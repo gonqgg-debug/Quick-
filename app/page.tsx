@@ -1,27 +1,32 @@
 import Link from "next/link";
+import { Logo } from "@/components/brand/Logo";
+import { brand } from "@/lib/theme";
 
 export default function Home() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-6">
+    <main className="flex min-h-screen items-center justify-center bg-white px-6">
       <div className="max-w-md text-center">
-        <p className="text-sm font-medium uppercase tracking-wide text-zinc-500">
-          Quick Orders
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold text-zinc-900">Pedidos por WhatsApp</h1>
-        <p className="mt-3 text-zinc-600">
-          Esqueleto de la aplicación. Las pantallas y APIs están listas para implementar
-          la lógica de negocio.
+        <div className="flex justify-center">
+          <Logo />
+        </div>
+        <h1 className="font-display mt-6 text-3xl font-bold" style={{ color: brand.ink }}>
+          Pedidos por WhatsApp
+        </h1>
+        <p className="mt-3" style={{ color: brand.muted }}>
+          Elige del catálogo y te lo llevamos a casa.
         </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Link
             href="/staff"
-            className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-zinc-700"
+            className="rounded-full px-4 py-2.5 text-sm font-bold text-white"
+            style={{ backgroundColor: brand.green }}
           >
             Panel de personal
           </Link>
           <Link
-            href="/order/demo"
-            className="rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
+            href="/order/22222222-2222-4222-8222-222222222222"
+            className="rounded-full border-2 px-4 py-2.5 text-sm font-bold"
+            style={{ borderColor: brand.blue, color: brand.blue }}
           >
             Catálogo de ejemplo
           </Link>

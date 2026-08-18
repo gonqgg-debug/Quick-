@@ -4,24 +4,70 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #1a1a1a;
+  --brand-green: #7eb341;
+  --brand-orange: #f79521;
+  --brand-blue: #1f82c5;
+  --brand-white: #ffffff;
+  --brand-ink: #1a1a1a;
+  --brand-muted: #6b7280;
+  --brand-error: #dc2626;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: #1a1a1a;
+  background: #ffffff;
+  font-family: var(--font-brand-body), system-ui, sans-serif;
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+
+  .text-brand-green {
+    color: #7eb341;
+  }
+  .text-brand-orange {
+    color: #f79521;
+  }
+  .text-brand-blue {
+    color: #1f82c5;
+  }
+  .text-brand-ink {
+    color: #1a1a1a;
+  }
+  .text-brand-muted {
+    color: #6b7280;
+  }
+  .text-brand-error {
+    color: #dc2626;
+  }
+
+  .bg-brand-green {
+    background-color: #7eb341;
+  }
+  .bg-brand-orange {
+    background-color: #f79521;
+  }
+  .bg-brand-blue {
+    background-color: #1f82c5;
+  }
+  .bg-brand-white {
+    background-color: #ffffff;
+  }
+
+  .border-brand-green {
+    border-color: #7eb341;
+  }
+  .border-brand-orange {
+    border-color: #f79521;
+  }
+  .border-brand-blue {
+    border-color: #1f82c5;
   }
 }

@@ -1,21 +1,21 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
+import { Baloo_2, Inter } from "next/font/google";
 import "./globals.css";
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
+const baloo = Baloo_2({
+  subsets: ["latin"],
+  variable: "--font-brand-display",
+  weight: ["400", "600", "700", "800"],
 });
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
-  weight: "100 900",
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-brand-body",
 });
 
 export const metadata: Metadata = {
-  title: "Quick Orders",
-  description: "Pedidos por WhatsApp",
+  title: "Quick! Mini Market",
+  description: "Pide del minimarket y te lo llevamos a casa",
 };
 
 export default function RootLayout({
@@ -26,7 +26,8 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${baloo.variable} ${inter.variable} bg-white font-sans antialiased`}
+        style={{ color: "#1A1A1A", backgroundColor: "#FFFFFF" }}
       >
         {children}
       </body>
