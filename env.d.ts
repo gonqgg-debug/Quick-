@@ -1,0 +1,11 @@
+declare namespace NodeJS {
+  interface ProcessEnv {
+    NEXT_PUBLIC_SUPABASE_URL?: string;
+    NEXT_PUBLIC_SUPABASE_ANON_KEY?: string;
+    SUPABASE_SERVICE_ROLE_KEY?: string;
+    WHATSAPP_ACCESS_TOKEN?: string;
+    WHATSAPP_PHONE_NUMBER_ID?: string;
+    WHATSAPP_VERIFY_TOKEN?: string;
+    WHATSAPP_API_VERSION?: string;
+  }
+}
