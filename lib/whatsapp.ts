@@ -38,6 +38,17 @@ function getMessagesEndpoint(): string {
   return `${GRAPH_API_BASE}/${GRAPH_API_VERSION}/${getWhatsAppPhoneNumberId()}/messages`;
 }
 
+function catalogBaseUrl(): string {
+  const explicit = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
+  if (explicit) {
+    return explicit.replace(/\/$/, "");
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL.replace(/\/$/, "")}`;
+  }
+  return "http://localhost:3000";
+}
+
 export function normalizePhoneNumber(phoneNumber: string): string {
   return phoneNumber.replace(/[^\d]/g, "");
 }
@@ -204,9 +215,43 @@ export async function sendTextMessage(phoneNumber: string, text: string): Promis
   return result;
 }
 
-export async function sendInteractiveMenu(phoneNumber: string): Promise<WhatsAppSendResult> {
+const ACTIVE_ORDER_STATES = [
+  "nueva",
+  "en_proceso",
+  "faltante_reportado",
+  "confirmada",
+] as const;
+
+export async function getActiveOrder(
+  chatId: string
+): Promise<{ id: string; estado: string } | null> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("orders")
+    .select("id, estado")
+    .eq("chat_id", chatId)
+    .in("estado", [...ACTIVE_ORDER_STATES])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("No pudimos buscar el pedido activo");
+  }
+
+  if (!data?.id) {
+    return null;
+  }
+
+  return { id: data.id as string, estado: String(data.estado) };
+}
+
+async function sendButtonMenu(
+  phoneNumber: string,
+  bodyText: string,
+  buttons: { id: string; title: string }[]
+): Promise<WhatsAppSendResult> {
   const to = normalizePhoneNumber(phoneNumber);
-  const bodyText = "¡Bienvenido a Quick! Mini Market! ¿Cómo te podemos ayudar hoy?";
   const result = await postWhatsAppMessage({
     messaging_product: "whatsapp",
     recipient_type: "individual",
@@ -216,28 +261,135 @@ export async function sendInteractiveMenu(phoneNumber: string): Promise<WhatsApp
       type: "button",
       body: { text: bodyText },
       action: {
-        buttons: [
-          {
-            type: "reply",
-            reply: { id: "nueva_orden", title: "Nueva orden" },
-          },
-          {
-            type: "reply",
-            reply: { id: "ver_pedido", title: "Ver mi pedido" },
-          },
-        ],
+        buttons: buttons.map((button) => ({
+          type: "reply",
+          reply: { id: button.id, title: button.title },
+        })),
       },
     },
   });
 
   await logOutgoingMessage(
     phoneNumber,
-    `${bodyText}\n[Nueva orden] [Ver mi pedido]`
+    `${bodyText}\n${buttons.map((button) => `[${button.title}]`).join(" ")}`
   );
   return result;
 }
 
-export async function sendOrderToStaff(orderId: string): Promise<void> {
+export async function sendClientMenu(
+  phoneNumber: string,
+  activeOrderId: string | null
+): Promise<WhatsAppSendResult> {
+  if (!activeOrderId) {
+    return sendButtonMenu(phoneNumber, "¡Bienvenido a Quick! Mini Market! ¿Cómo te podemos ayudar hoy?", [
+      { id: "nueva_orden", title: "Nueva orden" },
+      { id: "ver_pedido", title: "Ver mi pedido" },
+    ]);
+  }
+
+  return sendButtonMenu(phoneNumber, "Ya tienes un pedido en curso. ¿Qué quieres hacer?", [
+    { id: "modificar_pedido", title: "Modificar pedido" },
+    { id: "cancelar_pedido", title: "Cancelar pedido" },
+    { id: "ver_estatus", title: "Ver estatus" },
+  ]);
+}
+
+export async function handleModifyOrder(phoneNumber: string, chatId: string): Promise<void> {
+  const activeOrder = await getActiveOrder(chatId);
+  if (!activeOrder) {
+    await sendTextMessage(phoneNumber, "No tienes un pedido activo para modificar.");
+    return;
+  }
+
+  const supabase = getSupabaseAdminClient();
+
+  await supabase
+    .from("order_sessions")
+    .update({ estado: "expirada" })
+    .eq("chat_id", chatId)
+    .eq("estado", "activa");
+
+  const { data: session, error } = await supabase
+    .from("order_sessions")
+    .insert({
+      chat_id: chatId,
+      estado: "activa",
+      edit_order_id: activeOrder.id,
+      expira_en: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (error || !session) {
+    throw new Error("No pudimos crear la sesión de edición");
+  }
+
+  const link = `${catalogBaseUrl()}/order/${session.id}`;
+  const numero = shortOrderId(activeOrder.id);
+  await sendTextMessage(
+    phoneNumber,
+    `Aquí puedes modificar tu pedido #${numero} (el enlace vence en 2 horas):\n${link}`
+  );
+}
+
+export async function sendCancelConfirmation(
+  phoneNumber: string,
+  orderId: string
+): Promise<WhatsAppSendResult> {
+  const numero = shortOrderId(orderId);
+  return sendButtonMenu(phoneNumber, `¿Seguro que quieres cancelar tu pedido #${numero}?`, [
+    { id: `confirmar_cancelacion_${orderId}`, title: "Sí, cancelar" },
+    { id: "no_cancelar", title: "No" },
+  ]);
+}
+
+export async function cancelOrder(orderId: string): Promise<void> {
+  const supabase = getSupabaseAdminClient();
+  const { data: order, error } = await supabase
+    .from("orders")
+    .update({ estado: "cancelada" })
+    .eq("id", orderId)
+    .in("estado", [...ACTIVE_ORDER_STATES])
+    .select("id, chats ( phone_number )")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("No pudimos cancelar el pedido");
+  }
+
+  if (!order) {
+    throw new Error("Ese pedido ya no se puede cancelar");
+  }
+
+  const chat = unwrapOne(
+    order.chats as { phone_number: string } | { phone_number: string }[] | null
+  );
+  const phoneNumber = chat?.phone_number;
+  const numero = shortOrderId(order.id as string);
+  const staffPhone = getStaffPhoneOrNull();
+
+  const notices: Promise<unknown>[] = [];
+  if (staffPhone) {
+    notices.push(
+      sendTextMessage(staffPhone, `❌ Pedido #${numero} fue cancelado por el cliente`)
+    );
+  }
+  if (phoneNumber) {
+    notices.push(sendTextMessage(phoneNumber, `Tu pedido #${numero} fue cancelado.`));
+  }
+
+  const results = await Promise.allSettled(notices);
+  results.forEach((result) => {
+    if (result.status === "rejected") {
+      console.error("[whatsapp] error al notificar la cancelación", result.reason);
+    }
+  });
+}
+
+export async function sendOrderToStaff(
+  orderId: string,
+  esModificacion = false
+): Promise<void> {
   const staffPhone = getStaffPhoneNumber();
   const supabase = getSupabaseAdminClient();
 
@@ -282,7 +434,7 @@ export async function sendOrderToStaff(orderId: string): Promise<void> {
 
   const numero = shortOrderId(order.id as string);
   const message = [
-    `🆕 *Pedido #${numero}*`,
+    esModificacion ? `✏️ *Pedido #${numero} MODIFICADO*` : `🆕 *Pedido #${numero}*`,
     `📍 ${order.direccion}`,
     `💳 ${labelMetodoPago(String(order.metodo_pago))}`,
     "",
@@ -296,7 +448,10 @@ export async function sendOrderToStaff(orderId: string): Promise<void> {
   await sendTextMessage(staffPhone, message);
 }
 
-export async function confirmOrderToCustomer(orderId: string): Promise<void> {
+export async function confirmOrderToCustomer(
+  orderId: string,
+  esModificacion = false
+): Promise<void> {
   const supabase = getSupabaseAdminClient();
 
   const { data: order, error } = await supabase
@@ -348,7 +503,7 @@ export async function confirmOrderToCustomer(orderId: string): Promise<void> {
 
   const numero = shortOrderId(order.id as string);
   const message = [
-    `✅ *Pedido #${numero} recibido*`,
+    esModificacion ? `✏️ *Pedido #${numero} actualizado*` : `✅ *Pedido #${numero} recibido*`,
     "",
     ...itemLines,
     "",
@@ -356,10 +511,80 @@ export async function confirmOrderToCustomer(orderId: string): Promise<void> {
     `📍 ${order.direccion}`,
     `💳 ${labelMetodoPago(String(order.metodo_pago))}`,
     "",
-    "Te avisamos cuando esté en camino. ¡Gracias por tu pedido!",
+    esModificacion
+      ? "Guardamos los cambios. Te avisamos cuando esté en camino."
+      : "Te avisamos cuando esté en camino. ¡Gracias por tu pedido!",
   ].join("\n");
 
   await sendTextMessage(phoneNumber, message);
+}
+
+export async function notifyOrderDispatched(orderId: string): Promise<void> {
+  const supabase = getSupabaseAdminClient();
+  const { data: order, error } = await supabase
+    .from("orders")
+    .select("id, chats ( phone_number )")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("No pudimos leer el pedido para avisar el despacho");
+  }
+
+  if (!order) {
+    throw new Error(`No existe el pedido ${orderId}`);
+  }
+
+  const chat = unwrapOne(
+    order.chats as { phone_number: string } | { phone_number: string }[] | null
+  );
+  const phoneNumber = chat?.phone_number;
+
+  if (!phoneNumber) {
+    throw new Error("El pedido no tiene un teléfono de cliente");
+  }
+
+  const numero = shortOrderId(order.id as string);
+  await sendTextMessage(
+    phoneNumber,
+    `🚚 Tu pedido #${numero} ya salió. Para hacer un pedido nuevo, escríbenos cuando quieras.`
+  );
+}
+
+async function sendMissingItemPrompt(phoneNumber: string, bodyText: string): Promise<void> {
+  const to = normalizePhoneNumber(phoneNumber);
+
+  try {
+    await postWhatsAppMessage({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: { text: bodyText },
+        action: {
+          buttons: [
+            {
+              type: "reply",
+              reply: { id: "faltante_reemplazo", title: "Sugerir reemplazo" },
+            },
+            {
+              type: "reply",
+              reply: { id: "faltante_eliminar", title: "Eliminarlo" },
+            },
+          ],
+        },
+      },
+    });
+    await logOutgoingMessage(
+      phoneNumber,
+      `${bodyText}\n[Sugerir reemplazo] [Eliminarlo]`
+    );
+  } catch (error) {
+    console.error("[whatsapp] no se pudo enviar el menú de faltante, usando texto", error);
+    await sendTextMessage(phoneNumber, bodyText);
+  }
 }
 
 export async function notifyMissingItem(orderId: string, productId: string): Promise<void> {
@@ -367,7 +592,7 @@ export async function notifyMissingItem(orderId: string, productId: string): Pro
 
   const { data: order, error: orderError } = await supabase
     .from("orders")
-    .select("id, chats ( phone_number )")
+    .select("id, chat_id, chats ( phone_number )")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -375,11 +600,19 @@ export async function notifyMissingItem(orderId: string, productId: string): Pro
     throw new Error("No pudimos leer el pedido para avisar del faltante");
   }
 
-  const { data: product } = await supabase
+  if (!order.chat_id) {
+    throw new Error("El pedido no tiene un chat asociado");
+  }
+
+  const { data: product, error: productError } = await supabase
     .from("products")
     .select("nombre")
     .eq("id", productId)
     .maybeSingle();
+
+  if (productError) {
+    throw new Error("No pudimos leer el producto faltante");
+  }
 
   const chat = unwrapOne(
     order.chats as { phone_number: string } | { phone_number: string }[] | null
@@ -391,10 +624,104 @@ export async function notifyMissingItem(orderId: string, productId: string): Pro
   }
 
   const productName = product?.nombre ? String(product.nombre) : "un producto";
-  const numero = shortOrderId(order.id as string);
+  const bodyText = [
+    `❗ No tenemos disponible: ${productName}`,
+    "¿Qué prefieres?",
+    "1️⃣ Sugerir un reemplazo (respóndenos cuál)",
+    "2️⃣ Eliminarlo del pedido",
+  ].join("\n");
 
-  await sendTextMessage(
-    phoneNumber,
-    `El producto *${productName}* de tu pedido #${numero} no está disponible. ¿Quieres reemplazarlo por otro o eliminarlo del pedido? Responde por este chat y el personal lo resuelve.`
-  );
+  await sendMissingItemPrompt(phoneNumber, bodyText);
+}
+
+export async function reportMissingItem(orderId: string, productId: string): Promise<boolean> {
+  const supabase = getSupabaseAdminClient();
+
+  const { data: items, error: itemError } = await supabase
+    .from("order_items")
+    .update({ estado: "faltante" })
+    .eq("order_id", orderId)
+    .eq("product_id", productId)
+    .select("id");
+
+  if (itemError) {
+    throw new Error("No pudimos marcar el producto como faltante");
+  }
+
+  if (!items || items.length === 0) {
+    return false;
+  }
+
+  const { error: orderError } = await supabase
+    .from("orders")
+    .update({ estado: "faltante_reportado" })
+    .eq("id", orderId);
+
+  if (orderError) {
+    throw new Error("No pudimos actualizar el estado del pedido");
+  }
+
+  await notifyMissingItem(orderId, productId);
+  return true;
+}
+
+export type MissingItemDecision = "eliminado" | "reemplazado";
+
+export async function recordMissingItemDecision(
+  orderId: string,
+  decision: MissingItemDecision,
+  clientNote?: string
+): Promise<{ productNames: string[] }> {
+  const supabase = getSupabaseAdminClient();
+
+  const { data: items, error: lookupError } = await supabase
+    .from("order_items")
+    .select("id, products!order_items_product_id_fkey ( nombre )")
+    .eq("order_id", orderId)
+    .eq("estado", "faltante");
+
+  if (lookupError) {
+    throw new Error("No pudimos leer los productos faltantes");
+  }
+
+  const rows = Array.isArray(items) ? items : [];
+  const productNames = rows.map((item) => {
+    const product = unwrapOne(
+      item.products as { nombre: string } | { nombre: string }[] | null
+    );
+    return product?.nombre ? String(product.nombre) : "un producto";
+  });
+
+  if (rows.length === 0) {
+    return { productNames };
+  }
+
+  const { error: updateError } = await supabase
+    .from("order_items")
+    .update({ estado: decision })
+    .eq("order_id", orderId)
+    .eq("estado", "faltante");
+
+  if (updateError) {
+    throw new Error("No pudimos guardar la preferencia del cliente");
+  }
+
+  const staffPhone = getStaffPhoneOrNull();
+  if (!staffPhone) {
+    return { productNames };
+  }
+
+  const numero = shortOrderId(orderId);
+  const listed = productNames.join(", ");
+  const staffMessage =
+    decision === "eliminado"
+      ? `❌ El cliente quiere ELIMINAR *${listed}* del pedido #${numero}. Ajusta el pedido.`
+      : [
+          `🔄 El cliente quiere REEMPLAZAR *${listed}* del pedido #${numero}.`,
+          clientNote ? `Sugerencia: "${clientNote}"` : "Todavía no indicó el producto de reemplazo.",
+          "Ajusta el pedido manualmente (sin matching automático).",
+        ].join("\n");
+
+  await sendTextMessage(staffPhone, staffMessage);
+  return { productNames };
 }

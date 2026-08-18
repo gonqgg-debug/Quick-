@@ -8,6 +8,7 @@ declare namespace NodeJS {
     WHATSAPP_VERIFY_TOKEN?: string;
     WHATSAPP_API_VERSION?: string;
     STAFF_PHONE_NUMBER?: string;
+    STAFF_PASSWORD?: string;
     NEXT_PUBLIC_APP_URL?: string;
     APP_URL?: string;
     VERCEL_URL?: string;

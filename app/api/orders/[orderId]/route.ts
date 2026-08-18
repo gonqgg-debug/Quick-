@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  EDITABLE_ORDER_STATES,
   isMetodoPago,
   jsonError,
   parseItems,
   priceCatalogItems,
 } from "@/lib/order-request";
 import { getSupabaseAdminClient } from "@/lib/supabase";
+import type { OrderEstado } from "@/lib/types";
 import { confirmOrderToCustomer, sendOrderToStaff } from "@/lib/whatsapp";
 
 type OrderBody = {
@@ -15,13 +17,16 @@ type OrderBody = {
   metodoPago?: unknown;
 };
 
-export async function GET() {
-  return NextResponse.json({ orders: [] });
-}
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { orderId: string } }
+) {
+  const orderId = params.orderId?.trim();
+  if (!orderId) {
+    return jsonError("Falta el pedido.", 400);
+  }
 
-export async function POST(request: NextRequest) {
   let body: OrderBody;
-
   try {
     body = (await request.json()) as OrderBody;
   } catch {
@@ -50,6 +55,28 @@ export async function POST(request: NextRequest) {
 
   const supabase = getSupabaseAdminClient();
 
+  const { data: order, error: orderError } = await supabase
+    .from("orders")
+    .select("id, chat_id, estado, direccion, metodo_pago")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (orderError) {
+    return jsonError("No pudimos leer el pedido.", 500);
+  }
+
+  if (!order) {
+    return jsonError("No encontramos ese pedido.", 404);
+  }
+
+  const estado = String(order.estado) as OrderEstado;
+  if (!EDITABLE_ORDER_STATES.includes(estado)) {
+    return jsonError(
+      "Este pedido ya no se puede modificar porque está despachado, completado o cancelado.",
+      409
+    );
+  }
+
   const { data: session, error: sessionError } = await supabase
     .from("order_sessions")
     .select("id, chat_id, estado, expira_en, edit_order_id")
@@ -72,8 +99,12 @@ export async function POST(request: NextRequest) {
     return jsonError("Esta sesión ya no está activa. Solicita un enlace nuevo por WhatsApp.", 409);
   }
 
-  if (session.edit_order_id) {
-    return jsonError("Esta sesión es para modificar un pedido. Usa el enlace de edición.", 409);
+  if (session.chat_id !== order.chat_id) {
+    return jsonError("Esta sesión no corresponde a este pedido.", 409);
+  }
+
+  if (session.edit_order_id !== order.id) {
+    return jsonError("Esta sesión no es para editar este pedido.", 409);
   }
 
   const priced = await priceCatalogItems(items);
@@ -81,21 +112,10 @@ export async function POST(request: NextRequest) {
     return jsonError(priced.message, priced.status);
   }
 
-  const { data: order, error: orderError } = await supabase
-    .from("orders")
-    .insert({
-      chat_id: session.chat_id,
-      session_id: session.id,
-      direccion,
-      metodo_pago: body.metodoPago,
-      estado: "nueva",
-      total_estimado: priced.totalEstimado,
-    })
-    .select("id")
-    .single();
+  const { error: deleteError } = await supabase.from("order_items").delete().eq("order_id", order.id);
 
-  if (orderError || !order) {
-    return jsonError("No pudimos crear el pedido.", 500);
+  if (deleteError) {
+    return jsonError("No pudimos actualizar los productos del pedido.", 500);
   }
 
   const { error: itemsError } = await supabase.from("order_items").insert(
@@ -106,7 +126,25 @@ export async function POST(request: NextRequest) {
   );
 
   if (itemsError) {
-    return jsonError("El pedido se creó, pero no pudimos guardar los productos.", 500);
+    return jsonError("No pudimos guardar los productos actualizados.", 500);
+  }
+
+  const orderPatch: Record<string, unknown> = {
+    total_estimado: priced.totalEstimado,
+  };
+
+  if (direccion !== String(order.direccion ?? "")) {
+    orderPatch.direccion = direccion;
+  }
+
+  if (body.metodoPago !== String(order.metodo_pago ?? "")) {
+    orderPatch.metodo_pago = body.metodoPago;
+  }
+
+  const { error: updateError } = await supabase.from("orders").update(orderPatch).eq("id", order.id);
+
+  if (updateError) {
+    return jsonError("Los productos se actualizaron, pero no pudimos guardar el resto del pedido.", 500);
   }
 
   const { data: usedSession, error: sessionUpdateError } = await supabase
@@ -118,19 +156,19 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   if (sessionUpdateError || !usedSession) {
-    return jsonError("El pedido se creó, pero no pudimos cerrar la sesión.", 500);
+    return jsonError("El pedido se actualizó, pero no pudimos cerrar la sesión.", 500);
   }
 
   const notifications = await Promise.allSettled([
-    sendOrderToStaff(order.id),
-    confirmOrderToCustomer(order.id),
+    sendOrderToStaff(order.id, true),
+    confirmOrderToCustomer(order.id, true),
   ]);
 
   notifications.forEach((result) => {
     if (result.status === "rejected") {
-      console.error("No se pudo notificar el pedido por WhatsApp", result.reason);
+      console.error("No se pudo notificar la modificación por WhatsApp", result.reason);
     }
   });
 
-  return NextResponse.json({ success: true, orderId: order.id });
+  return NextResponse.json({ success: true, orderId: order.id, updated: true });
 }

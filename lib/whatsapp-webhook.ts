@@ -1,13 +1,18 @@
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import {
   formatShortOrderId,
+  getActiveOrder,
   getOrCreateChat,
   getStaffPhoneOrNull,
+  handleModifyOrder,
   isSamePhone,
   logIncomingMessage,
-  notifyMissingItem,
-  sendInteractiveMenu,
+  recordMissingItemDecision,
+  reportMissingItem,
+  sendCancelConfirmation,
+  sendClientMenu,
   sendTextMessage,
+  cancelOrder,
 } from "@/lib/whatsapp";
 
 const GREETING_PATTERN =
@@ -47,6 +52,7 @@ function orderStatusLabel(estado: string): string {
     en_proceso: "en proceso",
     faltante_reportado: "con un faltante reportado",
     confirmada: "confirmada",
+    despachada: "despachada",
     completada: "completada",
     cancelada: "cancelada",
   };
@@ -135,6 +141,65 @@ function isViewOrderAction(message: IncomingMessage): boolean {
   return id === "ver_pedido" || text === "ver mi pedido";
 }
 
+function isModifyOrderAction(message: IncomingMessage): boolean {
+  const id = (message.buttonId ?? "").toLowerCase();
+  const text = message.text.toLowerCase();
+  return id === "modificar_pedido" || text === "modificar pedido";
+}
+
+function isCancelOrderAction(message: IncomingMessage): boolean {
+  const id = (message.buttonId ?? "").toLowerCase();
+  const text = message.text.toLowerCase();
+  return id === "cancelar_pedido" || text === "cancelar pedido";
+}
+
+function isViewStatusAction(message: IncomingMessage): boolean {
+  const id = (message.buttonId ?? "").toLowerCase();
+  const text = message.text.toLowerCase();
+  return id === "ver_estatus" || text === "ver estatus";
+}
+
+function isNoCancelAction(message: IncomingMessage): boolean {
+  return (message.buttonId ?? "").toLowerCase() === "no_cancelar";
+}
+
+function cancelConfirmationOrderId(message: IncomingMessage): string | null {
+  const id = message.buttonId ?? "";
+  const prefix = "confirmar_cancelacion_";
+  if (!id.toLowerCase().startsWith(prefix)) {
+    return null;
+  }
+  const orderId = id.slice(prefix.length).trim();
+  return orderId.length > 0 ? orderId : null;
+}
+
+function isMissingReplaceAction(message: IncomingMessage): boolean {
+  const id = (message.buttonId ?? "").toLowerCase();
+  const text = message.text.trim().toLowerCase();
+  return (
+    id === "faltante_reemplazo" ||
+    text === "1" ||
+    text === "1️⃣" ||
+    text.startsWith("1 ") ||
+    text === "sugerir un reemplazo" ||
+    text === "sugerir reemplazo"
+  );
+}
+
+function isMissingDeleteAction(message: IncomingMessage): boolean {
+  const id = (message.buttonId ?? "").toLowerCase();
+  const text = message.text.trim().toLowerCase();
+  return (
+    id === "faltante_eliminar" ||
+    text === "2" ||
+    text === "2️⃣" ||
+    text.startsWith("2 ") ||
+    text === "eliminarlo del pedido" ||
+    text === "eliminarlo" ||
+    text === "eliminar"
+  );
+}
+
 async function handleNewOrder(phoneNumber: string, chatId: string): Promise<void> {
   const supabase = getSupabaseAdminClient();
 
@@ -203,34 +268,13 @@ async function handleStaffMissing(phoneNumber: string, text: string): Promise<vo
 
   const orderId = match[1];
   const productId = match[2];
-  const supabase = getSupabaseAdminClient();
+  const found = await reportMissingItem(orderId, productId);
 
-  const { data: items, error: itemError } = await supabase
-    .from("order_items")
-    .update({ estado: "faltante" })
-    .eq("order_id", orderId)
-    .eq("product_id", productId)
-    .select("id");
-
-  if (itemError) {
-    throw new Error("No pudimos marcar el producto como faltante");
-  }
-
-  if (!items || items.length === 0) {
+  if (!found) {
     await sendTextMessage(phoneNumber, "No encontré ese producto en el pedido.");
     return;
   }
 
-  const { error: orderError } = await supabase
-    .from("orders")
-    .update({ estado: "faltante_reportado" })
-    .eq("id", orderId);
-
-  if (orderError) {
-    throw new Error("No pudimos actualizar el estado del pedido");
-  }
-
-  await notifyMissingItem(orderId, productId);
   await sendTextMessage(
     phoneNumber,
     `Listo. Marcamos el producto como faltante y avisamos al cliente del pedido #${formatShortOrderId(orderId)}.`
@@ -240,7 +284,7 @@ async function handleStaffMissing(phoneNumber: string, text: string): Promise<vo
 async function handleMissingReply(
   phoneNumber: string,
   chatId: string,
-  text: string
+  message: IncomingMessage
 ): Promise<boolean> {
   const supabase = getSupabaseAdminClient();
   const { data: order, error } = await supabase
@@ -256,17 +300,43 @@ async function handleMissingReply(
     return false;
   }
 
-  const staffPhone = getStaffPhoneOrNull();
-  if (staffPhone) {
-    await sendTextMessage(
-      staffPhone,
-      `💬 El cliente respondió sobre el pedido #${formatShortOrderId(order.id as string)}:\n"${text}"`
-    );
+  const orderId = order.id as string;
+  const { data: missingItems, error: missingError } = await supabase
+    .from("order_items")
+    .select("id")
+    .eq("order_id", orderId)
+    .eq("estado", "faltante")
+    .limit(1);
+
+  if (missingError || !missingItems || missingItems.length === 0) {
+    return false;
   }
 
+  if (isMissingDeleteAction(message)) {
+    await recordMissingItemDecision(orderId, "eliminado");
+    await sendTextMessage(
+      phoneNumber,
+      "Listo, lo quitamos del pedido. El personal ajusta el total y te confirma."
+    );
+    return true;
+  }
+
+  if (isMissingReplaceAction(message)) {
+    await sendTextMessage(
+      phoneNumber,
+      "Dinos qué producto te gustaría de reemplazo. El personal lo ajusta a mano."
+    );
+    return true;
+  }
+
+  if (!message.text) {
+    return false;
+  }
+
+  await recordMissingItemDecision(orderId, "reemplazado", message.text);
   await sendTextMessage(
     phoneNumber,
-    "Gracias. El personal revisa tu respuesta y te confirma el cambio."
+    "Gracias. Le pasamos tu sugerencia al personal para que ajuste el pedido."
   );
   return true;
 }
@@ -304,8 +374,41 @@ async function handleIncomingMessage(message: IncomingMessage): Promise<void> {
     return;
   }
 
+  const confirmedCancelId = cancelConfirmationOrderId(message);
+  if (confirmedCancelId) {
+    try {
+      await cancelOrder(confirmedCancelId);
+    } catch (error) {
+      console.error("[whatsapp] error al cancelar pedido", error);
+      try {
+        await sendTextMessage(
+          message.from,
+          "No pudimos cancelar el pedido. Si sigue activo, inténtalo de nuevo."
+        );
+      } catch (notifyError) {
+        console.error("[whatsapp] error al avisar que no se pudo cancelar", notifyError);
+      }
+    }
+    return;
+  }
+
+  if (isNoCancelAction(message)) {
+    try {
+      const activeOrder = await getActiveOrder(chat.id);
+      await sendClientMenu(message.from, activeOrder?.id ?? null);
+    } catch (error) {
+      console.error("[whatsapp] error al volver al menú", error);
+    }
+    return;
+  }
+
   if (isNewOrderAction(message)) {
     try {
+      const activeOrder = await getActiveOrder(chat.id);
+      if (activeOrder) {
+        await sendClientMenu(message.from, activeOrder.id);
+        return;
+      }
       await handleNewOrder(message.from, chat.id);
     } catch (error) {
       console.error("[whatsapp] error al crear nueva orden", error);
@@ -313,7 +416,7 @@ async function handleIncomingMessage(message: IncomingMessage): Promise<void> {
     return;
   }
 
-  if (isViewOrderAction(message)) {
+  if (isViewOrderAction(message) || isViewStatusAction(message)) {
     try {
       await handleViewOrder(message.from, chat.id);
     } catch (error) {
@@ -322,21 +425,43 @@ async function handleIncomingMessage(message: IncomingMessage): Promise<void> {
     return;
   }
 
-  if (message.text && !message.buttonId) {
+  if (isModifyOrderAction(message)) {
     try {
-      const handledMissing = await handleMissingReply(message.from, chat.id, message.text);
-      if (handledMissing) {
+      await handleModifyOrder(message.from, chat.id);
+    } catch (error) {
+      console.error("[whatsapp] error al modificar pedido", error);
+    }
+    return;
+  }
+
+  if (isCancelOrderAction(message)) {
+    try {
+      const activeOrder = await getActiveOrder(chat.id);
+      if (!activeOrder) {
+        await sendTextMessage(message.from, "No tienes un pedido activo para cancelar.");
         return;
       }
+      await sendCancelConfirmation(message.from, activeOrder.id);
     } catch (error) {
-      console.error("[whatsapp] error al notificar respuesta de faltante", error);
+      console.error("[whatsapp] error al pedir confirmación de cancelación", error);
     }
+    return;
+  }
+
+  try {
+    const handledMissing = await handleMissingReply(message.from, chat.id, message);
+    if (handledMissing) {
+      return;
+    }
+  } catch (error) {
+    console.error("[whatsapp] error al notificar respuesta de faltante", error);
   }
 
   const unrecognized = Boolean(message.text) && !GREETING_PATTERN.test(message.text);
   if (chat.created || GREETING_PATTERN.test(message.text) || unrecognized || !message.text) {
     try {
-      await sendInteractiveMenu(message.from);
+      const activeOrder = await getActiveOrder(chat.id);
+      await sendClientMenu(message.from, activeOrder?.id ?? null);
     } catch (error) {
       console.error("[whatsapp] error al enviar el menú interactivo", error);
     }

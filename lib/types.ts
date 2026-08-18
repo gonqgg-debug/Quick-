@@ -3,6 +3,7 @@ export type OrderSession = {
   chat_id: string;
   estado: "activa" | "usada" | "expirada";
   expira_en: string;
+  edit_order_id: string | null;
 };
 
 export type Product = {
@@ -16,6 +17,17 @@ export type Product = {
 };
 
 export type MetodoPago = "efectivo" | "tarjeta";
+
+export type OrderEstado =
+  | "nueva"
+  | "en_proceso"
+  | "faltante_reportado"
+  | "confirmada"
+  | "despachada"
+  | "completada"
+  | "cancelada";
+
+export type OrderItemEstado = "ok" | "faltante" | "reemplazado" | "eliminado";
 
 export type CreateOrderItem = {
   productId: string;
@@ -32,4 +44,16 @@ export type CreateOrderPayload = {
 export type CreateOrderResponse = {
   success: true;
   orderId: string;
+};
+
+export type OrderDraftItem = {
+  productId: string;
+  cantidad: number;
+};
+
+export type OrderDraft = {
+  orderId: string;
+  direccion: string;
+  metodoPago: MetodoPago | null;
+  items: OrderDraftItem[];
 };

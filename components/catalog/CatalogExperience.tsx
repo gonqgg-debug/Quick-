@@ -6,11 +6,12 @@ import { CartIcon } from "@/components/brand/CartIcon";
 import { Logo } from "@/components/brand/Logo";
 import { formatPrice } from "@/lib/money";
 import { brand, brandChipColor, isPharmaCategory } from "@/lib/theme";
-import type { CreateOrderPayload, MetodoPago, Product } from "@/lib/types";
+import type { CreateOrderPayload, MetodoPago, OrderDraft, Product } from "@/lib/types";
 
 type CatalogExperienceProps = {
   sessionId: string;
   products: Product[];
+  editOrder?: OrderDraft | null;
 };
 
 type Step = "catalog" | "checkout" | "success";
@@ -21,21 +22,32 @@ function cartStorageKey(sessionId: string) {
   return `quick-orders:cart:${sessionId}`;
 }
 
-function readCart(sessionId: string): CartMap {
+function readCart(sessionId: string): CartMap | null {
   if (typeof window === "undefined") {
-    return {};
+    return null;
   }
 
   try {
     const raw = window.localStorage.getItem(cartStorageKey(sessionId));
     if (!raw) {
-      return {};
+      return null;
     }
     const parsed = JSON.parse(raw) as CartMap;
-    return parsed && typeof parsed === "object" ? parsed : {};
+    return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
+    return null;
+  }
+}
+
+function cartFromDraft(editOrder: OrderDraft | null | undefined): CartMap {
+  if (!editOrder) {
     return {};
   }
+  const next: CartMap = {};
+  for (const item of editOrder.items) {
+    next[item.productId] = item.cantidad;
+  }
+  return next;
 }
 
 function categoryAnchor(categoria: string) {
@@ -63,14 +75,15 @@ function groupProducts(products: Product[]) {
   return Array.from(groups.entries());
 }
 
-export function CatalogExperience({ sessionId, products }: CatalogExperienceProps) {
+export function CatalogExperience({ sessionId, products, editOrder = null }: CatalogExperienceProps) {
+  const isEditing = Boolean(editOrder);
   const [step, setStep] = useState<Step>("catalog");
-  const [cart, setCart] = useState<CartMap>({});
+  const [cart, setCart] = useState<CartMap>(() => cartFromDraft(editOrder));
   const [cartOpen, setCartOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [query, setQuery] = useState("");
-  const [direccion, setDireccion] = useState("");
-  const [metodoPago, setMetodoPago] = useState<MetodoPago | null>(null);
+  const [direccion, setDireccion] = useState(editOrder?.direccion ?? "");
+  const [metodoPago, setMetodoPago] = useState<MetodoPago | null>(editOrder?.metodoPago ?? null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
@@ -113,9 +126,16 @@ export function CatalogExperience({ sessionId, products }: CatalogExperienceProp
   const total = lines.reduce((sum, line) => sum + line.subtotal, 0);
 
   useEffect(() => {
-    setCart(readCart(sessionId));
+    const stored = readCart(sessionId);
+    setCart(stored ?? cartFromDraft(editOrder));
+    if (editOrder?.direccion) {
+      setDireccion((current) => current || editOrder.direccion);
+    }
+    if (editOrder?.metodoPago) {
+      setMetodoPago((current) => current ?? editOrder.metodoPago);
+    }
     setHydrated(true);
-  }, [sessionId]);
+  }, [sessionId, editOrder]);
 
   useEffect(() => {
     if (!hydrated) {
@@ -166,8 +186,9 @@ export function CatalogExperience({ sessionId, products }: CatalogExperienceProp
     setSubmitError(null);
 
     try {
-      const response = await fetch("/api/orders", {
-        method: "POST",
+      const endpoint = isEditing && editOrder ? `/api/orders/${editOrder.orderId}` : "/api/orders";
+      const response = await fetch(endpoint, {
+        method: isEditing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -178,7 +199,12 @@ export function CatalogExperience({ sessionId, products }: CatalogExperienceProp
       };
 
       if (!response.ok || !body.success || !body.orderId) {
-        setSubmitError(body.error ?? "No pudimos confirmar el pedido. Inténtalo de nuevo.");
+        setSubmitError(
+          body.error ??
+            (isEditing
+              ? "No pudimos guardar los cambios. Inténtalo de nuevo."
+              : "No pudimos confirmar el pedido. Inténtalo de nuevo.")
+        );
         return;
       }
 
@@ -187,14 +213,18 @@ export function CatalogExperience({ sessionId, products }: CatalogExperienceProp
       window.localStorage.removeItem(cartStorageKey(sessionId));
       setStep("success");
     } catch {
-      setSubmitError("No pudimos confirmar el pedido. Revisa tu conexión.");
+      setSubmitError(
+        isEditing
+          ? "No pudimos guardar los cambios. Revisa tu conexión."
+          : "No pudimos confirmar el pedido. Revisa tu conexión."
+      );
     } finally {
       setSubmitting(false);
     }
   }
 
   if (step === "success") {
-    return <SuccessScreen orderId={orderId} />;
+    return <SuccessScreen orderId={orderId} isEditing={isEditing} />;
   }
 
   if (step === "checkout") {
@@ -206,6 +236,7 @@ export function CatalogExperience({ sessionId, products }: CatalogExperienceProp
         metodoPago={metodoPago}
         submitting={submitting}
         submitError={submitError}
+        isEditing={isEditing}
         onDireccionChange={setDireccion}
         onMetodoPagoChange={setMetodoPago}
         onBack={() => {
@@ -258,7 +289,9 @@ export function CatalogExperience({ sessionId, products }: CatalogExperienceProp
 
       <div className="mx-auto max-w-lg px-4 pb-32 pt-4">
         <p className="text-sm leading-relaxed text-brand-muted">
-          Elige lo que necesitas. Te lo preparamos y te confirmamos por WhatsApp.
+          {isEditing
+            ? "Ya cargamos tu pedido. Cambia lo que necesites y guarda los cambios."
+            : "Elige lo que necesitas. Te lo preparamos y te confirmamos por WhatsApp."}
         </p>
 
         {chipCategories.length > 0 ? (
@@ -623,6 +656,7 @@ function CheckoutScreen({
   metodoPago,
   submitting,
   submitError,
+  isEditing,
   onDireccionChange,
   onMetodoPagoChange,
   onBack,
@@ -634,6 +668,7 @@ function CheckoutScreen({
   metodoPago: MetodoPago | null;
   submitting: boolean;
   submitError: string | null;
+  isEditing: boolean;
   onDireccionChange: (value: string) => void;
   onMetodoPagoChange: (value: MetodoPago) => void;
   onBack: () => void;
@@ -646,7 +681,9 @@ function CheckoutScreen({
       <button type="button" onClick={onBack} className="text-sm font-bold" style={{ color: brand.blue }}>
         ← Volver al catálogo
       </button>
-      <h1 className="font-display mt-4 text-3xl font-bold text-brand-ink">Confirmar pedido</h1>
+      <h1 className="font-display mt-4 text-3xl font-bold text-brand-ink">
+        {isEditing ? "Guardar cambios" : "Confirmar pedido"}
+      </h1>
       <p className="mt-1 text-sm text-brand-muted">
         {lines.length} {lines.length === 1 ? "producto" : "productos"} ·{" "}
         <span className="font-bold" style={{ color: brand.orange }}>
@@ -712,7 +749,13 @@ function CheckoutScreen({
         className="mt-8 w-full rounded-full py-3.5 text-base font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
         style={{ backgroundColor: brand.green }}
       >
-        {submitting ? "Confirmando..." : "Confirmar pedido"}
+        {submitting
+          ? isEditing
+            ? "Guardando..."
+            : "Confirmando..."
+          : isEditing
+            ? "Guardar cambios"
+            : "Confirmar pedido"}
       </button>
     </div>
   );
@@ -742,20 +785,23 @@ function PaymentOption({
   );
 }
 
-function SuccessScreen({ orderId }: { orderId: string | null }) {
+function SuccessScreen({ orderId, isEditing }: { orderId: string | null; isEditing: boolean }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-white px-5 py-16">
       <section className="w-full max-w-md rounded-[28px] border border-black/[0.06] bg-white px-6 py-10 text-center shadow-[0_16px_40px_rgba(26,26,26,0.08)]">
         <Logo />
         <p className="mt-4">
-          <Badge variant="green">Pedido recibido</Badge>
+          <Badge variant="green">{isEditing ? "Pedido actualizado" : "Pedido recibido"}</Badge>
         </p>
         <h1 className="font-display mt-3 text-3xl font-bold leading-tight text-brand-ink">
-          Pedido recibido, te confirmaremos por WhatsApp
+          {isEditing
+            ? "Guardamos los cambios, te confirmaremos por WhatsApp"
+            : "Pedido recibido, te confirmaremos por WhatsApp"}
         </h1>
         <p className="mt-4 text-sm leading-relaxed text-brand-muted">
-          Ya llegó al minimarket. En un momento te escribimos para confirmar stock y el horario de
-          entrega.
+          {isEditing
+            ? "El minimarket ya tiene la versión actualizada. Te escribimos si hace falta ajustar algo más."
+            : "Ya llegó al minimarket. En un momento te escribimos para confirmar stock y el horario de entrega."}
         </p>
         {orderId ? (
           <p className="mt-6 text-xs font-bold" style={{ color: brand.blue }}>

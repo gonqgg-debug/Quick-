@@ -1,7 +1,7 @@
 import { CatalogExperience } from "@/components/catalog/CatalogExperience";
 import { InvalidSession } from "@/components/catalog/InvalidSession";
-import { getActiveOrderSession, getActiveProducts } from "@/lib/catalog";
-import type { Product } from "@/lib/types";
+import { getActiveOrderSession, getActiveProducts, getOrderDraft } from "@/lib/catalog";
+import type { OrderDraft, Product } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +14,16 @@ type OrderCatalogPageProps = {
 export default async function OrderCatalogPage({ params }: OrderCatalogPageProps) {
   let session = null;
   let products: Product[] = [];
+  let editOrder: OrderDraft | null = null;
   let unavailable = false;
 
   try {
     session = await getActiveOrderSession(params.sessionId);
     if (session) {
       products = await getActiveProducts();
+      if (session.edit_order_id) {
+        editOrder = await getOrderDraft(session.edit_order_id);
+      }
     }
   } catch {
     unavailable = true;
@@ -38,5 +42,16 @@ export default async function OrderCatalogPage({ params }: OrderCatalogPageProps
     return <InvalidSession />;
   }
 
-  return <CatalogExperience sessionId={session.id} products={products} />;
+  if (session.edit_order_id && !editOrder) {
+    return (
+      <InvalidSession
+        title="No pudimos cargar tu pedido"
+        message="Este enlace de edición ya no es válido. Solicita uno nuevo por WhatsApp."
+      />
+    );
+  }
+
+  return (
+    <CatalogExperience sessionId={session.id} products={products} editOrder={editOrder} />
+  );
 }
