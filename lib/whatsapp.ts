@@ -206,7 +206,7 @@ export async function sendTextMessage(phoneNumber: string, text: string): Promis
 
 export async function sendInteractiveMenu(phoneNumber: string): Promise<WhatsAppSendResult> {
   const to = normalizePhoneNumber(phoneNumber);
-  const bodyText = "Hola, ¿qué quieres hacer?";
+  const bodyText = "¡Bienvenido a Quick! Mini Market! ¿Cómo te podemos ayudar hoy?";
   const result = await postWhatsAppMessage({
     messaging_product: "whatsapp",
     recipient_type: "individual",
@@ -301,7 +301,20 @@ export async function confirmOrderToCustomer(orderId: string): Promise<void> {
 
   const { data: order, error } = await supabase
     .from("orders")
-    .select("id, chat_id, chats ( phone_number )")
+    .select(
+      `
+      id,
+      direccion,
+      metodo_pago,
+      total_estimado,
+      chats ( phone_number ),
+      order_items (
+        cantidad,
+        precio_unitario,
+        products!order_items_product_id_fkey ( nombre )
+      )
+    `
+    )
     .eq("id", orderId)
     .maybeSingle();
 
@@ -322,11 +335,31 @@ export async function confirmOrderToCustomer(orderId: string): Promise<void> {
     throw new Error("El pedido no tiene un teléfono de cliente");
   }
 
+  const items = Array.isArray(order.order_items) ? order.order_items : [];
+  const itemLines = items.map((item) => {
+    const product = unwrapOne(
+      item.products as { nombre: string } | { nombre: string }[] | null
+    );
+    const nombre = product?.nombre ?? "Producto";
+    const cantidad = Number(item.cantidad);
+    const lineTotal = toMoney(item.precio_unitario) * cantidad;
+    return `${cantidad}x ${nombre} - ${formatRd(lineTotal)}`;
+  });
+
   const numero = shortOrderId(order.id as string);
-  await sendTextMessage(
-    phoneNumber,
-    `✅ Pedido #${numero} recibido. Te avisamos cuando esté en camino.`
-  );
+  const message = [
+    `✅ *Pedido #${numero} recibido*`,
+    "",
+    ...itemLines,
+    "",
+    `💰 *Total: ${formatRd(order.total_estimado)}*`,
+    `📍 ${order.direccion}`,
+    `💳 ${labelMetodoPago(String(order.metodo_pago))}`,
+    "",
+    "Te avisamos cuando esté en camino. ¡Gracias por tu pedido!",
+  ].join("\n");
+
+  await sendTextMessage(phoneNumber, message);
 }
 
 export async function notifyMissingItem(orderId: string, productId: string): Promise<void> {
