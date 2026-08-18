@@ -344,6 +344,7 @@ async function handleIncomingMessage(message: IncomingMessage): Promise<void> {
 }
 
 export async function processWhatsAppWebhook(payload: unknown): Promise<void> {
+  console.log("[whatsapp][debug] payload recibido:", JSON.stringify(payload));
   const messages = extractIncomingMessages(payload);
   for (const message of messages) {
     try {
