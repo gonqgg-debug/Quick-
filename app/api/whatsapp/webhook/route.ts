@@ -35,11 +35,11 @@ export async function POST(request: NextRequest) {
     return new NextResponse("EVENT_RECEIVED", { status: 200 });
   }
 
-  const work = processWhatsAppWebhook(payload).catch((error) => {
+  try {
+    await processWhatsAppWebhook(payload);
+  } catch (error) {
     console.error("[whatsapp] error en procesamiento POST", error);
-  });
-
-  void work;
+  }
 
   return new NextResponse("EVENT_RECEIVED", { status: 200 });
 }
