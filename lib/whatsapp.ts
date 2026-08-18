@@ -254,7 +254,7 @@ export async function sendOrderToStaff(orderId: string): Promise<void> {
         cantidad,
         precio_unitario,
         product_id,
-        products ( nombre )
+        products!order_items_product_id_fkey ( nombre )
       )
     `
     )

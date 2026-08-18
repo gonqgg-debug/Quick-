@@ -191,12 +191,16 @@ export async function POST(request: NextRequest) {
     return jsonError("El pedido se creó, pero no pudimos cerrar la sesión.", 500);
   }
 
-  try {
-    await sendOrderToStaff(order.id);
-    await confirmOrderToCustomer(order.id);
-  } catch (error) {
-    console.error("No se pudo notificar el pedido por WhatsApp", error);
-  }
+  const notifications = await Promise.allSettled([
+    sendOrderToStaff(order.id),
+    confirmOrderToCustomer(order.id),
+  ]);
+
+  notifications.forEach((result) => {
+    if (result.status === "rejected") {
+      console.error("No se pudo notificar el pedido por WhatsApp", result.reason);
+    }
+  });
 
   return NextResponse.json({ success: true, orderId: order.id });
 }
