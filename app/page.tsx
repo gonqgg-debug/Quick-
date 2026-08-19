@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import Image from "next/image";
+import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
 import { brand, whatsappHref } from "@/lib/theme";
 
@@ -82,14 +83,6 @@ function IconMapPin({ className = "", style }: IconProps) {
   );
 }
 
-function IconMedicalCross({ className = "", style }: IconProps) {
-  return (
-    <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M9.2 2.4h5.6c.7 0 1.2.5 1.2 1.2v4.4h4.4c.7 0 1.2.5 1.2 1.2v5.6c0 .7-.5 1.2-1.2 1.2H16v4.4c0 .7-.5 1.2-1.2 1.2H9.2c-.7 0-1.2-.5-1.2-1.2V16H3.6c-.7 0-1.2-.5-1.2-1.2V9.2c0-.7.5-1.2 1.2-1.2H8V3.6c0-.7.5-1.2 1.2-1.2Z" />
-    </svg>
-  );
-}
-
 const STEPS = [
   {
     n: "1",
@@ -125,6 +118,21 @@ function WhatsAppButton({ className = "", small = false }: { className?: string;
       <IconMessageCircle className={small ? "h-4 w-4" : "h-5 w-5"} />
       Pedir por WhatsApp
     </a>
+  );
+}
+
+function StaffButton({ light = false }: { light?: boolean }) {
+  return (
+    <Link
+      href="/staff"
+      className="inline-flex min-h-10 items-center justify-center rounded-full border-2 px-5 py-2 text-sm font-bold"
+      style={{
+        borderColor: light ? "rgba(255,255,255,0.45)" : brand.ink,
+        color: light ? "#FFFFFF" : brand.ink,
+      }}
+    >
+      Staff
+    </Link>
   );
 }
 
@@ -235,6 +243,9 @@ export default function Home() {
       {/* Hero */}
       <section className="bg-white pb-8 pt-8 md:pb-10 md:pt-12">
         <Inner>
+          <div className="mb-6 flex justify-end md:mb-8">
+            <StaffButton />
+          </div>
           <div className="grid items-center gap-10 md:grid-cols-2 md:gap-14">
             <div className="order-2 text-center md:order-1 md:text-left">
               <Logo className="mx-auto h-16 max-w-[220px] md:mx-0 md:h-20 md:max-w-[280px]" />
@@ -361,15 +372,14 @@ export default function Home() {
         <Inner className="relative z-10 py-20 md:py-28">
           <div className="grid items-center gap-10 md:grid-cols-2 md:gap-16">
             <div>
-              <div
-                className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-3xl"
-                style={{ backgroundColor: "rgba(255,255,255,0.16)" }}
-              >
-                <IconMedicalCross className="h-10 w-10 text-white" />
+              <div className="mb-6 inline-flex rounded-3xl bg-white px-5 py-4 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                <Logo variant="pharma" className="h-14 max-w-[220px] md:h-16 md:max-w-[260px]" />
               </div>
-              <span className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-bold" style={{ color: brand.blue }}>
-                Próximamente
-              </span>
+              <div>
+                <span className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-bold" style={{ color: brand.blue }}>
+                  Próximamente
+                </span>
+              </div>
               <h2 className="font-display mt-4 text-4xl font-extrabold text-white md:text-5xl">
                 PharmaQuick!
               </h2>
@@ -433,6 +443,7 @@ export default function Home() {
             <div className="flex flex-col items-center gap-4 md:items-start">
               <Logo className="h-12 max-w-[180px]" />
               <WhatsAppButton small />
+              <StaffButton light />
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/50">Dónde estamos</p>
