@@ -10,8 +10,8 @@ export const ORDER_AGING = {
   warnAfterMinutes: 5,
   /** A partir de aquí el borde pasa a rojo y se muestra ⚠️. */
   urgentAfterMinutes: 10,
-  /** Recalcular el tiempo relativo en el cliente. */
-  tickMs: 30_000,
+  /** Recalcular cronómetros y color de aging en el cliente. */
+  tickMs: 1_000,
   colors: {
     ok: brand.green,
     warn: "#F59E0B",
@@ -30,12 +30,29 @@ export function usesOrderAging(estado: OrderEstado): boolean {
   );
 }
 
-export function elapsedMinutes(createdAt: string, now = Date.now()): number {
+export function elapsedMs(createdAt: string, now = Date.now()): number {
   const timestamp = new Date(createdAt).getTime();
   if (Number.isNaN(timestamp)) {
     return 0;
   }
-  return Math.max(0, Math.floor((now - timestamp) / 60_000));
+  return Math.max(0, now - timestamp);
+}
+
+export function elapsedMinutes(createdAt: string, now = Date.now()): number {
+  return Math.floor(elapsedMs(createdAt, now) / 60_000);
+}
+
+export function formatElapsedClock(createdAt: string, now = Date.now()): string {
+  const totalSeconds = Math.floor(elapsedMs(createdAt, now) / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+  if (hours > 0) {
+    return `${hours}:${mm}:${ss}`;
+  }
+  return `${mm}:${ss}`;
 }
 
 export function orderAgingLevel(minutes: number): OrderAgingLevel {
