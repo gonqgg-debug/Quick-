@@ -6,8 +6,6 @@ function crc32(data: Buffer): number {
   return nodeCrc32(data) >>> 0;
 }
 
-type CellValue = string | number;
-
 function xmlText(value: string): string {
   return value
     .replace(/&/g, "&amp;")
