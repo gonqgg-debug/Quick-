@@ -92,38 +92,55 @@ function unwrapOne<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? (value[0] ?? null) : value;
 }
 
+function graphErrorMessage(data: unknown): string {
+  if (
+    data &&
+    typeof data === "object" &&
+    "error" in data &&
+    data.error &&
+    typeof data.error === "object" &&
+    "message" in data.error
+  ) {
+    return String((data.error as { message: unknown }).message);
+  }
+  return "Error al enviar el mensaje de WhatsApp";
+}
+
 async function postWhatsAppMessage(
   payload: Record<string, unknown>
 ): Promise<WhatsAppSendResult> {
-  const response = await fetch(getMessagesEndpoint(), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${getWhatsAppAccessToken()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  const type = typeof payload.type === "string" ? payload.type : "unknown";
+  console.log("[whatsapp] send:start", { type });
 
-  const data: unknown = await response.json().catch(() => null);
+  try {
+    const response = await fetch(getMessagesEndpoint(), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${getWhatsAppAccessToken()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
 
-  if (!response.ok) {
-    const message =
-      data &&
-      typeof data === "object" &&
-      "error" in data &&
-      data.error &&
-      typeof data.error === "object" &&
-      "message" in data.error
-        ? String((data.error as { message: unknown }).message)
-        : "Error al enviar el mensaje de WhatsApp";
-    throw new Error(message);
+    const data: unknown = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      const message = graphErrorMessage(data);
+      console.error("[whatsapp] send:fail", { type, status: response.status, error: message });
+      throw new Error(message);
+    }
+
+    console.log("[whatsapp] send:ok", { type, status: response.status });
+    return {
+      ok: true,
+      status: response.status,
+      data,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Error desconocido al enviar WhatsApp";
+    console.error("[whatsapp] send:error", { type, error: message });
+    throw error instanceof Error ? error : new Error(message);
   }
-
-  return {
-    ok: true,
-    status: response.status,
-    data,
-  };
 }
 
 export async function getOrCreateChat(
@@ -281,14 +298,14 @@ export async function sendClientMenu(
   activeOrderId: string | null
 ): Promise<WhatsAppSendResult> {
   if (!activeOrderId) {
-    return sendButtonMenu(phoneNumber, "¡Bienvenido a Quick! Mini Market! ¿Cómo te podemos ayudar hoy?", [
+    return await sendButtonMenu(phoneNumber, "¡Bienvenido a Quick! Mini Market! ¿Cómo te podemos ayudar hoy?", [
       { id: "nueva_orden", title: "Nueva orden" },
       { id: "ver_pedido", title: "Ver mi pedido" },
       { id: "hablar_con_alguien", title: "Hablar con alguien" },
     ]);
   }
 
-  return sendButtonMenu(phoneNumber, "Ya tienes un pedido en curso. ¿Qué quieres hacer?", [
+  return await sendButtonMenu(phoneNumber, "Ya tienes un pedido en curso. ¿Qué quieres hacer?", [
     { id: "modificar_pedido", title: "Modificar pedido" },
     { id: "cancelar_pedido", title: "Cancelar pedido" },
     { id: "ver_estatus", title: "Ver estatus" },
@@ -382,7 +399,7 @@ export async function sendCancelConfirmation(
   orderId: string
 ): Promise<WhatsAppSendResult> {
   const numero = shortOrderId(orderId);
-  return sendButtonMenu(phoneNumber, `¿Seguro que quieres cancelar tu pedido #${numero}?`, [
+  return await sendButtonMenu(phoneNumber, `¿Seguro que quieres cancelar tu pedido #${numero}?`, [
     { id: `confirmar_cancelacion_${orderId}`, title: "Sí, cancelar" },
     { id: "no_cancelar", title: "No" },
   ]);

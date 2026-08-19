@@ -3,6 +3,7 @@ import { processWhatsAppWebhook } from "@/lib/whatsapp-webhook";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 30;
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,9 +37,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    console.log("[whatsapp] webhook:process:start");
     await processWhatsAppWebhook(payload);
+    console.log("[whatsapp] webhook:process:done");
   } catch (error) {
-    console.error("[whatsapp] error en procesamiento POST", error);
+    console.error("[whatsapp] webhook:process:error", error);
   }
 
   return new NextResponse("EVENT_RECEIVED", { status: 200 });

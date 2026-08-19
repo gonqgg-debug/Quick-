@@ -373,6 +373,7 @@ async function handleIncomingMessage(message: IncomingMessage): Promise<void> {
     try {
       const waiting = await isWaitingForHuman(chat.id);
       if (waiting) {
+        console.log("[whatsapp] skip:reply, chat espera humano", chat.id);
         return;
       }
     } catch (error) {
@@ -497,6 +498,11 @@ async function handleIncomingMessage(message: IncomingMessage): Promise<void> {
 export async function processWhatsAppWebhook(payload: unknown): Promise<void> {
   console.log("[whatsapp][debug] payload recibido:", JSON.stringify(payload));
   const messages = extractIncomingMessages(payload);
+  if (messages.length === 0) {
+    console.log("[whatsapp] webhook sin mensajes de usuario (posible status delivery/read)");
+    return;
+  }
+
   for (const message of messages) {
     try {
       await handleIncomingMessage(message);
