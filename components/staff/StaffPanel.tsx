@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StaffChrome } from "@/components/staff/StaffChrome";
 import { StaffLogin, staffLogout } from "@/components/staff/StaffLogin";
+import {
+  elapsedMinutes,
+  ORDER_AGING,
+  orderAgingColor,
+  orderAgingLevel,
+  usesOrderAging,
+} from "@/lib/order-aging";
 import { formatOrderNumber, itemStatusLabel, orderStatusLabel } from "@/lib/order-display";
 import { brand } from "@/lib/theme";
 import { formatElapsedAgo } from "@/lib/time";
@@ -102,10 +109,6 @@ function paymentLabel(metodo: string): string {
   return metodo;
 }
 
-function needsLiveTimer(estado: OrderEstado): boolean {
-  return estado === "nueva" || estado === "en_proceso" || estado === "confirmada";
-}
-
 export function StaffPanel() {
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [orders, setOrders] = useState<StaffOrder[]>([]);
@@ -184,7 +187,7 @@ export function StaffPanel() {
     }
     const timer = window.setInterval(() => {
       setNow(Date.now());
-    }, 30000);
+    }, ORDER_AGING.tickMs);
     return () => window.clearInterval(timer);
   }, [authorized]);
 
@@ -324,23 +327,32 @@ export function StaffPanel() {
         />
       }
       filters={
-        <div className="-mx-3 flex gap-2 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div
+          className="flex w-full rounded-full p-1.5"
+          style={{ backgroundColor: "#F3F4F6" }}
+          role="tablist"
+          aria-label="Filtrar pedidos"
+        >
           {FILTERS.map((filter) => {
             const active = filter.id === filterId;
             return (
               <button
                 key={filter.id}
                 type="button"
+                role="tab"
+                aria-selected={active}
                 onClick={() => setFilterId(filter.id)}
-                className="shrink-0 rounded-full px-3.5 py-2 text-sm font-bold"
+                className="flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center rounded-full px-1 py-1.5 transition-colors"
                 style={{
-                  minHeight: 44,
-                  backgroundColor: active ? brand.green : "#FFFFFF",
-                  color: active ? "#FFFFFF" : brand.ink,
-                  border: active ? "none" : "1px solid #E5E7EB",
+                  backgroundColor: active ? brand.green : "transparent",
+                  color: active ? "#FFFFFF" : "#4B5563",
+                  boxShadow: active ? "0 1px 2px rgba(26,26,26,0.12)" : "none",
                 }}
               >
-                {filter.label} ({chipCounts[filter.id]})
+                <span className="truncate text-[11px] font-bold leading-tight sm:text-sm">{filter.label}</span>
+                <span className="text-[10px] font-semibold leading-tight tabular-nums opacity-80 sm:text-xs">
+                  {chipCounts[filter.id]}
+                </span>
               </button>
             );
           })}
@@ -360,7 +372,9 @@ export function StaffPanel() {
           {visibleOrders.map((order) => {
             const open = selectedId === order.id;
             const cliente = order.clienteNombre || order.clienteTelefono;
-            const stripe = stripeColor(order.estado);
+            const aging = usesOrderAging(order.estado);
+            const agingLevel = aging ? orderAgingLevel(elapsedMinutes(order.createdAt, now)) : null;
+            const stripe = agingLevel ? orderAgingColor(agingLevel) : stripeColor(order.estado);
             return (
               <li
                 key={order.id}
@@ -370,17 +384,32 @@ export function StaffPanel() {
                 <button
                   type="button"
                   onClick={() => setSelectedId(open ? null : order.id)}
-                  className="flex w-full items-start justify-between gap-3 px-4 py-4 text-left"
+                  className="flex w-full items-start justify-between gap-3 px-5 py-5 text-left"
                   style={{ minHeight: 72 }}
                 >
                   <div className="min-w-0">
-                    <p className="font-display text-xl font-bold">#{formatOrderNumber(order.id)}</p>
-                    <p className="truncate text-sm text-brand-muted">{cliente}</p>
-                    <p className="mt-1 text-xs font-semibold" style={{ color: needsLiveTimer(order.estado) ? brand.orange : brand.muted }}>
-                      {needsLiveTimer(order.estado)
-                        ? formatElapsedAgo(order.createdAt, now)
-                        : formatWhen(order.createdAt)}
+                    <p className="font-display text-xl font-bold">
+                      #{formatOrderNumber(order.id)}
+                      {agingLevel === "urgent" ? (
+                        <span className="ml-1.5 text-base" aria-label="Pedido urgente">
+                          ⚠️
+                        </span>
+                      ) : null}
                     </p>
+                    {aging && agingLevel ? (
+                      <>
+                        <p
+                          className="mt-1.5 text-base font-bold leading-tight"
+                          style={{ color: orderAgingColor(agingLevel) }}
+                        >
+                          {formatElapsedAgo(order.createdAt, now)}
+                        </p>
+                        <p className="mt-0.5 text-xs text-brand-muted">{formatWhen(order.createdAt)}</p>
+                      </>
+                    ) : (
+                      <p className="mt-1 text-xs font-semibold text-brand-muted">{formatWhen(order.createdAt)}</p>
+                    )}
+                    <p className="mt-1 truncate text-sm text-brand-muted">{cliente}</p>
                   </div>
                   <div className="text-right">
                     <p
@@ -394,8 +423,8 @@ export function StaffPanel() {
                 </button>
 
                 {open ? (
-                  <div className="px-4 pb-4">
-                    <div className="space-y-2 rounded-2xl px-3 py-3" style={{ backgroundColor: "#F8FAF7" }}>
+                  <div className="px-5 pb-5">
+                    <div className="space-y-2 rounded-2xl px-4 py-4" style={{ backgroundColor: "#F8FAF7" }}>
                       <InfoRow icon={<PinIcon />}>{order.direccion}</InfoRow>
                       <InfoRow icon={order.metodoPago === "efectivo" ? <CashIcon /> : <CardIcon />}>
                         {paymentLabel(order.metodoPago)}

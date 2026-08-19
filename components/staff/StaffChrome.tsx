@@ -24,8 +24,8 @@ export function StaffChrome({
   return (
     <div className="min-h-screen bg-white" style={{ color: brand.ink }}>
       <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md">
-        <header className="border-b px-3 py-2" style={{ borderColor: "#F3F4F6" }}>
-          <div className="mx-auto flex max-w-3xl items-center gap-2">
+        <header className="border-b py-3" style={{ borderColor: "#F3F4F6" }}>
+          <div className="mx-auto flex max-w-3xl items-center gap-2 px-3">
             <MiniLogo />
             <div className="min-w-0 flex-1">{search}</div>
             <button
@@ -43,13 +43,13 @@ export function StaffChrome({
           </div>
         </header>
         {filters ? (
-          <div className="border-b bg-white" style={{ borderColor: "#F3F4F6" }}>
-            {filters}
+          <div className="bg-white">
+            <div className="mx-auto max-w-3xl px-3 pt-6 pb-1">{filters}</div>
           </div>
         ) : null}
       </div>
 
-      <div className="mx-auto max-w-3xl px-3 pb-28 pt-3 md:pb-8">{children}</div>
+      <div className="mx-auto max-w-3xl px-3 pb-28 pt-8 md:pb-8">{children}</div>
 
       <nav
         className="fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 px-2 py-1 backdrop-blur-md md:hidden"
