@@ -71,3 +71,20 @@ body {
     border-color: #1f82c5;
   }
 }
+
+@keyframes cart-trail-draw {
+  from {
+    stroke-dashoffset: 220;
+    opacity: 0;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+.cart-trail {
+  stroke-dasharray: 220;
+  stroke-dashoffset: 220;
+  animation: cart-trail-draw 1.15s ease-out 0.15s forwards;
+}

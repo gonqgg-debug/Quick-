@@ -284,6 +284,7 @@ export async function sendClientMenu(
     return sendButtonMenu(phoneNumber, "¡Bienvenido a Quick! Mini Market! ¿Cómo te podemos ayudar hoy?", [
       { id: "nueva_orden", title: "Nueva orden" },
       { id: "ver_pedido", title: "Ver mi pedido" },
+      { id: "hablar_con_alguien", title: "Hablar con alguien" },
     ]);
   }
 
@@ -292,6 +293,50 @@ export async function sendClientMenu(
     { id: "cancelar_pedido", title: "Cancelar pedido" },
     { id: "ver_estatus", title: "Ver estatus" },
   ]);
+}
+
+export async function isWaitingForHuman(chatId: string): Promise<boolean> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("chats")
+    .select("esperando_humano")
+    .eq("id", chatId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("No pudimos verificar si el chat espera a una persona");
+  }
+
+  return Boolean(data?.esperando_humano);
+}
+
+export async function requestHumanHelp(phoneNumber: string, chatId: string): Promise<void> {
+  const supabase = getSupabaseAdminClient();
+  const { error } = await supabase
+    .from("chats")
+    .update({
+      esperando_humano: true,
+      esperando_humano_desde: new Date().toISOString(),
+    })
+    .eq("id", chatId);
+
+  if (error) {
+    throw new Error("No pudimos marcar el chat como espera de una persona");
+  }
+
+  const staffPhone = getStaffPhoneOrNull();
+  if (staffPhone) {
+    const panelLink = `${catalogBaseUrl()}/staff/chats/${chatId}`;
+    await sendTextMessage(
+      staffPhone,
+      `🙋 El cliente ${phoneNumber} pidió hablar con una persona. Revisa el panel: ${panelLink}`
+    );
+  }
+
+  await sendTextMessage(
+    phoneNumber,
+    "Ya avisamos al equipo, en un momento te contactamos por aquí mismo."
+  );
 }
 
 export async function handleModifyOrder(phoneNumber: string, chatId: string): Promise<void> {

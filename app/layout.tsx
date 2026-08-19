@@ -15,7 +15,8 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Quick! Mini Market",
-  description: "Pide del minimarket y te lo llevamos a casa",
+  description:
+    "La conveniencia de tu residencial, todos los días. Pedidos por WhatsApp en Pueblo Bávaro.",
 };
 
 export default function RootLayout({

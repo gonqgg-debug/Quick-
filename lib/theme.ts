@@ -23,3 +23,10 @@ export function isPharmaCategory(categoria: string): boolean {
 
 export const logoPublicPath = "/brand/logo.svg";
 export const pharmaLogoPublicPath = "/brand/pharma-logo.svg";
+
+export const defaultWhatsappNumber = "18092264986";
+
+export function whatsappHref(): string {
+  const raw = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || defaultWhatsappNumber;
+  return `https://wa.me/${raw.replace(/[^\d]/g, "")}`;
+}

@@ -6,9 +6,11 @@ import {
   getStaffPhoneOrNull,
   handleModifyOrder,
   isSamePhone,
+  isWaitingForHuman,
   logIncomingMessage,
   recordMissingItemDecision,
   reportMissingItem,
+  requestHumanHelp,
   sendCancelConfirmation,
   sendClientMenu,
   sendTextMessage,
@@ -127,6 +129,10 @@ function extractIncomingMessages(payload: unknown): IncomingMessage[] {
   }
 
   return messages;
+}
+
+function isHumanHelpAction(message: IncomingMessage): boolean {
+  return (message.buttonId ?? "") === "hablar_con_alguien";
 }
 
 function isNewOrderAction(message: IncomingMessage): boolean {
@@ -363,6 +369,17 @@ async function handleIncomingMessage(message: IncomingMessage): Promise<void> {
     console.error("[whatsapp] no se pudo registrar el mensaje en whatsapp_log", error);
   }
 
+  if (!fromStaff) {
+    try {
+      const waiting = await isWaitingForHuman(chat.id);
+      if (waiting) {
+        return;
+      }
+    } catch (error) {
+      console.error("[whatsapp] no se pudo verificar espera humana", error);
+    }
+  }
+
   if (fromStaff) {
     if (FALTANTE_PATTERN.test(message.text) || message.text.toLowerCase().startsWith("/faltante")) {
       try {
@@ -370,6 +387,15 @@ async function handleIncomingMessage(message: IncomingMessage): Promise<void> {
       } catch (error) {
         console.error("[whatsapp] error al reportar faltante", error);
       }
+    }
+    return;
+  }
+
+  if (isHumanHelpAction(message)) {
+    try {
+      await requestHumanHelp(message.from, chat.id);
+    } catch (error) {
+      console.error("[whatsapp] error al pedir ayuda humana", error);
     }
     return;
   }
