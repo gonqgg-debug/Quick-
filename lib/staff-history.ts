@@ -106,8 +106,8 @@ export async function fetchHistoryPage(
 ): Promise<{ orders: HistoryOrder[]; total: number }> {
   const from = (filters.page - 1) * filters.pageSize;
   const to = from + filters.pageSize - 1;
-  const query = await buildHistoryQuery(supabase, filters, { count: true });
-  const { data, error, count } = await query.range(from, to);
+  const search = await resolveHistorySearch(supabase, filters.q);
+  const { data, error, count } = await buildHistoryQuery(supabase, filters, { count: true }, search).range(from, to);
 
   if (error) {
     throw error;
@@ -123,12 +123,12 @@ export async function fetchHistoryForExport(
   supabase: SupabaseClient,
   filters: HistoryFilters
 ): Promise<HistoryOrder[]> {
+  const search = await resolveHistorySearch(supabase, filters.q);
   const orders: HistoryOrder[] = [];
   let offset = 0;
   while (offset < HISTORY_EXPORT_MAX_ROWS) {
-    const query = await buildHistoryQuery(supabase, filters, { count: false });
     const to = Math.min(offset + HISTORY_EXPORT_BATCH - 1, HISTORY_EXPORT_MAX_ROWS - 1);
-    const { data, error } = await query.range(offset, to);
+    const { data, error } = await buildHistoryQuery(supabase, filters, { count: false }, search).range(offset, to);
     if (error) {
       throw error;
     }
@@ -147,10 +147,37 @@ export async function fetchHistoryForExport(
   return orders;
 }
 
-async function buildHistoryQuery(
+type HistorySearch = {
+  chatIds: string[];
+  range: { gte: string; lte: string } | null;
+};
+
+async function resolveHistorySearch(supabase: SupabaseClient, rawQuery: string): Promise<HistorySearch | null> {
+  const needle = rawQuery.toLowerCase();
+  if (!needle) {
+    return null;
+  }
+
+  const { data: chats, error: chatError } = await supabase
+    .from("chats")
+    .select("id")
+    .or(`nombre.ilike.%${needle}%,phone_number.ilike.%${needle}%`)
+    .limit(200);
+  if (chatError) {
+    throw chatError;
+  }
+
+  return {
+    chatIds: (chats ?? []).map((chat) => String(chat.id)),
+    range: uuidPrefixRange(needle),
+  };
+}
+
+function buildHistoryQuery(
   supabase: SupabaseClient,
   filters: HistoryFilters,
-  options: { count: boolean }
+  options: { count: boolean },
+  search: HistorySearch | null
 ) {
   let query = supabase
     .from("orders")
@@ -181,26 +208,15 @@ async function buildHistoryQuery(
     query = query.lte("total_estimado", maxTotal);
   }
 
-  const needle = filters.q.toLowerCase();
-  if (needle) {
-    const { data: chats, error: chatError } = await supabase
-      .from("chats")
-      .select("id")
-      .or(`nombre.ilike.%${needle}%,phone_number.ilike.%${needle}%`)
-      .limit(200);
-    if (chatError) {
-      throw chatError;
-    }
-    const chatIds = (chats ?? []).map((chat) => String(chat.id));
-    const range = uuidPrefixRange(needle);
-    if (range && chatIds.length > 0) {
+  if (search) {
+    if (search.range && search.chatIds.length > 0) {
       query = query.or(
-        `and(id.gte.${range.gte},id.lte.${range.lte}),chat_id.in.(${chatIds.join(",")})`
+        `and(id.gte.${search.range.gte},id.lte.${search.range.lte}),chat_id.in.(${search.chatIds.join(",")})`
       );
-    } else if (range) {
-      query = query.gte("id", range.gte).lte("id", range.lte);
-    } else if (chatIds.length > 0) {
-      query = query.in("chat_id", chatIds);
+    } else if (search.range) {
+      query = query.gte("id", search.range.gte).lte("id", search.range.lte);
+    } else if (search.chatIds.length > 0) {
+      query = query.in("chat_id", search.chatIds);
     } else {
       query = query.eq("id", "00000000-0000-0000-0000-000000000000");
     }
