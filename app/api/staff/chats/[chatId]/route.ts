@@ -1,9 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
+import { formatPrice } from "@/lib/money";
 import { isStaffAuthorized, unauthorized } from "@/lib/staff-auth";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import { sendTextMessage } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
+
+const OPEN_ORDER_STATES = [
+  "nueva",
+  "en_proceso",
+  "faltante_reportado",
+  "confirmada",
+  "despachada",
+] as const;
+
+function unwrapOne<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) {
+    return null;
+  }
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
 
 type PostBody = {
   mensaje?: unknown;
@@ -11,6 +27,7 @@ type PostBody = {
 
 type PatchBody = {
   resuelto?: unknown;
+  visto?: unknown;
 };
 
 export async function GET(
@@ -61,6 +78,47 @@ export async function GET(
     createdAt: String(row.created_at),
   }));
 
+  const { data: orderRows, error: orderError } = await supabase
+    .from("orders")
+    .select(
+      `
+      id,
+      created_at,
+      estado,
+      direccion,
+      total_estimado,
+      order_items (
+        cantidad,
+        products!order_items_product_id_fkey ( nombre )
+      )
+    `
+    )
+    .eq("chat_id", chatId)
+    .in("estado", [...OPEN_ORDER_STATES])
+    .order("created_at", { ascending: false });
+
+  if (orderError) {
+    console.error("[staff] no se pudieron leer los pedidos del chat", orderError);
+  }
+
+  const orders = (orderRows ?? []).map((order) => {
+    const items = Array.isArray(order.order_items) ? order.order_items : [];
+    return {
+      id: order.id as string,
+      createdAt: String(order.created_at),
+      estado: String(order.estado),
+      direccion: String(order.direccion ?? ""),
+      totalLabel: formatPrice(order.total_estimado),
+      items: items.map((item) => {
+        const product = unwrapOne(item.products as { nombre: string } | { nombre: string }[] | null);
+        return {
+          cantidad: Number(item.cantidad),
+          nombre: product?.nombre ? String(product.nombre) : "Producto",
+        };
+      }),
+    };
+  });
+
   return NextResponse.json({
     chat: {
       id: chat.id as string,
@@ -68,6 +126,7 @@ export async function GET(
       nombre: chat.nombre ? String(chat.nombre) : null,
       esperandoHumano: Boolean(chat.esperando_humano),
     },
+    orders,
     messages,
   });
 }
@@ -115,6 +174,10 @@ export async function POST(
 
   try {
     await sendTextMessage(String(chat.phone_number), mensaje);
+    await supabase
+      .from("chats")
+      .update({ mensaje_pendiente: false })
+      .eq("id", chatId);
   } catch (error) {
     console.error("[staff] no se pudo enviar el mensaje de WhatsApp", error);
     return NextResponse.json({ error: "No pudimos enviar el mensaje" }, { status: 500 });
@@ -143,14 +206,24 @@ export async function PATCH(
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
 
-  if (body.resuelto !== true) {
-    return NextResponse.json({ error: "Debes enviar { resuelto: true }" }, { status: 400 });
+  const markSeen = body.visto === true;
+  const markResolved = body.resuelto === true;
+  if (!markSeen && !markResolved) {
+    return NextResponse.json({ error: "Debes enviar { visto: true } o { resuelto: true }" }, { status: 400 });
   }
 
   const supabase = getSupabaseAdminClient();
+  const patch: { mensaje_pendiente?: boolean; esperando_humano?: boolean } = {};
+  if (markSeen || markResolved) {
+    patch.mensaje_pendiente = false;
+  }
+  if (markResolved) {
+    patch.esperando_humano = false;
+  }
+
   const { data, error } = await supabase
     .from("chats")
-    .update({ esperando_humano: false })
+    .update(patch)
     .eq("id", chatId)
     .select("id")
     .maybeSingle();

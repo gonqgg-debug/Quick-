@@ -31,9 +31,12 @@ export async function GET() {
       metodo_pago,
       total_estimado,
       notas,
+      chat_id,
       chats (
+        id,
         phone_number,
-        nombre
+        nombre,
+        mensaje_pendiente
       ),
       order_items (
         id,
@@ -55,14 +58,25 @@ export async function GET() {
   const orders = (data ?? []).map((order) => {
     const chat = unwrapOne(
       order.chats as
-        | { phone_number: string; nombre: string | null }
-        | { phone_number: string; nombre: string | null }[]
+        | {
+            id: string;
+            phone_number: string;
+            nombre: string | null;
+            mensaje_pendiente?: boolean;
+          }
+        | {
+            id: string;
+            phone_number: string;
+            nombre: string | null;
+            mensaje_pendiente?: boolean;
+          }[]
         | null
     );
     const items = Array.isArray(order.order_items) ? order.order_items : [];
 
     return {
       id: order.id as string,
+      chatId: (order.chat_id as string | null) || (chat?.id ? String(chat.id) : null),
       createdAt: order.created_at as string,
       updatedAt: order.updated_at as string,
       estado: order.estado as OrderEstado,
@@ -73,6 +87,7 @@ export async function GET() {
       notas: order.notas ? String(order.notas) : null,
       clienteNombre: chat?.nombre ? String(chat.nombre) : null,
       clienteTelefono: chat?.phone_number ? String(chat.phone_number) : "Sin teléfono",
+      mensajePendiente: Boolean(chat?.mensaje_pendiente),
       items: items.map((item) => {
         const product = unwrapOne(
           item.products as { nombre: string } | { nombre: string }[] | null

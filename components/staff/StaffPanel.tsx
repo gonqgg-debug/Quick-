@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { StaffChatPanel } from "@/components/staff/StaffChatPanel";
 import { StaffChrome } from "@/components/staff/StaffChrome";
 import { StaffLogin, staffLogout } from "@/components/staff/StaffLogin";
 import { isToday } from "@/lib/local-day";
@@ -17,7 +19,6 @@ import {
   playStaffAlert,
   readStaffSoundMuted,
   unlockStaffAlerts,
-  writeStaffSoundMuted,
 } from "@/lib/staff-alerts";
 import { brand } from "@/lib/theme";
 import type { OrderEstado, OrderItemEstado } from "@/lib/types";
@@ -34,6 +35,7 @@ type StaffOrderItem = {
 
 type StaffOrder = {
   id: string;
+  chatId?: string | null;
   createdAt: string;
   updatedAt?: string;
   estado: OrderEstado;
@@ -44,6 +46,7 @@ type StaffOrder = {
   notas: string | null;
   clienteNombre: string | null;
   clienteTelefono: string;
+  mensajePendiente?: boolean;
   items: StaffOrderItem[];
 };
 
@@ -151,7 +154,6 @@ function usesCards(filterId: FilterId): boolean {
 export function StaffPanel() {
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [orders, setOrders] = useState<StaffOrder[]>([]);
-  const [waitingCount, setWaitingCount] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -160,6 +162,7 @@ export function StaffPanel() {
   const [filterId, setFilterId] = useState<FilterId>("nueva");
   const [now, setNow] = useState(() => Date.now());
   const [soundMuted, setSoundMuted] = useState(false);
+  const [openChatId, setOpenChatId] = useState<string | null>(null);
   const seenNewIds = useRef<Set<string> | null>(null);
   const seenUrgentIds = useRef<Set<string> | null>(null);
 
@@ -180,21 +183,9 @@ export function StaffPanel() {
     return true;
   }, []);
 
-  const loadWaitingCount = useCallback(async () => {
-    const response = await fetch("/api/staff/chats", { credentials: "include" });
-    if (!response.ok) {
-      return;
-    }
-    const body = (await response.json()) as { chats: unknown[] };
-    setWaitingCount(body.chats?.length ?? 0);
-  }, []);
-
   const refresh = useCallback(async () => {
-    const ok = await loadOrders();
-    if (ok) {
-      await loadWaitingCount();
-    }
-  }, [loadOrders, loadWaitingCount]);
+    await loadOrders();
+  }, [loadOrders]);
 
   useEffect(() => {
     setSoundMuted(readStaffSoundMuted());
@@ -276,9 +267,10 @@ export function StaffPanel() {
     return todayOrders.filter((order) => activeFilter.match(order.estado) && orderMatchesQuery(order, query));
   }, [todayOrders, activeFilter, query]);
 
-  const historyOrders = useMemo(() => {
-    return orders.filter((order) => !isToday(order.createdAt) && orderMatchesQuery(order, query));
-  }, [orders, query]);
+  const notificationCount = useMemo(
+    () => orders.filter((order) => order.mensajePendiente).length,
+    [orders]
+  );
 
   const needsLiveClock = useMemo(
     () => todayOrders.some((order) => usesOrderAging(order.estado)),
@@ -390,13 +382,6 @@ export function StaffPanel() {
     }
   }
 
-  function toggleSound() {
-    const next = !soundMuted;
-    setSoundMuted(next);
-    writeStaffSoundMuted(next);
-    void unlockStaffAlerts();
-  }
-
   if (authorized === null) {
     return (
       <main className="min-h-screen bg-white px-3 pt-4">
@@ -414,12 +399,10 @@ export function StaffPanel() {
     return <StaffLogin onSuccess={() => refresh()} />;
   }
 
-  const showHistory = filterId === "completada" || query.length > 0;
-
   return (
     <StaffChrome
       active="orders"
-      waitingCount={waitingCount}
+      notificationCount={notificationCount}
       onLogout={() => {
         void staffLogout().then(() => {
           setAuthorized(false);
@@ -427,29 +410,13 @@ export function StaffPanel() {
           setSelectedId(null);
         });
       }}
-      search={
-        <div className="flex items-center justify-end gap-2">
-          {searchOpen ? null : (
-            <button
-              type="button"
-              onClick={toggleSound}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
-              style={{ backgroundColor: "#F3F4F6" }}
-              aria-label={soundMuted ? "Activar alertas sonoras" : "Silenciar alertas sonoras"}
-              title={soundMuted ? "Alertas silenciadas" : "Alertas sonoras activas"}
-            >
-              {soundMuted ? "🔇" : "🔔"}
-            </button>
-          )}
-          <StaffSearch
-            open={searchOpen}
-            query={searchQuery}
-            placeholder="Buscar pedido o cliente"
-            onToggle={() => setSearchOpen((current) => !current)}
-            onChange={setSearchQuery}
-          />
-        </div>
-      }
+      search={{
+        open: searchOpen,
+        query: searchQuery,
+        placeholder: "Buscar pedido o cliente",
+        onToggle: () => setSearchOpen((current) => !current),
+        onChange: setSearchQuery,
+      }}
       filters={
         <div className="space-y-4">
           <TodaySummary nuevas={summary.nuevas} enProceso={summary.enProceso} urgentes={summary.urgentes} />
@@ -506,6 +473,7 @@ export function StaffPanel() {
               onToggle={() => setSelectedId(selectedId === order.id ? null : order.id)}
               onStatus={changeStatus}
               onMissing={markMissing}
+              onOpenChat={setOpenChatId}
             />
           ))}
         </ul>
@@ -519,32 +487,56 @@ export function StaffPanel() {
           onSelect={setSelectedId}
           onStatus={changeStatus}
           onMissing={markMissing}
+          onOpenChat={setOpenChatId}
         />
       )}
 
-      {showHistory ? (
-        <section className="mt-10">
-          <h2 className="font-display text-lg font-bold">Historial</h2>
-          <p className="mt-1 text-sm text-brand-muted">Pedidos de días anteriores.</p>
-          {historyOrders.length === 0 ? (
-            <p className="mt-4 text-sm text-brand-muted">No hay pedidos anteriores para mostrar.</p>
-          ) : (
-            <div className="mt-4">
-              <OrderTable
-                orders={historyOrders}
-                now={now}
-                live={false}
-                selectedId={selectedId}
-                busyKey={busyKey}
-                onSelect={setSelectedId}
-                onStatus={changeStatus}
-                onMissing={markMissing}
-              />
-            </div>
-          )}
-        </section>
+      {filterId === "completada" ? (
+        <p className="mt-5 text-center text-sm">
+          <Link href="/staff/historial" className="font-bold" style={{ color: brand.blue }}>
+            Ver historial completo
+          </Link>
+        </p>
+      ) : null}
+      {openChatId ? (
+        <StaffChatPanel
+          chatId={openChatId}
+          onClose={() => {
+            setOpenChatId(null);
+            void refresh().catch(() => undefined);
+          }}
+          onUnauthorized={() => setAuthorized(false)}
+          onConcluded={() => {
+            void refresh().catch(() => undefined);
+          }}
+        />
       ) : null}
     </StaffChrome>
+  );
+}
+
+function MessageAlert({ compact = false, onOpen }: { compact?: boolean; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen();
+      }}
+      className={`relative inline-flex items-center justify-center rounded-full ${compact ? "h-9 w-9" : "h-11 w-11"}`}
+      style={{ backgroundColor: "#FFF4E5" }}
+      aria-label="El cliente escribió. Abrir chat de WhatsApp"
+      title="El cliente escribió. Abrir chat"
+    >
+      <svg viewBox="0 0 24 24" className={compact ? "h-4 w-4" : "h-5 w-5"} fill="none" stroke={brand.orange} strokeWidth="2.2">
+        <path d="M5 16.5V7.8A2.8 2.8 0 0 1 7.8 5h8.4A2.8 2.8 0 0 1 19 7.8v5.4A2.8 2.8 0 0 1 16.2 16H9l-4 3.5z" />
+      </svg>
+      <span
+        className="absolute right-0.5 top-0.5 h-3 w-3 rounded-full ring-2 ring-white"
+        style={{ backgroundColor: brand.orange }}
+        aria-hidden
+      />
+    </button>
   );
 }
 
@@ -587,6 +579,7 @@ function OrderCard({
   onToggle,
   onStatus,
   onMissing,
+  onOpenChat,
 }: {
   order: StaffOrder;
   open: boolean;
@@ -595,6 +588,7 @@ function OrderCard({
   onToggle: () => void;
   onStatus: (orderId: string, estado: OrderEstado) => void;
   onMissing: (order: StaffOrder, item: StaffOrderItem) => void;
+  onOpenChat: (chatId: string) => void;
 }) {
   const aging = usesOrderAging(order.estado);
   const agingLevel = aging ? orderAgingLevel(elapsedMinutes(order.createdAt, now)) : null;
@@ -606,10 +600,11 @@ function OrderCard({
       className="overflow-hidden rounded-[28px] bg-white shadow-[0_10px_28px_rgba(26,26,26,0.08)]"
       style={{ borderLeft: `6px solid ${stripe}` }}
     >
+      <div className="flex items-start gap-1">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-start justify-between gap-3 px-5 py-5 text-left"
+        className="flex min-w-0 flex-1 items-start justify-between gap-3 px-5 py-5 text-left"
         style={{ minHeight: 72 }}
       >
         <div className="min-w-0">
@@ -653,6 +648,12 @@ function OrderCard({
           <p className="mt-2 font-display text-lg font-bold">{order.totalLabel}</p>
         </div>
       </button>
+      {order.mensajePendiente && order.chatId ? (
+        <div className="pr-4 pt-4">
+          <MessageAlert onOpen={() => onOpenChat(order.chatId!)} />
+        </div>
+      ) : null}
+      </div>
 
       {quick ? (
         <div className="px-5 pb-4">
@@ -688,6 +689,7 @@ function OrderTable({
   onSelect,
   onStatus,
   onMissing,
+  onOpenChat,
 }: {
   orders: StaffOrder[];
   now: number;
@@ -697,6 +699,7 @@ function OrderTable({
   onSelect: (id: string | null) => void;
   onStatus: (orderId: string, estado: OrderEstado) => void;
   onMissing: (order: StaffOrder, item: StaffOrderItem) => void;
+  onOpenChat: (chatId: string) => void;
 }) {
   return (
     <div className="overflow-x-auto rounded-[24px] border" style={{ borderColor: "#E5E7EB" }}>
@@ -734,6 +737,7 @@ function OrderTable({
                 onSelect={onSelect}
                 onStatus={onStatus}
                 onMissing={onMissing}
+                onOpenChat={onOpenChat}
               />
             );
           })}
@@ -753,6 +757,7 @@ function TableRowFragment({
   onSelect,
   onStatus,
   onMissing,
+  onOpenChat,
 }: {
   order: StaffOrder;
   open: boolean;
@@ -763,6 +768,7 @@ function TableRowFragment({
   onSelect: (id: string | null) => void;
   onStatus: (orderId: string, estado: OrderEstado) => void;
   onMissing: (order: StaffOrder, item: StaffOrderItem) => void;
+  onOpenChat: (chatId: string) => void;
 }) {
   return (
     <>
@@ -772,6 +778,11 @@ function TableRowFragment({
             #{formatOrderNumber(order.id)}
             {agingLevel === "urgent" ? " ⚠️" : ""}
           </button>
+          {order.mensajePendiente && order.chatId ? (
+            <div className="mt-2">
+              <MessageAlert compact onOpen={() => onOpenChat(order.chatId!)} />
+            </div>
+          ) : null}
           <p className="text-xs text-brand-muted">{formatWhen(order.createdAt)}</p>
         </td>
         <td className="max-w-[140px] truncate px-4 py-3">{customerLabel(order)}</td>
@@ -897,58 +908,6 @@ function OrderDetails({
   );
 }
 
-function StaffSearch({
-  open,
-  query,
-  placeholder,
-  onToggle,
-  onChange,
-}: {
-  open: boolean;
-  query: string;
-  placeholder: string;
-  onToggle: () => void;
-  onChange: (value: string) => void;
-}) {
-  if (open) {
-    return (
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <input
-          autoFocus
-          value={query}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder={placeholder}
-          className="h-11 w-full rounded-full border px-4 outline-none"
-          style={{ borderColor: `${brand.green}80`, fontSize: 16 }}
-        />
-        <button
-          type="button"
-          onClick={() => {
-            onChange("");
-            onToggle();
-          }}
-          className="h-11 shrink-0 text-sm font-bold"
-          style={{ color: brand.blue }}
-        >
-          Cerrar
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="flex h-11 w-11 items-center justify-center rounded-full"
-      style={{ backgroundColor: "#F3F4F6" }}
-      aria-label="Buscar"
-    >
-      <SearchIcon />
-    </button>
-  );
-}
-
 function EmptyState({ message }: { message: string }) {
   return (
     <div className="rounded-[28px] px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
@@ -988,15 +947,6 @@ function InfoRow({ icon, children }: { icon: React.ReactNode; children: React.Re
       </span>
       <span>{children}</span>
     </p>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke={brand.ink} strokeWidth="2.2">
-      <circle cx="11" cy="11" r="7" />
-      <path d="M20 20l-3.2-3.2" strokeLinecap="round" />
-    </svg>
   );
 }
 

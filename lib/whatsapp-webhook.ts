@@ -2,6 +2,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase";
 import {
   formatShortOrderId,
   getActiveOrder,
+  getOpenStaffOrder,
   getOrCreateChat,
   getStaffPhoneOrNull,
   handleModifyOrder,
@@ -15,6 +16,7 @@ import {
   sendClientMenu,
   sendTextMessage,
   cancelOrder,
+  flagCustomerMessageAlert,
 } from "@/lib/whatsapp";
 
 const GREETING_PATTERN =
@@ -132,7 +134,14 @@ function extractIncomingMessages(payload: unknown): IncomingMessage[] {
 }
 
 function isHumanHelpAction(message: IncomingMessage): boolean {
-  return (message.buttonId ?? "") === "hablar_con_alguien";
+  const id = (message.buttonId ?? "").toLowerCase();
+  const text = message.text.trim().toLowerCase();
+  return (
+    id === "hablar_con_alguien" ||
+    text === "hablar con alguien" ||
+    text === "3" ||
+    text === "3️⃣"
+  );
 }
 
 function isNewOrderAction(message: IncomingMessage): boolean {
@@ -367,6 +376,17 @@ async function handleIncomingMessage(message: IncomingMessage): Promise<void> {
     await logIncomingMessage(chat.id, contenido);
   } catch (error) {
     console.error("[whatsapp] no se pudo registrar el mensaje en whatsapp_log", error);
+  }
+
+  if (!fromStaff) {
+    try {
+      const openOrder = await getOpenStaffOrder(chat.id);
+      if (openOrder) {
+        await flagCustomerMessageAlert(chat.id);
+      }
+    } catch (error) {
+      console.error("[whatsapp] no se pudo marcar alerta de mensaje del cliente", error);
+    }
   }
 
   if (!fromStaff) {

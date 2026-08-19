@@ -239,15 +239,30 @@ const ACTIVE_ORDER_STATES = [
   "confirmada",
 ] as const;
 
+const OPEN_STAFF_ORDER_STATES = [...ACTIVE_ORDER_STATES, "despachada"] as const;
+
 export async function getActiveOrder(
   chatId: string
+): Promise<{ id: string; estado: string } | null> {
+  return getOrderInStates(chatId, ACTIVE_ORDER_STATES);
+}
+
+export async function getOpenStaffOrder(
+  chatId: string
+): Promise<{ id: string; estado: string } | null> {
+  return getOrderInStates(chatId, OPEN_STAFF_ORDER_STATES);
+}
+
+async function getOrderInStates(
+  chatId: string,
+  states: readonly string[]
 ): Promise<{ id: string; estado: string } | null> {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("orders")
     .select("id, estado")
     .eq("chat_id", chatId)
-    .in("estado", [...ACTIVE_ORDER_STATES])
+    .in("estado", [...states])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -263,10 +278,32 @@ export async function getActiveOrder(
   return { id: data.id as string, estado: String(data.estado) };
 }
 
+export async function flagCustomerMessageAlert(chatId: string): Promise<void> {
+  const supabase = getSupabaseAdminClient();
+  const { error } = await supabase.from("chats").update({ mensaje_pendiente: true }).eq("id", chatId);
+  if (error) {
+    console.error("[whatsapp] no se pudo marcar alerta de mensaje", error);
+  }
+}
+
+const HUMAN_HELP_BUTTON = {
+  id: "hablar_con_alguien",
+  title: "Hablar con alguien",
+} as const;
+
+type MenuChoice = { id: string; title: string };
+
+function withHumanHelp(buttons: MenuChoice[]): MenuChoice[] {
+  if (buttons.some((button) => button.id === HUMAN_HELP_BUTTON.id)) {
+    return buttons;
+  }
+  return [...buttons, { id: HUMAN_HELP_BUTTON.id, title: HUMAN_HELP_BUTTON.title }];
+}
+
 async function sendButtonMenu(
   phoneNumber: string,
   bodyText: string,
-  buttons: { id: string; title: string }[]
+  buttons: MenuChoice[]
 ): Promise<WhatsAppSendResult> {
   const to = normalizePhoneNumber(phoneNumber);
   const result = await postWhatsAppMessage({
@@ -293,19 +330,66 @@ async function sendButtonMenu(
   return result;
 }
 
+async function sendListMenu(
+  phoneNumber: string,
+  bodyText: string,
+  rows: MenuChoice[]
+): Promise<WhatsAppSendResult> {
+  const to = normalizePhoneNumber(phoneNumber);
+  const result = await postWhatsAppMessage({
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "interactive",
+    interactive: {
+      type: "list",
+      body: { text: bodyText },
+      action: {
+        button: "Ver opciones",
+        sections: [
+          {
+            title: "Opciones",
+            rows: rows.map((row) => ({
+              id: row.id,
+              title: row.title,
+            })),
+          },
+        ],
+      },
+    },
+  });
+
+  await logOutgoingMessage(
+    phoneNumber,
+    `${bodyText}\n${rows.map((row) => `[${row.title}]`).join(" ")}`
+  );
+  return result;
+}
+
+async function sendChoiceMenu(
+  phoneNumber: string,
+  bodyText: string,
+  buttons: MenuChoice[]
+): Promise<WhatsAppSendResult> {
+  const choices = withHumanHelp(buttons);
+  if (choices.length <= 3) {
+    return sendButtonMenu(phoneNumber, bodyText, choices);
+  }
+  return sendListMenu(phoneNumber, bodyText, choices);
+}
+
 export async function sendClientMenu(
   phoneNumber: string,
   activeOrderId: string | null
 ): Promise<WhatsAppSendResult> {
   if (!activeOrderId) {
-    return await sendButtonMenu(phoneNumber, "¡Bienvenido a Quick! Mini Market! ¿Cómo te podemos ayudar hoy?", [
+    return await sendChoiceMenu(phoneNumber, "¡Bienvenido a Quick! Mini Market! ¿Cómo te podemos ayudar hoy?", [
       { id: "nueva_orden", title: "Nueva orden" },
       { id: "ver_pedido", title: "Ver mi pedido" },
-      { id: "hablar_con_alguien", title: "Hablar con alguien" },
     ]);
   }
 
-  return await sendButtonMenu(phoneNumber, "Ya tienes un pedido en curso. ¿Qué quieres hacer?", [
+  return await sendChoiceMenu(phoneNumber, "Ya tienes un pedido en curso. ¿Qué quieres hacer?", [
     { id: "modificar_pedido", title: "Modificar pedido" },
     { id: "cancelar_pedido", title: "Cancelar pedido" },
     { id: "ver_estatus", title: "Ver estatus" },
@@ -399,7 +483,7 @@ export async function sendCancelConfirmation(
   orderId: string
 ): Promise<WhatsAppSendResult> {
   const numero = shortOrderId(orderId);
-  return await sendButtonMenu(phoneNumber, `¿Seguro que quieres cancelar tu pedido #${numero}?`, [
+  return await sendChoiceMenu(phoneNumber, `¿Seguro que quieres cancelar tu pedido #${numero}?`, [
     { id: `confirmar_cancelacion_${orderId}`, title: "Sí, cancelar" },
     { id: "no_cancelar", title: "No" },
   ]);
@@ -614,38 +698,17 @@ export async function notifyOrderDispatched(orderId: string): Promise<void> {
 }
 
 async function sendMissingItemPrompt(phoneNumber: string, bodyText: string): Promise<void> {
-  const to = normalizePhoneNumber(phoneNumber);
-
   try {
-    await postWhatsAppMessage({
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to,
-      type: "interactive",
-      interactive: {
-        type: "button",
-        body: { text: bodyText },
-        action: {
-          buttons: [
-            {
-              type: "reply",
-              reply: { id: "faltante_reemplazo", title: "Sugerir reemplazo" },
-            },
-            {
-              type: "reply",
-              reply: { id: "faltante_eliminar", title: "Eliminarlo" },
-            },
-          ],
-        },
-      },
-    });
-    await logOutgoingMessage(
-      phoneNumber,
-      `${bodyText}\n[Sugerir reemplazo] [Eliminarlo]`
-    );
+    await sendChoiceMenu(phoneNumber, bodyText, [
+      { id: "faltante_reemplazo", title: "Sugerir reemplazo" },
+      { id: "faltante_eliminar", title: "Eliminarlo" },
+    ]);
   } catch (error) {
     console.error("[whatsapp] no se pudo enviar el menú de faltante, usando texto", error);
-    await sendTextMessage(phoneNumber, bodyText);
+    await sendTextMessage(
+      phoneNumber,
+      `${bodyText}\n3️⃣ Hablar con alguien`
+    );
   }
 }
 

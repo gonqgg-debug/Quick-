@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { StaffChatPanel } from "@/components/staff/StaffChatPanel";
 import { StaffChrome } from "@/components/staff/StaffChrome";
 import { StaffLogin, staffLogout } from "@/components/staff/StaffLogin";
 import { brand } from "@/lib/theme";
@@ -14,13 +14,14 @@ type WaitingChat = {
   esperandoHumanoDesde: string | null;
 };
 
-export function StaffChatsList() {
+export function StaffChatsList({ initialChatId = null }: { initialChatId?: string | null }) {
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [chats, setChats] = useState<WaitingChat[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [openChatId, setOpenChatId] = useState<string | null>(initialChatId);
 
   const loadChats = useCallback(async (): Promise<boolean> => {
     const response = await fetch("/api/staff/chats", { credentials: "include" });
@@ -95,53 +96,19 @@ export function StaffChatsList() {
   return (
     <StaffChrome
       active="chats"
-      waitingCount={chats.length}
       onLogout={() => {
         void staffLogout().then(() => {
           setAuthorized(false);
           setChats([]);
         });
       }}
-      search={
-        searchOpen ? (
-          <div className="flex items-center gap-2">
-            <input
-              autoFocus
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Buscar cliente o teléfono"
-              className="h-11 w-full rounded-full border px-4 outline-none"
-              style={{ borderColor: `${brand.green}80`, fontSize: 16 }}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                setSearchQuery("");
-                setSearchOpen(false);
-              }}
-              className="h-11 text-sm font-bold"
-              style={{ color: brand.blue }}
-            >
-              Cerrar
-            </button>
-          </div>
-        ) : (
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => setSearchOpen(true)}
-              className="flex h-11 w-11 items-center justify-center rounded-full"
-              style={{ backgroundColor: "#F3F4F6" }}
-              aria-label="Buscar"
-            >
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke={brand.ink} strokeWidth="2.2">
-                <circle cx="11" cy="11" r="7" />
-                <path d="M20 20l-3.2-3.2" strokeLinecap="round" />
-              </svg>
-            </button>
-          </div>
-        )
-      }
+      search={{
+        open: searchOpen,
+        query: searchQuery,
+        placeholder: "Buscar cliente o teléfono",
+        onToggle: () => setSearchOpen((current) => !current),
+        onChange: setSearchQuery,
+      }}
     >
       {error ? (
         <p className="mb-3 rounded-2xl px-3 py-2 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
@@ -159,9 +126,10 @@ export function StaffChatsList() {
         <ul className="space-y-3">
           {visibleChats.map((chat) => (
             <li key={chat.id}>
-              <Link
-                href={`/staff/chats/${chat.id}`}
-                className="flex items-center justify-between gap-3 rounded-[28px] bg-white px-4 py-4 shadow-[0_10px_28px_rgba(26,26,26,0.08)]"
+              <button
+                type="button"
+                onClick={() => setOpenChatId(chat.id)}
+                className="flex w-full items-center justify-between gap-3 rounded-[28px] bg-white px-4 py-4 text-left shadow-[0_10px_28px_rgba(26,26,26,0.08)]"
                 style={{ minHeight: 72, borderLeft: `6px solid ${brand.orange}` }}
               >
                 <div className="min-w-0">
@@ -171,11 +139,21 @@ export function StaffChatsList() {
                 <p className="shrink-0 text-sm font-bold" style={{ color: brand.orange }}>
                   {formatWaitingSince(chat.esperandoHumanoDesde, now)}
                 </p>
-              </Link>
+              </button>
             </li>
           ))}
         </ul>
       )}
+      {openChatId ? (
+        <StaffChatPanel
+          chatId={openChatId}
+          onClose={() => setOpenChatId(null)}
+          onUnauthorized={() => setAuthorized(false)}
+          onConcluded={() => {
+            void loadChats().catch(() => undefined);
+          }}
+        />
+      ) : null}
     </StaffChrome>
   );
 }
