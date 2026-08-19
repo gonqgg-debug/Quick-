@@ -238,6 +238,7 @@ export default function Home() {
   const year = new Date().getFullYear();
   const hasHero = hasPublicImage("hero.jpeg");
   const hasQuienesSomos = hasPublicImage("quienes-somos.jpg");
+  const hasUbicacion = hasPublicImage("ubicacion.webp");
   const hasPharmaStorefront = hasPublicImage("pharmaquick-storefront.jpeg");
 
   return (
