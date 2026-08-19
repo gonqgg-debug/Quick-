@@ -77,7 +77,7 @@ export function LandingHeader() {
                 key={link.href}
                 href={link.href}
                 className="text-sm font-bold transition-colors hover:opacity-80"
-                style={{ color: brand.orange }}
+                style={{ color: brand.blue }}
                 onClick={(e) => {
                   e.preventDefault();
                   goTo(link.href);
@@ -120,7 +120,7 @@ export function LandingHeader() {
                 <a
                   href={link.href}
                   className="flex min-h-12 items-center text-base font-bold"
-                  style={{ color: brand.orange }}
+                  style={{ color: brand.blue }}
                   onClick={(e) => {
                     e.preventDefault();
                     goTo(link.href);
