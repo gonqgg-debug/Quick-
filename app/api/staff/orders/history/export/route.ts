@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const buffer = buildXlsx(HEADERS, historyExportRows(orders));
     const filename = `historial-pedidos-${localDayKey(new Date().toISOString())}.xlsx`;
 
-    return new NextResponse(buffer, {
+    return new NextResponse(Uint8Array.from(buffer), {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": `attachment; filename="${filename}"`,
