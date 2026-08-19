@@ -206,7 +206,7 @@ export function StaffChatsList({ initialChatId = null }: { initialChatId?: strin
                 type="button"
                 onClick={() => {
                   setClosedTouched(true);
-                  setClosedExpanded((current) => !showClosed);
+                  setClosedExpanded(!showClosed);
                 }}
                 className="mb-3 flex w-full items-center justify-between px-1 text-left"
               >
