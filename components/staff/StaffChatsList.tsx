@@ -89,7 +89,7 @@ export function StaffChatsList() {
   }
 
   if (!authorized) {
-    return <StaffLogin onSuccess={() => loadChats()} />;
+    return <StaffLogin onSuccess={() => { loadChats(); }} />;
   }
 
   return (

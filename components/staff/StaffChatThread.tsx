@@ -166,7 +166,7 @@ export function StaffChatThread({ chatId }: { chatId: string }) {
   }
 
   if (!authorized) {
-    return <StaffLogin onSuccess={() => loadThread()} />;
+    return <StaffLogin onSuccess={() => { loadThread(); }} />;
   }
 
   const title = chat?.nombre || chat?.phoneNumber || "Conversación";
