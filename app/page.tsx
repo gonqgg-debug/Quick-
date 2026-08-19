@@ -228,35 +228,6 @@ function SoftCircles() {
   );
 }
 
-function PharmaLogoCard() {
-  return (
-    <div
-      className="relative mb-6 inline-flex items-center justify-center overflow-hidden rounded-3xl bg-white p-8 md:p-10"
-      style={{ boxShadow: "0 12px 32px rgba(26, 26, 26, 0.16)" }}
-    >
-      <svg
-        className="pointer-events-none absolute inset-0 h-full w-full"
-        viewBox="0 0 200 120"
-        preserveAspectRatio="xMidYMid slice"
-        aria-hidden="true"
-      >
-        <g fill="#1F82C5" opacity="0.08">
-          <path d="M28 18h8v10h10v8H36v10h-8V36H18v-8h10V18z" />
-          <path d="M162 22h7v8h8v7h-8v8h-7v-8h-8v-7h8v-8z" />
-          <path d="M94 78h9v11h11v9H103v11H94v-11H83v-9h11V78z" />
-          <circle cx="48" cy="88" r="5" />
-          <circle cx="168" cy="86" r="4" />
-          <circle cx="18" cy="70" r="3" />
-        </g>
-      </svg>
-      <Logo
-        variant="pharma"
-        className="relative z-10 !h-14 !w-auto !max-w-[240px] !object-center md:!h-[4.5rem] md:!max-w-[300px]"
-      />
-    </div>
-  );
-}
-
 function Inner({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={`mx-auto max-w-[1100px] px-6 md:px-8 ${className}`}>{children}</div>
@@ -267,7 +238,7 @@ export default function Home() {
   const year = new Date().getFullYear();
   const hasHero = hasPublicImage("hero.jpeg");
   const hasQuienesSomos = hasPublicImage("quienes-somos.jpg");
-  const hasUbicacion = hasPublicImage("ubicacion.webp");
+  const hasPharmaStorefront = hasPublicImage("pharmaquick-storefront.jpeg");
 
   return (
     <main style={{ color: brand.ink }}>
@@ -410,7 +381,13 @@ export default function Home() {
         <Inner className="relative z-10 py-20 md:py-28">
           <div className="grid items-center gap-10 md:grid-cols-2 md:gap-16">
             <div>
-              <PharmaLogoCard />
+              {hasPharmaStorefront ? (
+                <SectionPhoto
+                  src="/images/pharmaquick-storefront.jpeg"
+                  alt="Fachada de PharmaQuick! con el logo iluminado sobre la entrada de la farmacia"
+                  className="mb-6 aspect-[16/10] w-full"
+                />
+              ) : null}
               <div>
                 <span className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-bold" style={{ color: brand.blue }}>
                   Próximamente
