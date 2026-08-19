@@ -17,6 +17,13 @@ export const metadata: Metadata = {
   title: "Quick! Mini Market",
   description:
     "La conveniencia de tu residencial, todos los días. Pedidos por WhatsApp en Pueblo Bávaro.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/icon.png", type: "image/png", sizes: "192x192" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180" }],
+  },
 };
 
 export default function RootLayout({

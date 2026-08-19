@@ -85,6 +85,29 @@ function IconMapPin({ className = "", style }: IconProps) {
   );
 }
 
+function IconClock({ className = "", style }: IconProps) {
+  return (
+    <svg
+      className={className}
+      style={style}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </svg>
+  );
+}
+
+const STORE_ADDRESS =
+  "Residencial Jardines 3, Pueblo Bávaro, La Altagracia, República Dominicana";
+
+const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(STORE_ADDRESS)}`;
+
 const STEPS = [
   {
     n: "1",
@@ -236,8 +259,15 @@ export default function Home() {
                 Quick! Mini Market lleva lo que necesitas directo a tu comunidad — sin salir del
                 residencial.
               </p>
-              <div className="mt-6 md:mt-8">
+              <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap md:mt-8 md:items-start">
                 <WhatsAppButton />
+                <a
+                  href="#donde-estamos"
+                  className="inline-flex min-h-12 items-center justify-center rounded-full border-2 px-7 py-3.5 text-base font-bold"
+                  style={{ borderColor: brand.green, color: brand.green }}
+                >
+                  Visítanos en tienda
+                </a>
               </div>
             </div>
             {hasHero ? (
@@ -333,6 +363,12 @@ export default function Home() {
                   </li>
                 ))}
               </ol>
+              <p className="relative z-10 mt-8 text-center text-sm leading-relaxed" style={{ color: brand.muted }}>
+                ¿Prefieres venir en persona? Te esperamos en Residencial Jardines 3, todos los días.{" "}
+                <a href="#donde-estamos" className="font-bold underline-offset-2 hover:underline" style={{ color: brand.green }}>
+                  Ver ubicación
+                </a>
+              </p>
             </div>
           </div>
         </Inner>
@@ -385,10 +421,24 @@ export default function Home() {
               </p>
               <div className="mt-6 flex items-start gap-3 rounded-2xl bg-white/15 px-5 py-4">
                 <IconMapPin className="mt-0.5 h-5 w-5 shrink-0 text-white" />
-                <span className="font-semibold leading-relaxed">
-                  Residencial Jardines 3, Pueblo Bávaro, La Altagracia, República Dominicana
-                </span>
+                <span className="font-semibold leading-relaxed">{STORE_ADDRESS}</span>
               </div>
+              <div className="mt-3 flex items-start gap-3 rounded-2xl bg-white/15 px-5 py-4">
+                <IconClock className="mt-0.5 h-5 w-5 shrink-0 text-white" />
+                <div>
+                  <p className="font-semibold">Horario de atención</p>
+                  <p className="mt-0.5 text-sm text-white/85">Todos los días, de 8:00 a. m. a 12:00 a. m.</p>
+                </div>
+              </div>
+              <a
+                href={mapsHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-6 inline-flex min-h-12 items-center justify-center rounded-full bg-white px-7 py-3 text-base font-bold"
+                style={{ color: brand.green }}
+              >
+                Cómo llegar
+              </a>
               {/* Aquí se puede insertar un mapa embebido de Google Maps más adelante. */}
             </div>
             {hasUbicacion ? (
