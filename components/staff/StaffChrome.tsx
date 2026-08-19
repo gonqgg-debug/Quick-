@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Logo } from "@/components/brand/Logo";
 import { brand } from "@/lib/theme";
 
 type StaffChromeProps = {
@@ -119,9 +120,9 @@ function TabLink({
 
 function MiniLogo() {
   return (
-    <p className="font-display shrink-0 text-lg font-extrabold leading-none">
-      <span style={{ color: brand.green }}>Quick!</span>
-    </p>
+    <Link href="/staff" className="shrink-0" aria-label="Quick! Mini Market">
+      <Logo className="h-8 w-auto max-w-[140px] md:h-9 md:max-w-[160px]" />
+    </Link>
   );
 }
 

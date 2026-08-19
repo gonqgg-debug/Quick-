@@ -1,7 +1,6 @@
 import fs from "fs";
 import path from "path";
 import Image from "next/image";
-import { Badge } from "@/components/brand/Badge";
 import { Logo } from "@/components/brand/Logo";
 import { brand, whatsappHref } from "@/lib/theme";
 
@@ -65,23 +64,6 @@ function IconHome({ className = "", style }: IconProps) {
   );
 }
 
-function IconHeart({ className = "", style }: IconProps) {
-  return (
-    <svg
-      className={className}
-      style={style}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-    </svg>
-  );
-}
-
 function IconMapPin({ className = "", style }: IconProps) {
   return (
     <svg
@@ -96,6 +78,14 @@ function IconMapPin({ className = "", style }: IconProps) {
     >
       <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" />
       <circle cx="12" cy="10" r="3" />
+    </svg>
+  );
+}
+
+function IconMedicalCross({ className = "", style }: IconProps) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M9.2 2.4h5.6c.7 0 1.2.5 1.2 1.2v4.4h4.4c.7 0 1.2.5 1.2 1.2v5.6c0 .7-.5 1.2-1.2 1.2H16v4.4c0 .7-.5 1.2-1.2 1.2H9.2c-.7 0-1.2-.5-1.2-1.2V16H3.6c-.7 0-1.2-.5-1.2-1.2V9.2c0-.7.5-1.2 1.2-1.2H8V3.6c0-.7.5-1.2 1.2-1.2Z" />
     </svg>
   );
 }
@@ -140,12 +130,7 @@ function WhatsAppButton({ className = "", small = false }: { className?: string;
 
 function DeliveryTrailHero({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 180 120"
-      fill="none"
-      aria-hidden="true"
-    >
+    <svg className={className} viewBox="0 0 180 120" fill="none" aria-hidden="true">
       <path
         d="M10 90 C 40 20, 100 10, 170 50"
         stroke={brand.orange}
@@ -206,6 +191,39 @@ function DeliveryTrailSteps() {
   );
 }
 
+function SectionWave({ fill }: { fill: string }) {
+  return (
+    <div className="-mb-px" aria-hidden="true">
+      <svg
+        className="block h-10 w-full md:h-16"
+        viewBox="0 0 1440 88"
+        preserveAspectRatio="none"
+      >
+        <path
+          fill={fill}
+          d="M0 42C190 86 310 6 520 32C740 60 820 92 1040 48C1200 16 1320 10 1440 38V88H0V42Z"
+        />
+      </svg>
+    </div>
+  );
+}
+
+function SoftCircles() {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+      <span className="absolute -right-16 -top-20 h-64 w-64 rounded-full bg-white/10" />
+      <span className="absolute -bottom-24 -left-12 h-80 w-80 rounded-full bg-white/10" />
+      <span className="absolute bottom-10 right-1/4 h-32 w-32 rounded-full bg-white/[0.14]" />
+    </div>
+  );
+}
+
+function Inner({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`mx-auto max-w-[1100px] px-6 md:px-8 ${className}`}>{children}</div>
+  );
+}
+
 export default function Home() {
   const year = new Date().getFullYear();
   const hasHero = hasPublicImage("hero.jpg");
@@ -214,17 +232,17 @@ export default function Home() {
 
   return (
     <main className="bg-white" style={{ color: brand.ink }}>
-      <div className="mx-auto max-w-[1100px] px-6 md:px-8">
-        {/* Hero */}
-        <section className="pb-12 pt-8 md:pb-16 md:pt-12">
+      {/* Hero */}
+      <section className="bg-white pb-8 pt-8 md:pb-10 md:pt-12">
+        <Inner>
           <div className="grid items-center gap-10 md:grid-cols-2 md:gap-14">
             <div className="order-2 text-center md:order-1 md:text-left">
               <Logo className="mx-auto h-16 max-w-[220px] md:mx-0 md:h-20 md:max-w-[280px]" />
-              <h1 className="font-display mt-6 text-balance text-3xl font-extrabold leading-tight md:mt-7 md:text-5xl">
+              <h1 className="font-display mt-6 text-balance text-4xl font-extrabold leading-[1.05] md:mt-7 md:text-6xl">
                 La conveniencia de tu residencial, todos los días
               </h1>
               <p
-                className="mx-auto mt-3 max-w-md text-base leading-relaxed md:mx-0 md:mt-4 md:text-lg"
+                className="mx-auto mt-4 max-w-md text-base leading-relaxed md:mx-0 md:mt-5 md:text-xl"
                 style={{ color: brand.muted }}
               >
                 Quick! Mini Market lleva lo que necesitas directo a tu comunidad — sin salir del
@@ -246,10 +264,14 @@ export default function Home() {
               </div>
             ) : null}
           </div>
-        </section>
+        </Inner>
+      </section>
 
-        {/* Quiénes somos */}
-        <section className="py-20 md:py-28">
+      <SectionWave fill="#F1F7EA" />
+
+      {/* Quiénes somos */}
+      <section className="bg-[#F1F7EA] py-20 md:py-28">
+        <Inner>
           <div
             className={`grid items-center gap-10 ${hasQuienesSomos ? "md:grid-cols-2 md:gap-14" : ""}`}
           >
@@ -257,7 +279,7 @@ export default function Home() {
               <SectionPhoto
                 src="/images/quienes-somos.jpg"
                 alt="Bolsas de compras con frutas, pan y productos frescos listas para entregar"
-                className="aspect-[4/5] w-full max-w-md mx-auto md:max-w-none"
+                className="mx-auto aspect-[4/5] w-full max-w-md md:max-w-none"
               />
             ) : null}
             <div className={hasQuienesSomos ? "" : "mx-auto max-w-2xl"}>
@@ -267,7 +289,7 @@ export default function Home() {
               >
                 Quiénes somos
               </p>
-              <h2 className="font-display mt-2 text-3xl font-bold leading-tight md:text-4xl">
+              <h2 className="font-display mt-3 text-4xl font-extrabold leading-tight md:text-5xl">
                 Una tienda pensada para tu comunidad
               </h2>
               <p
@@ -282,10 +304,14 @@ export default function Home() {
               </p>
             </div>
           </div>
-        </section>
+        </Inner>
+      </section>
 
-        {/* Cómo funciona */}
-        <section className="py-20 md:py-28">
+      <SectionWave fill="#FFFFFF" />
+
+      {/* Cómo funciona */}
+      <section className="bg-white py-20 md:py-28">
+        <Inner>
           <div className="mx-auto max-w-4xl">
             <p
               className="text-center text-xs font-bold uppercase tracking-[0.18em]"
@@ -293,10 +319,10 @@ export default function Home() {
             >
               Cómo funciona
             </p>
-            <h2 className="font-display mt-2 text-center text-3xl font-bold md:text-4xl">
+            <h2 className="font-display mt-3 text-center text-4xl font-extrabold md:text-5xl">
               Pedir es así de simple
             </h2>
-            <div className="relative mt-10">
+            <div className="relative mt-12">
               <div className="hidden md:block">
                 <DeliveryTrailSteps />
               </div>
@@ -324,90 +350,107 @@ export default function Home() {
               </ol>
             </div>
           </div>
-        </section>
+        </Inner>
+      </section>
 
-        {/* PharmaQuick! */}
-        <section className="py-20 md:py-28">
-          <div
-            className="mx-auto max-w-3xl rounded-3xl px-6 py-16 md:px-12 md:py-20"
-            style={{ backgroundColor: "#EAF3FA" }}
-          >
-            <div className="flex items-center gap-2">
-              <IconHeart className="h-5 w-5" style={{ color: brand.blue }} />
-              <Badge variant="blue">Próximamente</Badge>
+      <SectionWave fill={brand.blue} />
+
+      {/* PharmaQuick! */}
+      <section className="relative" style={{ backgroundColor: brand.blue }}>
+        <SoftCircles />
+        <Inner className="relative z-10 py-20 md:py-28">
+          <div className="grid items-center gap-10 md:grid-cols-2 md:gap-16">
+            <div>
+              <div
+                className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-3xl"
+                style={{ backgroundColor: "rgba(255,255,255,0.16)" }}
+              >
+                <IconMedicalCross className="h-10 w-10 text-white" />
+              </div>
+              <span className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-bold" style={{ color: brand.blue }}>
+                Próximamente
+              </span>
+              <h2 className="font-display mt-4 text-4xl font-extrabold text-white md:text-5xl">
+                PharmaQuick!
+              </h2>
             </div>
-            <h2 className="font-display mt-4 text-3xl font-bold md:text-4xl" style={{ color: brand.blue }}>
-              PharmaQuick!
-            </h2>
-            <p className="mt-4 max-w-xl text-base leading-relaxed md:text-lg" style={{ color: brand.ink }}>
+            <p className="max-w-xl text-base leading-relaxed text-white/90 md:text-lg">
               Muy pronto abrimos PharmaQuick!, nuestra farmacia hermana, cerca de Quick! — el mismo
               estándar de conveniencia y cercanía, ahora también para tu salud y cuidado personal.
             </p>
           </div>
-        </section>
+        </Inner>
+      </section>
 
-        {/* Ubicación */}
-        <section className="py-20 md:py-28">
-          <div
-            className="relative mx-auto max-w-3xl overflow-hidden rounded-3xl"
-            style={hasUbicacion ? undefined : { backgroundColor: "#F9FAFB" }}
-          >
-            {hasUbicacion ? (
-              <>
-                <Image
-                  src="/images/ubicacion.jpg"
-                  alt="Pasillo iluminado de la tienda Quick! Mini Market con estantes de productos"
-                  fill
-                  className="object-cover"
-                  sizes="(min-width: 768px) 768px, 100vw"
-                  loading="lazy"
-                />
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    background:
-                      "linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.86) 55%, rgba(255,255,255,0.78) 100%)",
-                  }}
-                />
-              </>
-            ) : null}
-            <div className="relative z-10 px-6 py-12 md:px-12 md:py-16">
-              <p
-                className="text-xs font-bold uppercase tracking-[0.18em]"
-                style={{ color: brand.orange }}
-              >
+      <SectionWave fill={brand.green} />
+
+      {/* Ubicación */}
+      <section className="relative" style={{ backgroundColor: brand.green }}>
+        <SoftCircles />
+        <Inner className="relative z-10 py-20 md:py-28">
+          <div className={`grid items-center gap-12 ${hasUbicacion ? "md:grid-cols-2 md:gap-16" : ""}`}>
+            <div className="text-white">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/80">
                 Ubicación
               </p>
-              <h2 className="font-display mt-2 text-3xl font-bold md:text-4xl">Dónde estamos</h2>
-              <p className="mt-5 text-base leading-relaxed md:text-lg" style={{ color: brand.muted }}>
+              <h2 className="font-display mt-3 text-4xl font-extrabold md:text-5xl">Dónde estamos</h2>
+              <p className="mt-5 text-base leading-relaxed text-white/90 md:text-lg">
                 Hoy tenemos una tienda en el Residencial Jardines 3, Pueblo Bávaro. Y vienen más —
                 estamos creciendo hacia otros residenciales próximamente.
               </p>
-              <div
-                className="mt-6 flex items-start gap-3 rounded-2xl bg-white/90 px-5 py-4"
-                style={{ color: brand.ink }}
-              >
-                <IconMapPin className="mt-0.5 h-5 w-5 shrink-0" style={{ color: brand.green }} />
+              <div className="mt-6 flex items-start gap-3 rounded-2xl bg-white/15 px-5 py-4">
+                <IconMapPin className="mt-0.5 h-5 w-5 shrink-0 text-white" />
                 <span className="font-semibold leading-relaxed">
                   Residencial Jardines 3, Pueblo Bávaro, La Altagracia, República Dominicana
                 </span>
               </div>
               {/* Aquí se puede insertar un mapa embebido de Google Maps más adelante. */}
             </div>
+            {hasUbicacion ? (
+              <div className="mx-auto w-full max-w-sm rotate-[2deg] bg-white p-3 shadow-[0_24px_50px_rgba(26,26,26,0.28)] md:p-4">
+                <div className="relative aspect-[4/5] overflow-hidden">
+                  <Image
+                    src="/images/ubicacion.jpg"
+                    alt="Pasillo iluminado de la tienda Quick! Mini Market con estantes de productos"
+                    fill
+                    className="object-cover"
+                    sizes="(min-width: 768px) 380px, 90vw"
+                    loading="lazy"
+                  />
+                </div>
+              </div>
+            ) : null}
           </div>
-        </section>
+        </Inner>
+      </section>
 
-        {/* Footer */}
-        <footer className="border-t border-gray-100 pb-12 pt-10">
-          <div className="flex flex-col items-center gap-5 text-center">
-            <Logo className="h-10 max-w-[160px]" />
-            <WhatsAppButton small />
-            <p className="text-sm" style={{ color: brand.muted }}>
-              © {year} Quick! Mini Market
-            </p>
+      <SectionWave fill={brand.ink} />
+
+      {/* Footer */}
+      <footer className="pb-12 pt-10 md:pt-14" style={{ backgroundColor: brand.ink }}>
+        <Inner>
+          <div className="grid gap-10 text-center md:grid-cols-3 md:gap-8 md:text-left">
+            <div className="flex flex-col items-center gap-4 md:items-start">
+              <Logo className="h-12 max-w-[180px]" />
+              <WhatsAppButton small />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/50">Dónde estamos</p>
+              <p className="mt-3 text-sm leading-relaxed text-white/85">
+                Residencial Jardines 3, Pueblo Bávaro, La Altagracia, República Dominicana
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/50">En el mapa</p>
+              <p className="mt-3 text-sm font-semibold text-white">Residencial Jardines 3</p>
+              <p className="text-sm text-white/70">Pueblo Bávaro</p>
+            </div>
           </div>
-        </footer>
-      </div>
+          <p className="mt-10 text-center text-sm text-white/40">
+            © {year} Quick! Mini Market
+          </p>
+        </Inner>
+      </footer>
     </main>
   );
 }
