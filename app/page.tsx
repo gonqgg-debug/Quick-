@@ -2,10 +2,13 @@ import { Badge } from "@/components/brand/Badge";
 import { Logo } from "@/components/brand/Logo";
 import { brand, whatsappHref } from "@/lib/theme";
 
-function IconMessageCircle({ className = "" }: { className?: string }) {
+type IconProps = { className?: string; style?: React.CSSProperties };
+
+function IconMessageCircle({ className = "", style }: IconProps) {
   return (
     <svg
       className={className}
+      style={style}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -18,10 +21,11 @@ function IconMessageCircle({ className = "" }: { className?: string }) {
   );
 }
 
-function IconShoppingCart({ className = "" }: { className?: string }) {
+function IconShoppingCart({ className = "", style }: IconProps) {
   return (
     <svg
       className={className}
+      style={style}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -36,10 +40,11 @@ function IconShoppingCart({ className = "" }: { className?: string }) {
   );
 }
 
-function IconHome({ className = "" }: { className?: string }) {
+function IconHome({ className = "", style }: IconProps) {
   return (
     <svg
       className={className}
+      style={style}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -53,10 +58,11 @@ function IconHome({ className = "" }: { className?: string }) {
   );
 }
 
-function IconHeart({ className = "" }: { className?: string }) {
+function IconHeart({ className = "", style }: IconProps) {
   return (
     <svg
       className={className}
+      style={style}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -69,10 +75,11 @@ function IconHeart({ className = "" }: { className?: string }) {
   );
 }
 
-function IconMapPin({ className = "" }: { className?: string }) {
+function IconMapPin({ className = "", style }: IconProps) {
   return (
     <svg
       className={className}
+      style={style}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
