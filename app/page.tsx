@@ -1,6 +1,13 @@
+import fs from "fs";
+import path from "path";
+import Image from "next/image";
 import { Badge } from "@/components/brand/Badge";
 import { Logo } from "@/components/brand/Logo";
 import { brand, whatsappHref } from "@/lib/theme";
+
+function hasPublicImage(filename: string): boolean {
+  return fs.existsSync(path.join(process.cwd(), "public", "images", filename));
+}
 
 type IconProps = { className?: string; style?: React.CSSProperties };
 
@@ -131,10 +138,10 @@ function WhatsAppButton({ className = "", small = false }: { className?: string;
   );
 }
 
-function DeliveryTrailHero() {
+function DeliveryTrailHero({ className }: { className?: string }) {
   return (
     <svg
-      className="pointer-events-none absolute -left-8 -top-2 h-28 w-40 sm:-left-12 sm:h-32 sm:w-48"
+      className={className}
       viewBox="0 0 180 120"
       fill="none"
       aria-hidden="true"
@@ -147,6 +154,34 @@ function DeliveryTrailHero() {
         opacity="0.7"
       />
     </svg>
+  );
+}
+
+function SectionPhoto({
+  src,
+  alt,
+  priority = false,
+  className = "",
+}: {
+  src: string;
+  alt: string;
+  priority?: boolean;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`relative overflow-hidden rounded-3xl shadow-[0_18px_40px_rgba(26,26,26,0.12)] ${className}`}
+    >
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        className="object-cover"
+        sizes="(min-width: 768px) 480px, 100vw"
+        priority={priority}
+        {...(priority ? {} : { loading: "lazy" as const })}
+      />
+    </div>
   );
 }
 
@@ -173,55 +208,79 @@ function DeliveryTrailSteps() {
 
 export default function Home() {
   const year = new Date().getFullYear();
+  const hasHero = hasPublicImage("hero.jpg");
+  const hasQuienesSomos = hasPublicImage("quienes-somos.jpg");
+  const hasUbicacion = hasPublicImage("ubicacion.jpg");
 
   return (
     <main className="bg-white" style={{ color: brand.ink }}>
       <div className="mx-auto max-w-[1100px] px-6 md:px-8">
         {/* Hero */}
         <section className="pb-12 pt-8 md:pb-16 md:pt-12">
-          <div className="mx-auto max-w-2xl text-center">
-            <div className="relative mx-auto inline-block">
-              <DeliveryTrailHero />
-              <Logo className="relative z-10 mx-auto h-16 max-w-[220px] md:h-20 md:max-w-[280px]" />
+          <div className="grid items-center gap-10 md:grid-cols-2 md:gap-14">
+            <div className="order-2 text-center md:order-1 md:text-left">
+              <Logo className="mx-auto h-16 max-w-[220px] md:mx-0 md:h-20 md:max-w-[280px]" />
+              <h1 className="font-display mt-6 text-balance text-3xl font-extrabold leading-tight md:mt-7 md:text-5xl">
+                La conveniencia de tu residencial, todos los días
+              </h1>
+              <p
+                className="mx-auto mt-3 max-w-md text-base leading-relaxed md:mx-0 md:mt-4 md:text-lg"
+                style={{ color: brand.muted }}
+              >
+                Quick! Mini Market lleva lo que necesitas directo a tu comunidad — sin salir del
+                residencial.
+              </p>
+              <div className="mt-6 md:mt-8">
+                <WhatsAppButton />
+              </div>
             </div>
-            <h1 className="font-display mt-6 text-balance text-3xl font-extrabold leading-tight md:mt-8 md:text-5xl">
-              La conveniencia de tu residencial, todos los días
-            </h1>
-            <p
-              className="mx-auto mt-3 max-w-md text-base leading-relaxed md:mt-4 md:text-lg"
-              style={{ color: brand.muted }}
-            >
-              Quick! Mini Market lleva lo que necesitas directo a tu comunidad — sin salir del
-              residencial.
-            </p>
-            <div className="mt-6 md:mt-8">
-              <WhatsAppButton />
-            </div>
+            {hasHero ? (
+              <div className="relative order-1 mx-auto w-full max-w-md md:order-2 md:max-w-none">
+                <DeliveryTrailHero className="pointer-events-none absolute -bottom-4 -left-10 z-0 h-28 w-44 sm:-left-14 sm:h-32 sm:w-52" />
+                <SectionPhoto
+                  src="/images/hero.jpg"
+                  alt="Vecina sonriendo al recibir su pedido de Quick! en la puerta de casa"
+                  priority
+                  className="relative z-10 aspect-[4/5]"
+                />
+              </div>
+            ) : null}
           </div>
         </section>
 
         {/* Quiénes somos */}
         <section className="py-20 md:py-28">
-          <div className="mx-auto max-w-2xl">
-            <p
-              className="text-xs font-bold uppercase tracking-[0.18em]"
-              style={{ color: brand.orange }}
-            >
-              Quiénes somos
-            </p>
-            <h2 className="font-display mt-2 text-3xl font-bold leading-tight md:text-4xl">
-              Una tienda pensada para tu comunidad
-            </h2>
-            <p
-              className="mt-5 text-base leading-relaxed md:text-lg"
-              style={{ color: brand.muted }}
-            >
-              Quick! Mini Market es una cadena de mini markets enfocada en comunidades residenciales.
-              Nuestro objetivo es simple: traer conveniencia y buen servicio directo a donde vives,
-              con la calidad y consistencia de una cadena, pero la cercanía de tu vecino de al lado.
-              Abrimos nuestra primera tienda en septiembre de 2025, y desde entonces trabajamos para
-              que hacer las compras del día a día sea más fácil para cada residencial donde estamos.
-            </p>
+          <div
+            className={`grid items-center gap-10 ${hasQuienesSomos ? "md:grid-cols-2 md:gap-14" : ""}`}
+          >
+            {hasQuienesSomos ? (
+              <SectionPhoto
+                src="/images/quienes-somos.jpg"
+                alt="Bolsas de compras con frutas, pan y productos frescos listas para entregar"
+                className="aspect-[4/5] w-full max-w-md mx-auto md:max-w-none"
+              />
+            ) : null}
+            <div className={hasQuienesSomos ? "" : "mx-auto max-w-2xl"}>
+              <p
+                className="text-xs font-bold uppercase tracking-[0.18em]"
+                style={{ color: brand.orange }}
+              >
+                Quiénes somos
+              </p>
+              <h2 className="font-display mt-2 text-3xl font-bold leading-tight md:text-4xl">
+                Una tienda pensada para tu comunidad
+              </h2>
+              <p
+                className="mt-5 text-base leading-relaxed md:text-lg"
+                style={{ color: brand.muted }}
+              >
+                Quick! Mini Market es una cadena de mini markets enfocada en comunidades residenciales.
+                Nuestro objetivo es simple: traer conveniencia y buen servicio directo a donde vives,
+                con la calidad y consistencia de una cadena, pero la cercanía de tu vecino de al lado.
+                Abrimos nuestra primera tienda en septiembre de 2025, y desde entonces trabajamos para
+                que hacer las compras del día a día sea más fácil para cada residencial donde estamos.
+              </p>
+            </div>
           </div>
         </section>
 
@@ -290,30 +349,51 @@ export default function Home() {
         {/* Ubicación */}
         <section className="py-20 md:py-28">
           <div
-            className="mx-auto max-w-3xl rounded-3xl px-6 py-12 md:px-12 md:py-16"
-            style={{ backgroundColor: "#F9FAFB" }}
+            className="relative mx-auto max-w-3xl overflow-hidden rounded-3xl"
+            style={hasUbicacion ? undefined : { backgroundColor: "#F9FAFB" }}
           >
-            <p
-              className="text-xs font-bold uppercase tracking-[0.18em]"
-              style={{ color: brand.orange }}
-            >
-              Ubicación
-            </p>
-            <h2 className="font-display mt-2 text-3xl font-bold md:text-4xl">Dónde estamos</h2>
-            <p className="mt-5 text-base leading-relaxed md:text-lg" style={{ color: brand.muted }}>
-              Hoy tenemos una tienda en el Residencial Jardines 3, Pueblo Bávaro. Y vienen más —
-              estamos creciendo hacia otros residenciales próximamente.
-            </p>
-            <div
-              className="mt-6 flex items-start gap-3 rounded-2xl bg-white px-5 py-4"
-              style={{ color: brand.ink }}
-            >
-              <IconMapPin className="mt-0.5 h-5 w-5 shrink-0" style={{ color: brand.green }} />
-              <span className="font-semibold leading-relaxed">
-                Residencial Jardines 3, Pueblo Bávaro, La Altagracia, República Dominicana
-              </span>
+            {hasUbicacion ? (
+              <>
+                <Image
+                  src="/images/ubicacion.jpg"
+                  alt="Pasillo iluminado de la tienda Quick! Mini Market con estantes de productos"
+                  fill
+                  className="object-cover"
+                  sizes="(min-width: 768px) 768px, 100vw"
+                  loading="lazy"
+                />
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background:
+                      "linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.86) 55%, rgba(255,255,255,0.78) 100%)",
+                  }}
+                />
+              </>
+            ) : null}
+            <div className="relative z-10 px-6 py-12 md:px-12 md:py-16">
+              <p
+                className="text-xs font-bold uppercase tracking-[0.18em]"
+                style={{ color: brand.orange }}
+              >
+                Ubicación
+              </p>
+              <h2 className="font-display mt-2 text-3xl font-bold md:text-4xl">Dónde estamos</h2>
+              <p className="mt-5 text-base leading-relaxed md:text-lg" style={{ color: brand.muted }}>
+                Hoy tenemos una tienda en el Residencial Jardines 3, Pueblo Bávaro. Y vienen más —
+                estamos creciendo hacia otros residenciales próximamente.
+              </p>
+              <div
+                className="mt-6 flex items-start gap-3 rounded-2xl bg-white/90 px-5 py-4"
+                style={{ color: brand.ink }}
+              >
+                <IconMapPin className="mt-0.5 h-5 w-5 shrink-0" style={{ color: brand.green }} />
+                <span className="font-semibold leading-relaxed">
+                  Residencial Jardines 3, Pueblo Bávaro, La Altagracia, República Dominicana
+                </span>
+              </div>
+              {/* Aquí se puede insertar un mapa embebido de Google Maps más adelante. */}
             </div>
-            {/* Aquí se puede insertar un mapa embebido de Google Maps más adelante. */}
           </div>
         </section>
 
