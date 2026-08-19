@@ -3,7 +3,7 @@ import { StaffChatsList } from "@/components/staff/StaffChatsList";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Conversaciones | Personal",
+  title: "Chat | Personal",
   description: "Chats de WhatsApp en espera de una persona",
 };
 

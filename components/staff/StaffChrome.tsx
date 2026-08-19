@@ -26,10 +26,15 @@ type StaffChromeProps = {
   children: React.ReactNode;
 };
 
-const TABS: { id: StaffSection; href: string; label: string }[] = [
+const DESKTOP_TABS: { id: StaffSection; href: string; label: string }[] = [
   { id: "orders", href: "/staff", label: "Pedidos" },
   { id: "historial", href: "/staff/historial", label: "Historial" },
-  { id: "chats", href: "/staff/chats", label: "Conversaciones" },
+  { id: "chats", href: "/staff/chats", label: "Chat" },
+];
+
+const MOBILE_TABS: { id: "orders" | "chats"; href: string; label: string }[] = [
+  { id: "orders", href: "/staff", label: "Pedidos" },
+  { id: "chats", href: "/staff/chats", label: "Chat" },
 ];
 
 export function StaffChrome({
@@ -44,6 +49,33 @@ export function StaffChrome({
 }: StaffChromeProps) {
   const shell = wide ? "mx-auto max-w-6xl px-3" : "mx-auto max-w-3xl px-3";
   const searchOpen = Boolean(search?.open);
+  const [pendingCount, setPendingCount] = useState(notificationCount);
+
+  useEffect(() => {
+    setPendingCount(notificationCount);
+  }, [notificationCount]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPending() {
+      const response = await fetch("/api/staff/chats", { credentials: "include" });
+      if (!response.ok) {
+        return;
+      }
+      const body = (await response.json()) as { pendingMessageCount?: number };
+      if (!cancelled && typeof body.pendingMessageCount === "number") {
+        setPendingCount(body.pendingMessageCount);
+      }
+    }
+    void loadPending();
+    const timer = window.setInterval(() => {
+      void loadPending();
+    }, 20000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-white" style={{ color: brand.ink }}>
@@ -55,72 +87,40 @@ export function StaffChrome({
             {searchOpen && search ? (
               <SearchField search={search} />
             ) : (
-              <nav className="min-w-0 flex-1 overflow-x-auto" aria-label="Secciones">
-                <div className="flex items-center gap-1">
-                  {TABS.map((tab) => {
-                    const isActive = active === tab.id;
-                    return (
-                      <Link
-                        key={tab.id}
-                        href={tab.href}
-                        className="relative flex h-11 shrink-0 items-center px-2.5 text-sm font-semibold"
-                        style={{ color: isActive ? brand.green : brand.muted }}
-                      >
-                        {tab.label}
-                        {isActive ? (
-                          <span
-                            className="absolute inset-x-2 bottom-[6px] h-[2px] rounded-full"
-                            style={{ backgroundColor: brand.green }}
-                          />
-                        ) : null}
-                      </Link>
-                    );
-                  })}
-                </div>
-              </nav>
+              <>
+                <nav className="hidden min-w-0 flex-1 overflow-x-auto md:block" aria-label="Secciones">
+                  <div className="flex items-center gap-1">
+                    {DESKTOP_TABS.map((tab) => {
+                      const isActive = active === tab.id;
+                      return (
+                        <Link
+                          key={tab.id}
+                          href={tab.href}
+                          className="relative flex h-11 shrink-0 items-center px-2.5 text-sm font-semibold"
+                          style={{ color: isActive ? brand.green : brand.muted }}
+                        >
+                          {tab.label}
+                          {isActive ? (
+                            <span
+                              className="absolute inset-x-2 bottom-[6px] h-[2px] rounded-full"
+                              style={{ backgroundColor: brand.green }}
+                            />
+                          ) : null}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </nav>
+                <div className="min-w-0 flex-1 md:hidden" />
+              </>
             )}
 
-            <div className="ml-auto flex shrink-0 items-center gap-0.5">
-              {search ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (search.open) {
-                      search.onChange("");
-                    }
-                    search.onToggle();
-                  }}
-                  className="flex h-11 w-9 items-center justify-center"
-                  style={{ color: search.open ? brand.green : brand.muted }}
-                  aria-label={search.open ? "Cerrar búsqueda" : "Buscar"}
-                  aria-pressed={search.open}
-                >
-                  <SearchIcon />
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={onNotificationsClick}
-                className="relative flex h-11 w-9 items-center justify-center"
-                style={{ color: brand.muted }}
-                aria-label={
-                  notificationCount > 0
-                    ? `Notificaciones, ${notificationCount} pendientes`
-                    : "Notificaciones"
-                }
-              >
-                <BellIcon />
-                {notificationCount > 0 ? (
-                  <span
-                    className="absolute right-0.5 top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
-                    style={{ backgroundColor: brand.orange }}
-                  >
-                    {notificationCount > 9 ? "9+" : notificationCount}
-                  </span>
-                ) : null}
-              </button>
-              <AccountMenu onLogout={onLogout} />
-            </div>
+            <UtilityIcons
+              search={search}
+              pendingCount={pendingCount}
+              onNotificationsClick={onNotificationsClick}
+              onLogout={onLogout}
+            />
           </div>
         </header>
         {filters ? (
@@ -130,7 +130,92 @@ export function StaffChrome({
         ) : null}
       </div>
 
-      <div className={`${shell} pb-8 pt-6`}>{children}</div>
+      <div className={`${shell} pb-28 pt-6 md:pb-8`}>{children}</div>
+
+      <nav
+        className="fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 backdrop-blur-md md:hidden"
+        style={{ borderColor: "#F3F4F6", paddingBottom: "max(0.25rem, env(safe-area-inset-bottom))" }}
+        aria-label="Navegación"
+      >
+        <div className="mx-auto flex max-w-3xl items-stretch">
+          {MOBILE_TABS.map((tab) => {
+            const isActive = active === tab.id;
+            return (
+              <Link
+                key={tab.id}
+                href={tab.href}
+                className="relative flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-[11px] font-bold"
+                style={{ color: isActive ? brand.green : brand.muted }}
+              >
+                <span className="relative">
+                  {tab.id === "orders" ? <OrdersIcon /> : <ChatIcon />}
+                  {tab.id === "chats" && pendingCount > 0 ? (
+                    <span
+                      className="absolute -right-2.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+                      style={{ backgroundColor: brand.orange }}
+                    >
+                      {pendingCount > 9 ? "9+" : pendingCount}
+                    </span>
+                  ) : null}
+                </span>
+                {tab.label}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    </div>
+  );
+}
+
+function UtilityIcons({
+  search,
+  pendingCount,
+  onNotificationsClick,
+  onLogout,
+}: {
+  search?: StaffSearchProps;
+  pendingCount: number;
+  onNotificationsClick?: () => void;
+  onLogout: () => void;
+}) {
+  return (
+    <div className="ml-auto flex shrink-0 items-center gap-0.5">
+      {search ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (search.open) {
+              search.onChange("");
+            }
+            search.onToggle();
+          }}
+          className="flex h-11 w-9 items-center justify-center"
+          style={{ color: search.open ? brand.green : brand.muted }}
+          aria-label={search.open ? "Cerrar búsqueda" : "Buscar"}
+          aria-pressed={search.open}
+        >
+          <SearchIcon />
+        </button>
+      ) : null}
+      <button
+        type="button"
+        onClick={onNotificationsClick}
+        className="relative flex h-11 w-9 items-center justify-center"
+        style={{ color: brand.muted }}
+        aria-label={pendingCount > 0 ? `Notificaciones, ${pendingCount} pendientes` : "Notificaciones"}
+      >
+        <BellIcon />
+        {pendingCount > 0 ? (
+          <span
+            className="absolute right-0.5 top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+            style={{ backgroundColor: brand.orange }}
+          >
+            {pendingCount > 9 ? "9+" : pendingCount}
+          </span>
+        ) : null}
+      </button>
+      <AccountMenu onLogout={onLogout} />
     </div>
   );
 }
@@ -193,6 +278,15 @@ function AccountMenu({ onLogout }: { onLogout: () => void }) {
           className="absolute right-0 top-full z-40 mt-1 min-w-[160px] overflow-hidden rounded-2xl border bg-white py-1 shadow-[0_10px_28px_rgba(26,26,26,0.12)]"
           style={{ borderColor: "#E5E7EB" }}
         >
+          <Link
+            href="/staff/historial"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="flex h-11 items-center px-4 text-sm font-semibold md:hidden"
+            style={{ color: brand.ink }}
+          >
+            Historial
+          </Link>
           <button
             type="button"
             role="menuitem"
@@ -216,6 +310,23 @@ function MiniLogo() {
     <Link href="/staff" className="shrink-0" aria-label="Quick! Mini Market">
       <Logo className="h-8 w-auto max-w-[140px] md:h-9 md:max-w-[160px]" />
     </Link>
+  );
+}
+
+function OrdersIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M8 6h12M8 12h12M8 18h12" strokeLinecap="round" />
+      <path d="M4 6h.01M4 12h.01M4 18h.01" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ChatIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2">
+      <path d="M5 16.5V7.8A2.8 2.8 0 0 1 7.8 5h8.4A2.8 2.8 0 0 1 19 7.8v5.4A2.8 2.8 0 0 1 16.2 16H9l-4 3.5z" />
+    </svg>
   );
 }
 

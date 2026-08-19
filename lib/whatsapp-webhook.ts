@@ -1,5 +1,11 @@
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import {
+  mediaAckMessage,
+  mediaPlaceholder,
+  storeIncomingWhatsAppMedia,
+  type IncomingWhatsAppMedia,
+} from "@/lib/whatsapp-media";
+import {
   formatShortOrderId,
   getActiveOrder,
   getOpenStaffOrder,
@@ -29,6 +35,7 @@ type IncomingMessage = {
   text: string;
   buttonId: string | null;
   contactName: string | null;
+  media: IncomingWhatsAppMedia | null;
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -118,19 +125,67 @@ function extractIncomingMessages(payload: unknown): IncomingMessage[] {
           asString(listReply?.title) ||
           asString(legacyButton?.text);
 
-        const text = textBody || buttonTitle || (type === "interactive" ? buttonId || "" : "");
+        const media = extractIncomingMedia(message, type);
+        const text = (textBody || buttonTitle || media?.caption || (type === "interactive" ? buttonId || "" : "")).trim();
 
         messages.push({
           from,
-          text: text.trim(),
+          text,
           buttonId,
           contactName: nameByWaId.get(from) ?? null,
+          media,
         });
       }
     }
   }
 
   return messages;
+}
+
+function extractIncomingMedia(message: Record<string, unknown>, type: string): IncomingWhatsAppMedia | null {
+  if (type === "image") {
+    const image = asRecord(message.image);
+    const id = asString(image?.id);
+    if (!id) {
+      return null;
+    }
+    return {
+      kind: "imagen",
+      id,
+      mimeType: asString(image?.mime_type) || "image/jpeg",
+      caption: asString(image?.caption).trim(),
+      filename: null,
+    };
+  }
+  if (type === "video") {
+    const video = asRecord(message.video);
+    const id = asString(video?.id);
+    if (!id) {
+      return null;
+    }
+    return {
+      kind: "video",
+      id,
+      mimeType: asString(video?.mime_type) || "video/mp4",
+      caption: asString(video?.caption).trim(),
+      filename: null,
+    };
+  }
+  if (type === "document") {
+    const document = asRecord(message.document);
+    const id = asString(document?.id);
+    if (!id) {
+      return null;
+    }
+    return {
+      kind: "documento",
+      id,
+      mimeType: asString(document?.mime_type) || "application/octet-stream",
+      caption: asString(document?.caption).trim(),
+      filename: asString(document?.filename) || null,
+    };
+  }
+  return null;
 }
 
 function isHumanHelpAction(message: IncomingMessage): boolean {
@@ -370,10 +425,24 @@ async function handleIncomingMessage(message: IncomingMessage): Promise<void> {
 
   const contenido = message.buttonId
     ? `[botón:${message.buttonId}] ${message.text}`.trim()
-    : message.text || "(mensaje vacío)";
+    : message.media
+      ? message.media.caption || mediaPlaceholder(message.media.kind, message.media.filename)
+      : message.text || "(mensaje vacío)";
+
+  let mediaUrl: string | null = null;
+  if (message.media) {
+    try {
+      mediaUrl = await storeIncomingWhatsAppMedia(chat.id, message.media);
+    } catch (error) {
+      console.error("[whatsapp] no se pudo guardar media de WhatsApp", error);
+    }
+  }
 
   try {
-    await logIncomingMessage(chat.id, contenido);
+    await logIncomingMessage(chat.id, contenido, {
+      tipoContenido: message.media?.kind ?? "texto",
+      mediaUrl,
+    });
   } catch (error) {
     console.error("[whatsapp] no se pudo registrar el mensaje en whatsapp_log", error);
   }
@@ -408,6 +477,15 @@ async function handleIncomingMessage(message: IncomingMessage): Promise<void> {
       } catch (error) {
         console.error("[whatsapp] error al reportar faltante", error);
       }
+    }
+    return;
+  }
+
+  if (message.media) {
+    try {
+      await sendTextMessage(message.from, mediaAckMessage(message.media.kind));
+    } catch (error) {
+      console.error("[whatsapp] error al acusar recibo de media", error);
     }
     return;
   }

@@ -267,11 +267,6 @@ export function StaffPanel() {
     return todayOrders.filter((order) => activeFilter.match(order.estado) && orderMatchesQuery(order, query));
   }, [todayOrders, activeFilter, query]);
 
-  const notificationCount = useMemo(
-    () => orders.filter((order) => order.mensajePendiente).length,
-    [orders]
-  );
-
   const needsLiveClock = useMemo(
     () => todayOrders.some((order) => usesOrderAging(order.estado)),
     [todayOrders]
@@ -402,7 +397,6 @@ export function StaffPanel() {
   return (
     <StaffChrome
       active="orders"
-      notificationCount={notificationCount}
       onLogout={() => {
         void staffLogout().then(() => {
           setAuthorized(false);

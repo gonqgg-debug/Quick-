@@ -187,7 +187,11 @@ async function getOrCreateChatId(phoneNumber: string): Promise<string> {
   return chat.id;
 }
 
-async function logOutgoingMessage(phoneNumber: string, contenido: string): Promise<void> {
+async function logOutgoingMessage(
+  phoneNumber: string,
+  contenido: string,
+  extra?: { tipoContenido?: "texto" | "imagen" | "video" | "documento"; mediaUrl?: string | null }
+): Promise<void> {
   const supabase = getSupabaseAdminClient();
   const chatId = await getOrCreateChatId(phoneNumber);
 
@@ -195,6 +199,8 @@ async function logOutgoingMessage(phoneNumber: string, contenido: string): Promi
     chat_id: chatId,
     direccion: "saliente",
     contenido,
+    tipo_contenido: extra?.tipoContenido ?? "texto",
+    media_url: extra?.mediaUrl ?? null,
   });
 
   if (error) {
@@ -202,12 +208,18 @@ async function logOutgoingMessage(phoneNumber: string, contenido: string): Promi
   }
 }
 
-export async function logIncomingMessage(chatId: string, contenido: string): Promise<void> {
+export async function logIncomingMessage(
+  chatId: string,
+  contenido: string,
+  extra?: { tipoContenido?: "texto" | "imagen" | "video" | "documento"; mediaUrl?: string | null }
+): Promise<void> {
   const supabase = getSupabaseAdminClient();
   const { error } = await supabase.from("whatsapp_log").insert({
     chat_id: chatId,
     direccion: "entrante",
     contenido,
+    tipo_contenido: extra?.tipoContenido ?? "texto",
+    media_url: extra?.mediaUrl ?? null,
   });
 
   if (error) {
@@ -229,6 +241,52 @@ export async function sendTextMessage(phoneNumber: string, text: string): Promis
   });
 
   await logOutgoingMessage(phoneNumber, text);
+  return result;
+}
+
+export async function sendImageMessage(
+  phoneNumber: string,
+  options: {
+    bytes: Uint8Array;
+    mimeType: string;
+    filename: string;
+    caption: string;
+    storagePath: string;
+  }
+): Promise<WhatsAppSendResult> {
+  const { uploadMediaToWhatsApp } = await import("@/lib/whatsapp-media");
+  let mediaId: string;
+  try {
+    mediaId = await uploadMediaToWhatsApp(options.bytes, options.mimeType, options.filename);
+  } catch (error) {
+    console.error("[whatsapp] staff:image:upload-fail", error);
+    throw new Error("No pudimos subir la foto a WhatsApp. Intenta de nuevo.");
+  }
+
+  const to = normalizePhoneNumber(phoneNumber);
+  const image: { id: string; caption?: string } = { id: mediaId };
+  if (options.caption) {
+    image.caption = options.caption.slice(0, 1024);
+  }
+
+  let result: WhatsAppSendResult;
+  try {
+    result = await postWhatsAppMessage({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "image",
+      image,
+    });
+  } catch (error) {
+    console.error("[whatsapp] staff:image:send-fail", error);
+    throw new Error("No pudimos enviar la foto al cliente. Intenta de nuevo.");
+  }
+
+  await logOutgoingMessage(phoneNumber, options.caption || "Imagen", {
+    tipoContenido: "imagen",
+    mediaUrl: options.storagePath,
+  });
   return result;
 }
 
