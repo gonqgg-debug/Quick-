@@ -110,7 +110,7 @@ async function downloadWhatsAppMedia(mediaId: string): Promise<{ bytes: Uint8Arr
   }
 
   const mimeType =
-    (typeof meta.mime_type === "string" && meta.mime_type) ||
+    (typeof meta?.mime_type === "string" && meta.mime_type) ||
     fileResponse.headers.get("content-type") ||
     "application/octet-stream";
   const bytes = new Uint8Array(await fileResponse.arrayBuffer());
@@ -192,10 +192,10 @@ export async function uploadMediaToWhatsApp(
     }
   );
   const data = (await response.json().catch(() => null)) as { id?: unknown; error?: { message?: unknown } } | null;
+  const graphMessage = data?.error?.message;
   const mediaId = typeof data?.id === "string" ? data.id : "";
   if (!response.ok || !mediaId) {
-    const message =
-      typeof data?.error?.message === "string" ? data.error.message : "No pudimos subir la imagen a WhatsApp";
+    const message = typeof graphMessage === "string" ? graphMessage : "No pudimos subir la imagen a WhatsApp";
     console.error("[whatsapp] upload:media:fail", { status: response.status, error: message });
     throw new Error(message);
   }
