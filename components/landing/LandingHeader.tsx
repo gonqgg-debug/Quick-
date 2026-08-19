@@ -77,7 +77,7 @@ export function LandingHeader() {
                 key={link.href}
                 href={link.href}
                 className="text-sm font-bold transition-colors hover:opacity-80"
-                style={{ color: brand.ink }}
+                style={{ color: brand.orange }}
                 onClick={(e) => {
                   e.preventDefault();
                   goTo(link.href);
@@ -89,8 +89,8 @@ export function LandingHeader() {
           </nav>
           <Link
             href="/staff"
-            className="inline-flex min-h-10 items-center justify-center rounded-full border-2 px-4 py-1.5 text-sm font-bold"
-            style={{ borderColor: brand.ink, color: brand.ink }}
+            className="inline-flex min-h-10 items-center justify-center rounded-full px-4 py-1.5 text-sm font-bold text-white"
+            style={{ backgroundColor: brand.orange }}
           >
             Empleados
           </Link>
@@ -120,7 +120,7 @@ export function LandingHeader() {
                 <a
                   href={link.href}
                   className="flex min-h-12 items-center text-base font-bold"
-                  style={{ color: brand.ink }}
+                  style={{ color: brand.orange }}
                   onClick={(e) => {
                     e.preventDefault();
                     goTo(link.href);
@@ -133,8 +133,8 @@ export function LandingHeader() {
             <li>
               <Link
                 href="/staff"
-                className="flex min-h-12 items-center text-base font-bold"
-                style={{ color: brand.ink }}
+                className="mt-2 inline-flex min-h-11 items-center justify-center rounded-full px-5 text-base font-bold text-white"
+                style={{ backgroundColor: brand.orange }}
                 onClick={() => setOpen(false)}
               >
                 Empleados

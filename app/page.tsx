@@ -123,15 +123,12 @@ function WhatsAppButton({ className = "", small = false }: { className?: string;
   );
 }
 
-function StaffButton({ light = false }: { light?: boolean }) {
+function StaffButton() {
   return (
     <Link
       href="/staff"
-      className="inline-flex min-h-10 items-center justify-center rounded-full border-2 px-5 py-2 text-sm font-bold"
-      style={{
-        borderColor: light ? "rgba(255,255,255,0.45)" : brand.ink,
-        color: light ? "#FFFFFF" : brand.ink,
-      }}
+      className="inline-flex min-h-10 items-center justify-center rounded-full px-5 py-2 text-sm font-bold text-white"
+      style={{ backgroundColor: brand.orange }}
     >
       Empleados
     </Link>
@@ -348,10 +345,10 @@ export default function Home() {
         <Inner className="relative z-10 py-20 md:py-28">
           <div className="grid items-center gap-10 md:grid-cols-2 md:gap-16">
             <div>
-              <div className="mb-6 inline-flex rounded-3xl bg-white px-6 py-5 shadow-[0_8px_24px_rgba(0,0,0,0.12)] md:px-8 md:py-6">
+              <div className="mb-6 inline-flex w-full max-w-xl rounded-3xl bg-white px-6 py-6 shadow-[0_8px_24px_rgba(0,0,0,0.12)] md:px-10 md:py-8">
                 <Logo
                   variant="pharma"
-                  className="!h-24 !w-auto !max-w-[360px] md:!h-36 md:!max-w-[520px]"
+                  className="!h-32 !w-auto !max-w-full md:!h-52"
                 />
               </div>
               <div>
@@ -421,7 +418,7 @@ export default function Home() {
             <div className="flex flex-col items-center gap-4 md:items-start">
               <Logo className="h-12 max-w-[180px]" />
               <WhatsAppButton small />
-              <StaffButton light />
+              <StaffButton />
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/50">Dónde estamos</p>
