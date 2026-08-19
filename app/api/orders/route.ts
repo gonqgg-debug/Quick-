@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getCustomerForChat, parseNuevaDireccion, resolveCheckoutAddress } from "@/lib/customers";
 import {
   isMetodoPago,
   jsonError,
@@ -13,6 +14,8 @@ type OrderBody = {
   items?: unknown;
   direccion?: unknown;
   metodoPago?: unknown;
+  addressId?: unknown;
+  nuevaDireccion?: unknown;
 };
 
 export async function GET() {
@@ -30,6 +33,8 @@ export async function POST(request: NextRequest) {
 
   const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
   const direccion = typeof body.direccion === "string" ? body.direccion.trim() : "";
+  const addressId = typeof body.addressId === "string" ? body.addressId.trim() : "";
+  const nuevaDireccion = parseNuevaDireccion(body.nuevaDireccion);
   const items = parseItems(body.items);
 
   if (!sessionId) {
@@ -40,7 +45,7 @@ export async function POST(request: NextRequest) {
     return jsonError("Debes enviar al menos un producto con cantidad válida.", 400);
   }
 
-  if (!direccion) {
+  if (!direccion && !addressId && !nuevaDireccion) {
     return jsonError("La dirección de entrega es obligatoria.", 400);
   }
 
@@ -81,12 +86,33 @@ export async function POST(request: NextRequest) {
     return jsonError(priced.message, priced.status);
   }
 
+  const customer = await getCustomerForChat(String(session.chat_id));
+  let delivery = direccion;
+  let customerId: string | null = customer?.id ?? null;
+  try {
+    const resolved = await resolveCheckoutAddress(customer, {
+      direccion,
+      addressId: addressId || null,
+      nuevaDireccion,
+    });
+    delivery = resolved.direccion;
+    customerId = resolved.customerId;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No pudimos usar esa dirección.";
+    return jsonError(message, 400);
+  }
+
+  if (!delivery) {
+    return jsonError("La dirección de entrega es obligatoria.", 400);
+  }
+
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .insert({
       chat_id: session.chat_id,
       session_id: session.id,
-      direccion,
+      customer_id: customerId,
+      direccion: delivery,
       metodo_pago: body.metodoPago,
       estado: "nueva",
       total_estimado: priced.totalEstimado,

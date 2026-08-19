@@ -436,12 +436,36 @@ async function sendChoiceMenu(
   return sendListMenu(phoneNumber, bodyText, choices);
 }
 
+async function getRegisteredCustomerName(phoneNumber: string): Promise<string | null> {
+  const supabase = getSupabaseAdminClient();
+  const normalized = normalizePhoneNumber(phoneNumber);
+  const variants = Array.from(new Set([phoneNumber.trim(), normalized, `+${normalized}`].filter(Boolean)));
+  const { data, error } = await supabase
+    .from("customers")
+    .select("nombre")
+    .in("phone_number", variants)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[whatsapp] no se pudo buscar el cliente registrado", error);
+    return null;
+  }
+
+  const nombre = typeof data?.nombre === "string" ? data.nombre.trim() : "";
+  return nombre || null;
+}
+
 export async function sendClientMenu(
   phoneNumber: string,
   activeOrderId: string | null
 ): Promise<WhatsAppSendResult> {
   if (!activeOrderId) {
-    return await sendChoiceMenu(phoneNumber, "¡Bienvenido a Quick! Mini Market! ¿Cómo te podemos ayudar hoy?", [
+    const nombre = await getRegisteredCustomerName(phoneNumber);
+    const greeting = nombre
+      ? `¡Hola de nuevo, ${nombre}! ¿Qué se te ofrece hoy?`
+      : "¡Bienvenido a Quick! Mini Market! ¿Cómo te podemos ayudar hoy?";
+    return await sendChoiceMenu(phoneNumber, greeting, [
       { id: "nueva_orden", title: "Nueva orden" },
       { id: "ver_pedido", title: "Ver mi pedido" },
     ]);

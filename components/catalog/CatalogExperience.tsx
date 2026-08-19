@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { CustomerRegisterForm } from "@/components/catalog/CustomerRegisterForm";
 import { Badge } from "@/components/brand/Badge";
 import { CartIcon } from "@/components/brand/CartIcon";
 import { Logo } from "@/components/brand/Logo";
+import { ADDRESS_LABELS, type AddressLabel, type CatalogCustomer, type CustomerAddress } from "@/lib/customers";
 import { formatPrice } from "@/lib/money";
 import { brand, brandChipColor, isPharmaCategory } from "@/lib/theme";
 import type { CreateOrderPayload, MetodoPago, OrderDraft, Product } from "@/lib/types";
@@ -12,9 +14,10 @@ type CatalogExperienceProps = {
   sessionId: string;
   products: Product[];
   editOrder?: OrderDraft | null;
+  customer?: CatalogCustomer | null;
 };
 
-type Step = "catalog" | "checkout" | "success";
+type Step = "register" | "catalog" | "checkout" | "success";
 type CartMap = Record<string, number>;
 type CartLine = { product: Product; cantidad: number; subtotal: number };
 
@@ -75,14 +78,33 @@ function groupProducts(products: Product[]) {
   return Array.from(groups.entries());
 }
 
-export function CatalogExperience({ sessionId, products, editOrder = null }: CatalogExperienceProps) {
+function defaultAddress(customer: CatalogCustomer | null | undefined): CustomerAddress | null {
+  if (!customer?.addresses.length) {
+    return null;
+  }
+  return customer.addresses.find((address) => address.esPredeterminada) ?? customer.addresses[0];
+}
+
+export function CatalogExperience({
+  sessionId,
+  products,
+  editOrder = null,
+  customer: initialCustomer = null,
+}: CatalogExperienceProps) {
   const isEditing = Boolean(editOrder);
-  const [step, setStep] = useState<Step>("catalog");
+  const [customer, setCustomer] = useState<CatalogCustomer | null>(initialCustomer);
+  const [step, setStep] = useState<Step>(initialCustomer ? "catalog" : "register");
   const [cart, setCart] = useState<CartMap>(() => cartFromDraft(editOrder));
   const [cartOpen, setCartOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [query, setQuery] = useState("");
-  const [direccion, setDireccion] = useState(editOrder?.direccion ?? "");
+  const [direccion, setDireccion] = useState(
+    editOrder?.direccion ?? defaultAddress(initialCustomer)?.direccion ?? ""
+  );
+  const [selectedAddressId, setSelectedAddressId] = useState<string | "new">(
+    defaultAddress(initialCustomer)?.id ?? "new"
+  );
+  const [newEtiqueta, setNewEtiqueta] = useState<AddressLabel>("Casa");
   const [metodoPago, setMetodoPago] = useState<MetodoPago | null>(editOrder?.metodoPago ?? null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -130,12 +152,16 @@ export function CatalogExperience({ sessionId, products, editOrder = null }: Cat
     setCart(stored ?? cartFromDraft(editOrder));
     if (editOrder?.direccion) {
       setDireccion((current) => current || editOrder.direccion);
+      const match = customer?.addresses.find((address) => address.direccion === editOrder.direccion);
+      if (match) {
+        setSelectedAddressId(match.id);
+      }
     }
     if (editOrder?.metodoPago) {
       setMetodoPago((current) => current ?? editOrder.metodoPago);
     }
     setHydrated(true);
-  }, [sessionId, editOrder]);
+  }, [sessionId, editOrder, customer]);
 
   useEffect(() => {
     if (!hydrated) {
@@ -168,7 +194,9 @@ export function CatalogExperience({ sessionId, products, editOrder = null }: Cat
   }
 
   async function confirmOrder() {
-    if (!metodoPago || direccion.trim().length < 6 || lines.length === 0) {
+    const usingNewAddress = Boolean(customer && selectedAddressId === "new");
+    const delivery = usingNewAddress ? direccion.trim() : direccion.trim();
+    if (!metodoPago || delivery.length < 6 || lines.length === 0) {
       return;
     }
 
@@ -178,8 +206,13 @@ export function CatalogExperience({ sessionId, products, editOrder = null }: Cat
         productId: line.product.id,
         cantidad: line.cantidad,
       })),
-      direccion: direccion.trim(),
+      direccion: delivery,
       metodoPago: metodoPago,
+      addressId: customer && selectedAddressId !== "new" ? selectedAddressId : null,
+      nuevaDireccion:
+        usingNewAddress && customer
+          ? { direccion: delivery, etiqueta: newEtiqueta }
+          : null,
     };
 
     setSubmitting(true);
@@ -223,6 +256,23 @@ export function CatalogExperience({ sessionId, products, editOrder = null }: Cat
     }
   }
 
+  if (step === "register") {
+    return (
+      <CustomerRegisterForm
+        sessionId={sessionId}
+        onRegistered={(registered) => {
+          setCustomer(registered);
+          const first = defaultAddress(registered);
+          if (first) {
+            setDireccion(first.direccion);
+            setSelectedAddressId(first.id);
+          }
+          setStep("catalog");
+        }}
+      />
+    );
+  }
+
   if (step === "success") {
     return <SuccessScreen orderId={orderId} isEditing={isEditing} />;
   }
@@ -237,7 +287,19 @@ export function CatalogExperience({ sessionId, products, editOrder = null }: Cat
         submitting={submitting}
         submitError={submitError}
         isEditing={isEditing}
+        addresses={customer?.addresses ?? []}
+        selectedAddressId={selectedAddressId}
+        newEtiqueta={newEtiqueta}
         onDireccionChange={setDireccion}
+        onSelectAddress={(id, value) => {
+          setSelectedAddressId(id);
+          if (id === "new") {
+            setDireccion("");
+            return;
+          }
+          setDireccion(value);
+        }}
+        onNewEtiquetaChange={setNewEtiqueta}
         onMetodoPagoChange={setMetodoPago}
         onBack={() => {
           setSubmitError(null);
@@ -657,7 +719,12 @@ function CheckoutScreen({
   submitting,
   submitError,
   isEditing,
+  addresses,
+  selectedAddressId,
+  newEtiqueta,
   onDireccionChange,
+  onSelectAddress,
+  onNewEtiquetaChange,
   onMetodoPagoChange,
   onBack,
   onConfirm,
@@ -669,11 +736,17 @@ function CheckoutScreen({
   submitting: boolean;
   submitError: string | null;
   isEditing: boolean;
+  addresses: CustomerAddress[];
+  selectedAddressId: string | "new";
+  newEtiqueta: AddressLabel;
   onDireccionChange: (value: string) => void;
+  onSelectAddress: (id: string | "new", direccion: string) => void;
+  onNewEtiquetaChange: (value: AddressLabel) => void;
   onMetodoPagoChange: (value: MetodoPago) => void;
   onBack: () => void;
   onConfirm: () => void;
 }) {
+  const addingNew = selectedAddressId === "new" || addresses.length === 0;
   const canConfirm = direccion.trim().length >= 6 && metodoPago !== null && !submitting;
 
   return (
@@ -706,17 +779,89 @@ function CheckoutScreen({
         ))}
       </ul>
 
-      <label className="mt-8 block">
-        <span className="text-sm font-bold text-brand-ink">Dirección de entrega</span>
-        <textarea
-          value={direccion}
-          onChange={(event) => onDireccionChange(event.target.value)}
-          rows={3}
-          placeholder="Calle, número, piso, referencias..."
-          className="mt-2 w-full resize-none rounded-2xl border bg-white px-4 py-3 text-base text-brand-ink outline-none placeholder:text-brand-muted"
-          style={{ borderColor: `${brand.muted}40` }}
-        />
-      </label>
+      {addresses.length > 0 ? (
+        <fieldset className="mt-8">
+          <legend className="text-sm font-bold text-brand-ink">Dirección de entrega</legend>
+          <div className="mt-2 space-y-2">
+            {addresses.map((address) => {
+              const selected = selectedAddressId === address.id;
+              return (
+                <button
+                  key={address.id}
+                  type="button"
+                  onClick={() => onSelectAddress(address.id, address.direccion)}
+                  className="w-full rounded-2xl border-2 bg-white px-4 py-3 text-left"
+                  style={{ borderColor: selected ? brand.green : `${brand.muted}40` }}
+                >
+                  <span className="block text-xs font-bold" style={{ color: selected ? brand.green : brand.muted }}>
+                    {address.etiqueta || "Dirección"}
+                    {address.esPredeterminada ? " · habitual" : ""}
+                  </span>
+                  <span className="mt-0.5 block text-sm font-semibold text-brand-ink">{address.direccion}</span>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => onSelectAddress("new", "")}
+              className="w-full rounded-2xl border-2 border-dashed bg-white px-4 py-3 text-left text-sm font-bold"
+              style={{
+                borderColor: selectedAddressId === "new" ? brand.green : `${brand.muted}40`,
+                color: selectedAddressId === "new" ? brand.green : brand.ink,
+              }}
+            >
+              + Agregar nueva dirección
+            </button>
+          </div>
+        </fieldset>
+      ) : (
+        <label className="mt-8 block">
+          <span className="text-sm font-bold text-brand-ink">Dirección de entrega</span>
+          <textarea
+            value={direccion}
+            onChange={(event) => onDireccionChange(event.target.value)}
+            rows={3}
+            placeholder="Calle, número, piso, referencias..."
+            className="mt-2 w-full resize-none rounded-2xl border bg-white px-4 py-3 text-base text-brand-ink outline-none placeholder:text-brand-muted"
+            style={{ borderColor: `${brand.muted}40` }}
+          />
+        </label>
+      )}
+
+      {addresses.length > 0 && addingNew ? (
+        <div className="mt-4">
+          <label className="block">
+            <span className="text-sm font-bold text-brand-ink">Nueva dirección</span>
+            <textarea
+              value={direccion}
+              onChange={(event) => onDireccionChange(event.target.value)}
+              rows={3}
+              placeholder="Calle, número, piso, referencias..."
+              className="mt-2 w-full resize-none rounded-2xl border bg-white px-4 py-3 text-base text-brand-ink outline-none placeholder:text-brand-muted"
+              style={{ borderColor: `${brand.muted}40` }}
+            />
+          </label>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {ADDRESS_LABELS.map((label) => {
+              const selected = newEtiqueta === label;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => onNewEtiquetaChange(label)}
+                  className="rounded-2xl border-2 bg-white py-2.5 text-sm font-bold"
+                  style={{
+                    borderColor: selected ? brand.green : `${brand.muted}40`,
+                    color: selected ? brand.green : brand.ink,
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       <fieldset className="mt-6">
         <legend className="text-sm font-bold text-brand-ink">Método de pago</legend>

@@ -39,6 +39,8 @@ export type CreateOrderPayload = {
   items: CreateOrderItem[];
   direccion: string;
   metodoPago: MetodoPago;
+  addressId?: string | null;
+  nuevaDireccion?: { direccion: string; etiqueta: "Casa" | "Trabajo" | "Otro" } | null;
 };
 
 export type CreateOrderResponse = {
