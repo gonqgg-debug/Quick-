@@ -3,6 +3,8 @@ import path from "path";
 import Image from "next/image";
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
+import { LandingHeader } from "@/components/landing/LandingHeader";
+import { WhatsAppFloat } from "@/components/landing/WhatsAppFloat";
 import { brand, whatsappHref } from "@/lib/theme";
 
 function hasPublicImage(filename: string): boolean {
@@ -131,22 +133,8 @@ function StaffButton({ light = false }: { light?: boolean }) {
         color: light ? "#FFFFFF" : brand.ink,
       }}
     >
-      Staff
+      Empleados
     </Link>
-  );
-}
-
-function DeliveryTrailHero({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 180 120" fill="none" aria-hidden="true">
-      <path
-        d="M10 90 C 40 20, 100 10, 170 50"
-        stroke={brand.orange}
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        opacity="0.7"
-      />
-    </svg>
   );
 }
 
@@ -169,6 +157,7 @@ function SectionPhoto({
         src={src}
         alt={alt}
         fill
+        unoptimized
         className="object-cover"
         sizes="(min-width: 768px) 480px, 100vw"
         priority={priority}
@@ -201,16 +190,9 @@ function DeliveryTrailSteps() {
 
 function SectionWave({ fill }: { fill: string }) {
   return (
-    <div className="-mb-px" aria-hidden="true">
-      <svg
-        className="block h-10 w-full md:h-16"
-        viewBox="0 0 1440 88"
-        preserveAspectRatio="none"
-      >
-        <path
-          fill={fill}
-          d="M0 42C190 86 310 6 520 32C740 60 820 92 1040 48C1200 16 1320 10 1440 38V88H0V42Z"
-        />
+    <div className="section-wave" aria-hidden="true">
+      <svg viewBox="0 0 1440 88" preserveAspectRatio="none">
+        <path fill={fill} d="M0 46C200 90 340 8 540 34C760 62 860 94 1080 50C1240 18 1340 12 1440 40L1440 90 0 90Z" />
       </svg>
     </div>
   );
@@ -234,18 +216,16 @@ function Inner({ children, className = "" }: { children: React.ReactNode; classN
 
 export default function Home() {
   const year = new Date().getFullYear();
-  const hasHero = hasPublicImage("hero.jpg");
+  const hasHero = hasPublicImage("hero.jpeg");
   const hasQuienesSomos = hasPublicImage("quienes-somos.jpg");
-  const hasUbicacion = hasPublicImage("ubicacion.jpg");
+  const hasUbicacion = hasPublicImage("ubicacion.webp");
 
   return (
-    <main className="bg-white" style={{ color: brand.ink }}>
+    <main style={{ color: brand.ink }}>
+      <LandingHeader />
       {/* Hero */}
-      <section className="bg-white pb-8 pt-8 md:pb-10 md:pt-12">
-        <Inner>
-          <div className="mb-6 flex justify-end md:mb-8">
-            <StaffButton />
-          </div>
+      <section id="inicio" className="scroll-mt-20 bg-white pt-8 md:scroll-mt-24 md:pt-12">
+        <Inner className="pb-8 md:pb-10">
           <div className="grid items-center gap-10 md:grid-cols-2 md:gap-14">
             <div className="order-2 text-center md:order-1 md:text-left">
               <Logo className="mx-auto h-16 max-w-[220px] md:mx-0 md:h-20 md:max-w-[280px]" />
@@ -265,24 +245,22 @@ export default function Home() {
             </div>
             {hasHero ? (
               <div className="relative order-1 mx-auto w-full max-w-md md:order-2 md:max-w-none">
-                <DeliveryTrailHero className="pointer-events-none absolute -bottom-4 -left-10 z-0 h-28 w-44 sm:-left-14 sm:h-32 sm:w-52" />
                 <SectionPhoto
-                  src="/images/hero.jpg"
-                  alt="Vecina sonriendo al recibir su pedido de Quick! en la puerta de casa"
+                  src="/images/hero.jpeg"
+                  alt="Repartidor de Quick! Mini Market entregando una bolsa de compras en la puerta de casa"
                   priority
-                  className="relative z-10 aspect-[4/5]"
+                  className="aspect-[4/5]"
                 />
               </div>
             ) : null}
           </div>
         </Inner>
+        <SectionWave fill="#F1F7EA" />
       </section>
 
-      <SectionWave fill="#F1F7EA" />
-
       {/* Quiénes somos */}
-      <section className="bg-[#F1F7EA] py-20 md:py-28">
-        <Inner>
+      <section id="quienes-somos" className="scroll-mt-20 bg-[#F1F7EA] pt-20 md:scroll-mt-24 md:pt-28">
+        <Inner className="pb-20 md:pb-28">
           <div
             className={`grid items-center gap-10 ${hasQuienesSomos ? "md:grid-cols-2 md:gap-14" : ""}`}
           >
@@ -316,13 +294,12 @@ export default function Home() {
             </div>
           </div>
         </Inner>
+        <SectionWave fill="#FFFFFF" />
       </section>
 
-      <SectionWave fill="#FFFFFF" />
-
       {/* Cómo funciona */}
-      <section className="bg-white py-20 md:py-28">
-        <Inner>
+      <section id="como-funciona" className="scroll-mt-20 bg-white pt-20 md:scroll-mt-24 md:pt-28">
+        <Inner className="pb-20 md:pb-28">
           <div className="mx-auto max-w-4xl">
             <p
               className="text-center text-xs font-bold uppercase tracking-[0.18em]"
@@ -362,9 +339,8 @@ export default function Home() {
             </div>
           </div>
         </Inner>
+        <SectionWave fill={brand.blue} />
       </section>
-
-      <SectionWave fill={brand.blue} />
 
       {/* PharmaQuick! */}
       <section className="relative" style={{ backgroundColor: brand.blue }}>
@@ -372,8 +348,11 @@ export default function Home() {
         <Inner className="relative z-10 py-20 md:py-28">
           <div className="grid items-center gap-10 md:grid-cols-2 md:gap-16">
             <div>
-              <div className="mb-6 inline-flex rounded-3xl bg-white px-5 py-4 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                <Logo variant="pharma" className="h-14 max-w-[220px] md:h-16 md:max-w-[260px]" />
+              <div className="mb-6 inline-flex rounded-3xl bg-white px-6 py-5 shadow-[0_8px_24px_rgba(0,0,0,0.12)] md:px-8 md:py-6">
+                <Logo
+                  variant="pharma"
+                  className="!h-24 !w-auto !max-w-[360px] md:!h-36 md:!max-w-[520px]"
+                />
               </div>
               <div>
                 <span className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-bold" style={{ color: brand.blue }}>
@@ -390,12 +369,11 @@ export default function Home() {
             </p>
           </div>
         </Inner>
+        <SectionWave fill={brand.green} />
       </section>
 
-      <SectionWave fill={brand.green} />
-
       {/* Ubicación */}
-      <section className="relative" style={{ backgroundColor: brand.green }}>
+      <section id="donde-estamos" className="relative scroll-mt-20 md:scroll-mt-24" style={{ backgroundColor: brand.green }}>
         <SoftCircles />
         <Inner className="relative z-10 py-20 md:py-28">
           <div className={`grid items-center gap-12 ${hasUbicacion ? "md:grid-cols-2 md:gap-16" : ""}`}>
@@ -420,9 +398,10 @@ export default function Home() {
               <div className="mx-auto w-full max-w-sm rotate-[2deg] bg-white p-3 shadow-[0_24px_50px_rgba(26,26,26,0.28)] md:p-4">
                 <div className="relative aspect-[4/5] overflow-hidden">
                   <Image
-                    src="/images/ubicacion.jpg"
+                    src="/images/ubicacion.webp"
                     alt="Pasillo iluminado de la tienda Quick! Mini Market con estantes de productos"
                     fill
+                    unoptimized
                     className="object-cover"
                     sizes="(min-width: 768px) 380px, 90vw"
                     loading="lazy"
@@ -432,9 +411,8 @@ export default function Home() {
             ) : null}
           </div>
         </Inner>
+        <SectionWave fill={brand.ink} />
       </section>
-
-      <SectionWave fill={brand.ink} />
 
       {/* Footer */}
       <footer className="pb-12 pt-10 md:pt-14" style={{ backgroundColor: brand.ink }}>
@@ -462,6 +440,7 @@ export default function Home() {
           </p>
         </Inner>
       </footer>
+      <WhatsAppFloat />
     </main>
   );
 }
