@@ -316,8 +316,8 @@ export function StaffPanel() {
       return;
     }
 
-    const hasNewOrder = [...newIds].some((id) => !seenNewIds.current!.has(id));
-    const hasNewUrgent = [...urgentIds].some((id) => !seenUrgentIds.current!.has(id));
+    const hasNewOrder = Array.from(newIds).some((id) => !seenNewIds.current!.has(id));
+    const hasNewUrgent = Array.from(urgentIds).some((id) => !seenUrgentIds.current!.has(id));
 
     if (!soundMuted) {
       if (hasNewOrder) {
