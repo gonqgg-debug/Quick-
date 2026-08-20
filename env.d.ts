@@ -13,5 +13,7 @@ declare namespace NodeJS {
     NEXT_PUBLIC_WHATSAPP_NUMBER?: string;
     APP_URL?: string;
     VERCEL_URL?: string;
+    SERPER_API_KEY?: string;
+    ANTHROPIC_API_KEY?: string;
   }
 }

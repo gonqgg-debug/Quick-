@@ -19,6 +19,7 @@ function isActivePath(pathname: string, href: string): boolean {
 export function AdminShell({ email, children }: AdminShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const catalogOpen = pathname.startsWith("/admin/catalogo");
 
   async function handleLogout() {
     const supabase = createAdminBrowserClient();
@@ -69,7 +70,7 @@ export function AdminShell({ email, children }: AdminShellProps) {
                 return (
                   <Link
                     key={item.href}
-                    href={item.href}
+                    href={item.children?.[0]?.href ?? item.href}
                     className="rounded-full px-3 py-1.5 text-sm font-semibold"
                     style={{
                       backgroundColor: active ? brand.green : "#F3F4F6",
@@ -86,6 +87,26 @@ export function AdminShell({ email, children }: AdminShellProps) {
                 </span>
               ))}
             </nav>
+            {catalogOpen ? (
+              <nav className="mt-2 flex flex-wrap gap-1" aria-label="Catálogo">
+                {(ADMIN_NAV.find((item) => item.href === "/admin/catalogo")?.children ?? []).map((child) => {
+                  const active = pathname === child.href;
+                  return (
+                    <Link
+                      key={child.href}
+                      href={child.href}
+                      className="rounded-full px-3 py-1.5 text-sm font-semibold"
+                      style={{
+                        backgroundColor: active ? brand.green : "#F3F4F6",
+                        color: active ? "#FFFFFF" : brand.ink,
+                      }}
+                    >
+                      {child.label}
+                    </Link>
+                  );
+                })}
+              </nav>
+            ) : null}
           </header>
           <main className="px-4 py-6 md:px-6">{children}</main>
         </div>
@@ -100,17 +121,38 @@ function NavLinks({ pathname }: { pathname: string }) {
       {ADMIN_NAV.map((item) => {
         const active = isActivePath(pathname, item.href);
         return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="rounded-xl px-3 py-2.5 text-sm font-semibold"
-            style={{
-              backgroundColor: active ? `${brand.green}18` : "transparent",
-              color: active ? brand.green : brand.ink,
-            }}
-          >
-            {item.label}
-          </Link>
+          <div key={item.href}>
+            <Link
+              href={item.children?.[0]?.href ?? item.href}
+              className="block rounded-xl px-3 py-2.5 text-sm font-semibold"
+              style={{
+                backgroundColor: active && !item.children ? `${brand.green}18` : "transparent",
+                color: active ? brand.green : brand.ink,
+              }}
+            >
+              {item.label}
+            </Link>
+            {item.children ? (
+              <div className="mb-1 ml-2 mt-0.5 flex flex-col gap-0.5 border-l pl-2" style={{ borderColor: "#E5E7EB" }}>
+                {item.children.map((child) => {
+                  const childActive = pathname === child.href;
+                  return (
+                    <Link
+                      key={child.href}
+                      href={child.href}
+                      className="rounded-lg px-2.5 py-2 text-sm font-semibold"
+                      style={{
+                        backgroundColor: childActive ? `${brand.green}18` : "transparent",
+                        color: childActive ? brand.green : brand.muted,
+                      }}
+                    >
+                      {child.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
         );
       })}
     </nav>
