@@ -4,6 +4,7 @@ export type CatalogImageStats = {
   withBarcode: number;
   pendingReview: number;
   awaitingOff: number;
+  awaitingWeb: number;
   withoutBarcode: number;
 };
 

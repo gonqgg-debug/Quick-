@@ -1,6 +1,8 @@
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import { normalizeBarcode } from "@/lib/barcode";
 import { fetchOpenFoodFactsImage } from "@/lib/open-food-facts";
+import { pickBestProductImage } from "@/lib/anthropic-product-image";
+import { buildProductImageQuery, searchSerperProductImages } from "@/lib/serper-images";
 import type { CatalogImageQueueItem, CatalogImageStats } from "@/lib/product-images-shared";
 
 export type { CatalogImageQueueItem, CatalogImageStats } from "@/lib/product-images-shared";
@@ -8,7 +10,9 @@ export type { CatalogImageQueueItem, CatalogImageStats } from "@/lib/product-ima
 export const PRODUCT_PHOTOS_BUCKET = "product-photos";
 export const PRODUCT_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 const SUGGEST_BATCH = 12;
+const WEB_BATCH = 3;
 const OFF_GAP_MS = 350;
+const WEB_GAP_MS = 800;
 
 let bucketReady: Promise<void> | null = null;
 
@@ -38,6 +42,12 @@ function sleep(ms: number): Promise<void> {
 
 export async function getCatalogImageStats(): Promise<CatalogImageStats> {
   const supabase = getSupabaseAdminClient();
+  const { data: pendingRows } = await supabase
+    .from("product_image_suggestions")
+    .select("product_id")
+    .eq("status", "pending");
+  const pendingIds = (pendingRows ?? []).map((row) => String(row.product_id));
+
   const [
     { count: total },
     { count: confirmed },
@@ -59,12 +69,24 @@ export async function getCatalogImageStats(): Promise<CatalogImageStats> {
     supabase.from("products").select("id", { count: "exact", head: true }).is("codigo_barras", null),
   ]);
 
+  let awaitingWebQuery = supabase
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("foto_confirmada", false)
+    .is("web_consultado_en", null)
+    .or("codigo_barras.is.null,off_consultado_en.not.is.null");
+  if (pendingIds.length > 0) {
+    awaitingWebQuery = awaitingWebQuery.not("id", "in", `(${pendingIds.join(",")})`);
+  }
+  const { count: awaitingWeb } = await awaitingWebQuery;
+
   return {
     total: total ?? 0,
     confirmed: confirmed ?? 0,
     withBarcode: withBarcode ?? 0,
     pendingReview: pendingReview ?? 0,
     awaitingOff: awaitingOff ?? 0,
+    awaitingWeb: awaitingWeb ?? 0,
     withoutBarcode: withoutBarcode ?? 0,
   };
 }
@@ -104,12 +126,21 @@ export async function listCatalogImageQueue(limit = 40): Promise<CatalogImageQue
   });
 }
 
-export async function suggestOpenFoodFactsBatch(): Promise<{
+export type ImageSuggestDetail = {
+  nombre: string;
+  found: boolean;
+  reason: string;
+};
+
+export type ImageSuggestResult = {
   scanned: number;
   found: number;
   missed: number;
   remaining: number;
-}> {
+  details?: ImageSuggestDetail[];
+};
+
+export async function suggestOpenFoodFactsBatch(): Promise<ImageSuggestResult> {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("products")
@@ -176,6 +207,131 @@ export async function suggestOpenFoodFactsBatch(): Promise<{
   };
 }
 
+type WebProduct = {
+  id: string;
+  nombre: string;
+  marca: string | null;
+  categoria: string;
+};
+
+export async function suggestWebImagesBatch(options?: {
+  limit?: number;
+  productId?: string;
+}): Promise<ImageSuggestResult> {
+  if (!process.env.SERPER_API_KEY?.trim()) {
+    throw new Error("Falta SERPER_API_KEY");
+  }
+  if (!process.env.ANTHROPIC_API_KEY?.trim()) {
+    throw new Error("Falta ANTHROPIC_API_KEY");
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const limit = Math.min(Math.max(options?.limit ?? WEB_BATCH, 1), 8);
+  const products = options?.productId
+    ? await fetchWebProductById(options.productId)
+    : await fetchWebCandidates(limit);
+
+  let found = 0;
+  let missed = 0;
+  const details: ImageSuggestDetail[] = [];
+
+  for (const product of products) {
+    const now = new Date().toISOString();
+    try {
+      const query = buildProductImageQuery(product.nombre, product.marca, product.categoria);
+      const candidates = await searchSerperProductImages(query, 5);
+      const picked =
+        candidates.length > 0
+          ? await pickBestProductImage({
+              nombre: product.nombre,
+              marca: product.marca,
+              urls: candidates.map((item) => item.url),
+            })
+          : { url: null, reason: "Serper no devolvió imágenes" };
+      if (picked.url) {
+        await supabase
+          .from("product_image_suggestions")
+          .update({ status: "rejected" })
+          .eq("product_id", product.id)
+          .eq("status", "pending");
+        const { error: insertError } = await supabase.from("product_image_suggestions").insert({
+          product_id: product.id,
+          source: "web",
+          image_url: picked.url,
+          status: "pending",
+        });
+        if (insertError && !/duplicate|unique/i.test(insertError.message)) {
+          throw insertError;
+        }
+        found += 1;
+        details.push({ nombre: product.nombre, found: true, reason: picked.reason || query });
+      } else {
+        missed += 1;
+        details.push({ nombre: product.nombre, found: false, reason: picked.reason || query });
+      }
+    } catch (webError) {
+      console.error("[admin] web image search", product.id, webError);
+      missed += 1;
+      details.push({
+        nombre: product.nombre,
+        found: false,
+        reason: webError instanceof Error ? webError.message : "Error de red o timeout",
+      });
+    }
+    await supabase.from("products").update({ web_consultado_en: now }).eq("id", product.id);
+    await sleep(WEB_GAP_MS);
+  }
+
+  const stats = await getCatalogImageStats();
+  return {
+    scanned: products.length,
+    found,
+    missed,
+    remaining: stats.awaitingWeb,
+    details,
+  };
+}
+
+async function fetchWebProductById(productId: string): Promise<WebProduct[]> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, nombre, marca, categoria")
+    .eq("id", productId)
+    .eq("foto_confirmada", false)
+    .maybeSingle();
+  if (error) {
+    throw error;
+  }
+  return data ? [data as WebProduct] : [];
+}
+
+async function fetchWebCandidates(limit: number): Promise<WebProduct[]> {
+  const supabase = getSupabaseAdminClient();
+  const { data: pendingRows } = await supabase
+    .from("product_image_suggestions")
+    .select("product_id")
+    .eq("status", "pending");
+  const pendingIds = (pendingRows ?? []).map((row) => String(row.product_id));
+
+  let query = supabase
+    .from("products")
+    .select("id, nombre, marca, categoria")
+    .eq("foto_confirmada", false)
+    .is("web_consultado_en", null)
+    .or("codigo_barras.is.null,off_consultado_en.not.is.null")
+    .order("nombre", { ascending: true })
+    .limit(limit);
+  if (pendingIds.length > 0) {
+    query = query.not("id", "in", `(${pendingIds.join(",")})`);
+  }
+  const { data, error } = await query;
+  if (error) {
+    throw error;
+  }
+  return ((data ?? []) as WebProduct[]).slice(0, limit);
+}
+
 export async function acceptSuggestedImage(suggestionId: string): Promise<void> {
   const supabase = getSupabaseAdminClient();
   const { data: suggestion, error } = await supabase
@@ -203,8 +359,17 @@ export async function acceptSuggestedImage(suggestionId: string): Promise<void> 
     .eq("status", "pending");
 }
 
-export async function rejectSuggestedImage(suggestionId: string): Promise<void> {
+export async function rejectSuggestedImage(suggestionId: string): Promise<{ productId: string }> {
   const supabase = getSupabaseAdminClient();
+  const { data: suggestion, error: readError } = await supabase
+    .from("product_image_suggestions")
+    .select("id, product_id")
+    .eq("id", suggestionId)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (readError || !suggestion) {
+    throw new Error("No hay una sugerencia pendiente");
+  }
   const { error } = await supabase
     .from("product_image_suggestions")
     .update({ status: "rejected" })
@@ -213,6 +378,8 @@ export async function rejectSuggestedImage(suggestionId: string): Promise<void> 
   if (error) {
     throw error;
   }
+  await supabase.from("products").update({ web_consultado_en: null }).eq("id", suggestion.product_id);
+  return { productId: String(suggestion.product_id) };
 }
 
 export async function uploadProductPhoto(productId: string, bytes: Uint8Array, mimeType: string): Promise<void> {

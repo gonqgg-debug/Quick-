@@ -15,5 +15,6 @@ declare namespace NodeJS {
     VERCEL_URL?: string;
     SERPER_API_KEY?: string;
     ANTHROPIC_API_KEY?: string;
+    ANTHROPIC_MODEL?: string;
   }
 }
