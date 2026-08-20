@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
 import { brand } from "@/lib/theme";
 
-type StaffSection = "orders" | "chats" | "historial";
+type StaffSection = "orders" | "chats";
 
 export type StaffSearchProps = {
   open: boolean;
@@ -28,7 +28,6 @@ type StaffChromeProps = {
 
 const DESKTOP_TABS: { id: StaffSection; href: string; label: string }[] = [
   { id: "orders", href: "/staff", label: "Pedidos" },
-  { id: "historial", href: "/staff/historial", label: "Historial" },
   { id: "chats", href: "/staff/chats", label: "Chat" },
 ];
 
@@ -278,15 +277,6 @@ function AccountMenu({ onLogout }: { onLogout: () => void }) {
           className="absolute right-0 top-full z-40 mt-1 min-w-[160px] overflow-hidden rounded-2xl border bg-white py-1 shadow-[0_10px_28px_rgba(26,26,26,0.12)]"
           style={{ borderColor: "#E5E7EB" }}
         >
-          <Link
-            href="/staff/historial"
-            role="menuitem"
-            onClick={() => setOpen(false)}
-            className="flex h-11 items-center px-4 text-sm font-semibold md:hidden"
-            style={{ color: brand.ink }}
-          >
-            Historial
-          </Link>
           <button
             type="button"
             role="menuitem"

@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdminApi } from "@/lib/admin-auth";
 import { fetchHistoryPage, parseHistoryFilters } from "@/lib/staff-history";
-import { isStaffAuthorized, unauthorized } from "@/lib/staff-auth";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  if (!isStaffAuthorized()) {
-    return unauthorized();
+  const auth = await requireAdminApi();
+  if (auth instanceof NextResponse) {
+    return auth;
   }
 
   const filters = parseHistoryFilters(request.nextUrl.searchParams);
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
       pageSize: filters.pageSize,
     });
   } catch (error) {
-    console.error("[staff] no se pudo leer el historial", error);
+    console.error("[admin] no se pudo leer el historial", error);
     return NextResponse.json({ error: "No pudimos leer el historial" }, { status: 500 });
   }
 }

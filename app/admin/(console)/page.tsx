@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function StaffHistorialRedirect() {
+export default function AdminHomePage() {
   redirect("/admin/historial");
 }

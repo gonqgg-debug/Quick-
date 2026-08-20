@@ -1,0 +1,51 @@
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+import type { User } from "@supabase/supabase-js";
+import { ADMIN_ROLE } from "@/lib/admin-role";
+
+export function isAdminUser(user: User | null | undefined): boolean {
+  return Boolean(user && user.app_metadata?.role === ADMIN_ROLE);
+}
+
+export function createAdminServerClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) {
+    throw new Error("Faltan las variables de Supabase");
+  }
+
+  const cookieStore = cookies();
+  return createServerClient(url, anonKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
+        } catch {
+          // Called from a Server Component; middleware refreshes the session.
+        }
+      },
+    },
+  });
+}
+
+export async function getAdminUser(): Promise<User | null> {
+  const supabase = createAdminServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return isAdminUser(user) ? user : null;
+}
+
+export async function requireAdminApi(): Promise<User | NextResponse> {
+  const user = await getAdminUser();
+  if (!user) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+  return user;
+}

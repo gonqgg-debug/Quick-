@@ -5,18 +5,28 @@ export type HistoryEstado = (typeof HISTORY_STATES)[number];
 
 export const HISTORY_PAGE_SIZE = 50;
 
+export type HistoryOrderItem = {
+  id: string;
+  nombre: string;
+  cantidad: number;
+  precioLabel: string;
+  estado: string;
+};
+
 export type HistoryOrder = {
   id: string;
   createdAt: string;
   updatedAt: string | null;
   estado: HistoryEstado;
   direccion: string;
+  metodoPago: string;
   totalEstimado: number;
   totalLabel: string;
   clienteNombre: string | null;
   clienteTelefono: string;
   itemCount: number;
   durationLabel: string;
+  items: HistoryOrderItem[];
 };
 
 export type HistoryFilters = {

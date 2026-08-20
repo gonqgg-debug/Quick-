@@ -31,13 +31,23 @@ const SELECT = `
   updated_at,
   estado,
   direccion,
+  metodo_pago,
   total_estimado,
   chats (
     phone_number,
     nombre
   ),
+  customers!orders_customer_id_fkey (
+    nombre,
+    apellido,
+    phone_number
+  ),
   order_items (
-    cantidad
+    id,
+    cantidad,
+    precio_unitario,
+    estado,
+    products!order_items_product_id_fkey ( nombre )
   )
 `;
 
@@ -68,22 +78,46 @@ export function mapHistoryOrder(row: {
   updated_at: unknown;
   estado: unknown;
   direccion: unknown;
+  metodo_pago?: unknown;
   total_estimado: unknown;
   chats?: unknown;
+  customers?: unknown;
   order_items?: unknown;
 }): HistoryOrder {
   const chat = unwrapOne(
     row.chats as { phone_number?: string; nombre?: string | null } | { phone_number?: string; nombre?: string | null }[] | null
   );
-  const items = Array.isArray(row.order_items) ? row.order_items : [];
-  const itemCount = items.reduce((sum, item) => {
-    const qty = Number((item as { cantidad?: unknown }).cantidad);
-    return sum + (Number.isFinite(qty) ? qty : 0);
-  }, 0);
+  const customer = unwrapOne(
+    row.customers as
+      | { nombre?: string | null; apellido?: string | null; phone_number?: string | null }
+      | { nombre?: string | null; apellido?: string | null; phone_number?: string | null }[]
+      | null
+  );
+  const rawItems = Array.isArray(row.order_items) ? row.order_items : [];
+  const items = rawItems.map((item) => {
+    const product = unwrapOne(
+      (item as { products?: { nombre: string } | { nombre: string }[] | null }).products
+    );
+    const cantidad = Number((item as { cantidad?: unknown }).cantidad);
+    const precio = toMoney((item as { precio_unitario?: unknown }).precio_unitario);
+    const qty = Number.isFinite(cantidad) ? cantidad : 0;
+    return {
+      id: String((item as { id?: unknown }).id ?? ""),
+      nombre: product?.nombre ? String(product.nombre) : "Producto",
+      cantidad: qty,
+      precioLabel: formatPrice(precio * qty),
+      estado: String((item as { estado?: unknown }).estado ?? "ok"),
+    };
+  });
+  const itemCount = items.reduce((sum, item) => sum + item.cantidad, 0);
   const createdAt = String(row.created_at ?? "");
   const updatedAt = row.updated_at ? String(row.updated_at) : null;
   const durationLabel = updatedAt ? formatElapsedClock(createdAt, new Date(updatedAt).getTime()) : "—";
   const estado = isHistoryEstado(String(row.estado)) ? String(row.estado) : "completada";
+  const customerName = [customer?.nombre, customer?.apellido]
+    .map((part) => (part ? String(part).trim() : ""))
+    .filter(Boolean)
+    .join(" ");
 
   return {
     id: String(row.id),
@@ -91,12 +125,18 @@ export function mapHistoryOrder(row: {
     updatedAt,
     estado: estado as HistoryEstado,
     direccion: String(row.direccion ?? ""),
+    metodoPago: String(row.metodo_pago ?? ""),
     totalEstimado: toMoney(row.total_estimado),
     totalLabel: formatPrice(row.total_estimado),
-    clienteNombre: chat?.nombre ? String(chat.nombre) : null,
-    clienteTelefono: chat?.phone_number ? String(chat.phone_number) : "Sin teléfono",
+    clienteNombre: customerName || (chat?.nombre ? String(chat.nombre) : null),
+    clienteTelefono: customer?.phone_number
+      ? String(customer.phone_number)
+      : chat?.phone_number
+        ? String(chat.phone_number)
+        : "Sin teléfono",
     itemCount,
     durationLabel,
+    items,
   };
 }
 
@@ -149,6 +189,7 @@ export async function fetchHistoryForExport(
 
 type HistorySearch = {
   chatIds: string[];
+  customerIds: string[];
   range: { gte: string; lte: string } | null;
 };
 
@@ -158,17 +199,24 @@ async function resolveHistorySearch(supabase: SupabaseClient, rawQuery: string):
     return null;
   }
 
-  const { data: chats, error: chatError } = await supabase
-    .from("chats")
-    .select("id")
-    .or(`nombre.ilike.%${needle}%,phone_number.ilike.%${needle}%`)
-    .limit(200);
+  const [{ data: chats, error: chatError }, { data: customers, error: customerError }] = await Promise.all([
+    supabase.from("chats").select("id").or(`nombre.ilike.%${needle}%,phone_number.ilike.%${needle}%`).limit(200),
+    supabase
+      .from("customers")
+      .select("id")
+      .or(`nombre.ilike.%${needle}%,apellido.ilike.%${needle}%,phone_number.ilike.%${needle}%`)
+      .limit(200),
+  ]);
   if (chatError) {
     throw chatError;
+  }
+  if (customerError) {
+    throw customerError;
   }
 
   return {
     chatIds: (chats ?? []).map((chat) => String(chat.id)),
+    customerIds: (customers ?? []).map((customer) => String(customer.id)),
     range: uuidPrefixRange(needle),
   };
 }
@@ -209,16 +257,22 @@ function buildHistoryQuery(
   }
 
   if (search) {
-    if (search.range && search.chatIds.length > 0) {
-      query = query.or(
-        `and(id.gte.${search.range.gte},id.lte.${search.range.lte}),chat_id.in.(${search.chatIds.join(",")})`
-      );
-    } else if (search.range) {
-      query = query.gte("id", search.range.gte).lte("id", search.range.lte);
-    } else if (search.chatIds.length > 0) {
-      query = query.in("chat_id", search.chatIds);
-    } else {
+    const orParts: string[] = [];
+    if (search.range) {
+      orParts.push(`and(id.gte.${search.range.gte},id.lte.${search.range.lte})`);
+    }
+    if (search.chatIds.length > 0) {
+      orParts.push(`chat_id.in.(${search.chatIds.join(",")})`);
+    }
+    if (search.customerIds.length > 0) {
+      orParts.push(`customer_id.in.(${search.customerIds.join(",")})`);
+    }
+    if (orParts.length === 0) {
       query = query.eq("id", "00000000-0000-0000-0000-000000000000");
+    } else if (orParts.length === 1 && search.range && search.chatIds.length === 0 && search.customerIds.length === 0) {
+      query = query.gte("id", search.range.gte).lte("id", search.range.lte);
+    } else {
+      query = query.or(orParts.join(","));
     }
   }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdminApi } from "@/lib/admin-auth";
 import { localDayKey } from "@/lib/local-day";
 import { buildXlsx } from "@/lib/simple-xlsx";
 import {
@@ -7,7 +8,6 @@ import {
   historyExportRows,
   parseHistoryFilters,
 } from "@/lib/staff-history";
-import { isStaffAuthorized, unauthorized } from "@/lib/staff-auth";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -26,8 +26,9 @@ const HEADERS = [
 ];
 
 export async function GET(request: NextRequest) {
-  if (!isStaffAuthorized()) {
-    return unauthorized();
+  const auth = await requireAdminApi();
+  if (auth instanceof NextResponse) {
+    return auth;
   }
 
   const filters = parseHistoryFilters(request.nextUrl.searchParams);
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[staff] no se pudo exportar el historial", error);
+    console.error("[admin] no se pudo exportar el historial", error);
     return NextResponse.json({ error: "No pudimos exportar el historial" }, { status: 500 });
   }
 }
