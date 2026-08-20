@@ -212,7 +212,7 @@ function unzip(buffer: Buffer): Map<string, Buffer> {
     let compressed = buffer.readUInt32LE(offset + 18);
     const nameStart = offset + 30;
     const name = buffer.subarray(nameStart, nameStart + nameLen).toString("utf8");
-    let dataStart = nameStart + nameLen + extraLen;
+    const dataStart = nameStart + nameLen + extraLen;
     if (flags & 0x8) {
       compressed = findCompressedSize(buffer, dataStart);
     }
