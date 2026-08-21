@@ -70,7 +70,7 @@ const SELECT_FIELDS =
   "id, customer_id, phone_number, producto_solicitado, nota, nota_admin, estado, created_at, customers ( nombre, apellido )";
 
 export async function createProductRequestFromSession(input: {
-  sessionId: string;
+  sessionId: unknown;
   productoSolicitado: unknown;
   nota?: unknown;
 }): Promise<{ ok: true; id: string } | { ok: false; message: string; status: number }> {
