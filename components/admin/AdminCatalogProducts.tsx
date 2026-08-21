@@ -256,6 +256,11 @@ export function AdminCatalogProducts() {
 
   return (
     <div className={selected.length > 0 ? "pb-24" : undefined}>
+      <style>{`
+        .product-row:hover { background-color: #F9FAFB !important; }
+        .product-row[data-selected="true"] { background-color: rgba(126, 179, 65, 0.08) !important; }
+        .product-row[data-selected="true"]:hover { background-color: rgba(126, 179, 65, 0.12) !important; }
+      `}</style>
       <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Catálogo</p>
       <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -268,9 +273,10 @@ export function AdminCatalogProducts() {
           type="button"
           disabled={exporting || loading || total === 0}
           onClick={() => void exportWorkbook()}
-          className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
-          style={{ minHeight: 44, backgroundColor: "#F3F4F6" }}
+          className="inline-flex items-center gap-2 rounded-full px-4 text-sm font-bold disabled:opacity-40"
+          style={{ minHeight: 44, backgroundColor: "#F3F4F6", color: brand.ink }}
         >
+          <DownloadIcon />
           {exporting ? "Exportando..." : "Exportar a Excel"}
         </button>
       </div>
@@ -283,28 +289,33 @@ export function AdminCatalogProducts() {
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
               placeholder="Nombre, marca o código"
-              className="mt-1 h-11 w-full rounded-xl border bg-white px-3 text-sm font-semibold"
+              className="mt-1 h-11 w-full rounded-xl border bg-white px-3 text-sm font-semibold outline-none focus:border-[#7EB341]"
               style={{ borderColor: "#E5E7EB", color: brand.ink }}
             />
           </label>
           <label className="block text-xs font-bold text-brand-muted">
             Categoría
-            <select
-              value={categoria}
-              onChange={(event) => {
-                setCategoria(event.target.value);
-                setPage(1);
-              }}
-              className="mt-1 h-11 w-full rounded-xl border bg-white px-3 text-sm font-semibold"
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
-            >
-              <option value="">Todas</option>
-              {categories.map((item) => (
-                <option key={item} value={item}>
-                  {isUncategorized(item) ? "Sin categoría (All)" : item}
-                </option>
-              ))}
-            </select>
+            <span className="relative mt-1 block">
+              <select
+                value={categoria}
+                onChange={(event) => {
+                  setCategoria(event.target.value);
+                  setPage(1);
+                }}
+                className="h-11 w-full appearance-none rounded-xl border bg-white px-3 pr-9 text-sm font-semibold outline-none focus:border-[#7EB341]"
+                style={{ borderColor: "#E5E7EB", color: brand.ink }}
+              >
+                <option value="">Todas</option>
+                {categories.map((item) => (
+                  <option key={item} value={item}>
+                    {isUncategorized(item) ? "Sin categoría (All)" : item}
+                  </option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-brand-muted">
+                <ChevronIcon />
+              </span>
+            </span>
           </label>
         </div>
         <div className="flex flex-wrap gap-2" role="tablist" aria-label="Filtrar por estado">
@@ -358,10 +369,11 @@ export function AdminCatalogProducts() {
                     style={{ backgroundColor: "#F8FAF7" }}
                   >
                     <th className="w-10 px-3 py-3">
-                      <HeaderCheckbox
+                      <BrandCheckbox
                         checked={allPageSelected}
                         indeterminate={somePageSelected}
                         onChange={togglePage}
+                        label="Seleccionar todos los visibles"
                       />
                     </th>
                     <th className="px-3 py-3">Foto</th>
@@ -424,16 +436,21 @@ export function AdminCatalogProducts() {
 
       {selected.length > 0 ? (
         <div
-          className="fixed bottom-4 left-4 right-4 z-20 mx-auto flex max-w-5xl flex-wrap items-center gap-2 rounded-[24px] px-4 py-3 shadow-lg md:left-[248px]"
-          style={{ backgroundColor: brand.ink, color: "#FFFFFF" }}
+          className="fixed bottom-4 left-4 right-4 z-20 mx-auto flex max-w-5xl flex-wrap items-center gap-2 rounded-[24px] border px-4 py-3 md:left-[248px]"
+          style={{
+            backgroundColor: "#FFFFFF",
+            borderColor: "#E5E7EB",
+            boxShadow: "0 12px 40px rgba(26, 26, 26, 0.12)",
+            color: brand.ink,
+          }}
         >
-          <p className="mr-2 text-sm font-bold">{selected.length} seleccionados</p>
+          <p className="mr-1 text-sm font-bold">{selected.length} seleccionados</p>
           <button
             type="button"
             disabled={batchBusy}
             onClick={() => void runBatch({ activo: true })}
-            className="rounded-full px-3 text-sm font-bold disabled:opacity-40"
-            style={{ minHeight: 36, backgroundColor: brand.green, color: "#FFFFFF" }}
+            className="rounded-full px-3.5 text-sm font-bold text-white disabled:opacity-40"
+            style={{ minHeight: 40, backgroundColor: brand.green }}
           >
             Activar
           </button>
@@ -441,8 +458,8 @@ export function AdminCatalogProducts() {
             type="button"
             disabled={batchBusy}
             onClick={() => void runBatch({ activo: false })}
-            className="rounded-full px-3 text-sm font-bold disabled:opacity-40"
-            style={{ minHeight: 36, backgroundColor: "#FFFFFF", color: brand.ink }}
+            className="rounded-full border px-3.5 text-sm font-bold disabled:opacity-40"
+            style={{ minHeight: 40, borderColor: "#FECACA", backgroundColor: "#FFF7F7", color: "#B42318" }}
           >
             Desactivar
           </button>
@@ -450,17 +467,21 @@ export function AdminCatalogProducts() {
             type="button"
             disabled={exporting || batchBusy}
             onClick={() => void exportWorkbook(selected)}
-            className="rounded-full px-3 text-sm font-bold disabled:opacity-40"
-            style={{ minHeight: 36, backgroundColor: "#374151", color: "#FFFFFF" }}
+            className="inline-flex items-center gap-1.5 rounded-full border px-3.5 text-sm font-bold disabled:opacity-40"
+            style={{ minHeight: 40, borderColor: "#E5E7EB", backgroundColor: "#FFFFFF", color: brand.ink }}
           >
+            <DownloadIcon />
             Exportar seleccionados
           </button>
-          <div className="flex flex-wrap items-center gap-2">
+          <div
+            className="flex min-h-10 items-stretch overflow-hidden rounded-full border"
+            style={{ borderColor: "#E5E7EB" }}
+          >
             <select
               value={batchCategory}
               disabled={batchBusy}
               onChange={(event) => setBatchCategory(event.target.value)}
-              className="h-9 rounded-full px-3 text-sm font-semibold"
+              className="h-10 min-w-[10rem] border-0 bg-white px-3 text-sm font-semibold outline-none"
               style={{ color: brand.ink }}
             >
               <option value="">Asignar categoría</option>
@@ -476,17 +497,20 @@ export function AdminCatalogProducts() {
                 value={batchNewCategory}
                 disabled={batchBusy}
                 onChange={(event) => setBatchNewCategory(event.target.value)}
-                placeholder="Nombre de la categoría"
-                className="h-9 rounded-full px-3 text-sm font-semibold"
-                style={{ color: brand.ink }}
+                placeholder="Nombre"
+                className="h-10 w-36 border-l bg-white px-3 text-sm font-semibold outline-none"
+                style={{ borderColor: "#E5E7EB", color: brand.ink }}
               />
             ) : null}
             <button
               type="button"
               disabled={batchBusy || !assignCategory}
               onClick={() => void runBatch({ categoria: assignCategory })}
-              className="rounded-full px-3 text-sm font-bold disabled:opacity-40"
-              style={{ minHeight: 36, backgroundColor: brand.orange, color: "#FFFFFF" }}
+              className="h-10 px-4 text-sm font-bold disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: assignCategory && !batchBusy ? brand.green : "#E5E7EB",
+                color: assignCategory && !batchBusy ? "#FFFFFF" : brand.muted,
+              }}
             >
               Aplicar
             </button>
@@ -497,14 +521,16 @@ export function AdminCatalogProducts() {
   );
 }
 
-function HeaderCheckbox({
+function BrandCheckbox({
   checked,
-  indeterminate,
+  indeterminate = false,
   onChange,
+  label,
 }: {
   checked: boolean;
-  indeterminate: boolean;
+  indeterminate?: boolean;
   onChange: (checked: boolean) => void;
+  label: string;
 }) {
   const ref = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
@@ -512,15 +538,33 @@ function HeaderCheckbox({
       ref.current.indeterminate = indeterminate;
     }
   }, [indeterminate]);
+  const on = checked || indeterminate;
   return (
-    <input
-      ref={ref}
-      type="checkbox"
-      checked={checked}
-      onChange={(event) => onChange(event.target.checked)}
-      aria-label="Seleccionar todos los visibles"
-      className="h-4 w-4 accent-[#7EB341]"
-    />
+    <label className="inline-flex cursor-pointer items-center">
+      <input
+        ref={ref}
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        aria-label={label}
+        className="sr-only"
+      />
+      <span
+        className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border"
+        style={{
+          borderColor: on ? brand.green : "#D1D5DB",
+          backgroundColor: on ? brand.green : "#FFFFFF",
+        }}
+      >
+        {checked ? (
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+            <path d="M2 5.2 4.1 7.3 8 2.8" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : indeterminate ? (
+          <span className="block h-0.5 w-2.5 rounded-full bg-white" />
+        ) : null}
+      </span>
+    </label>
   );
 }
 
@@ -558,23 +602,23 @@ function ProductRow({
 
   return (
     <tr
-      className="border-t"
+      className="product-row border-t"
+      data-selected={selected ? "true" : "false"}
       style={{
         borderColor: "#F3F4F6",
-        backgroundColor: selected ? "#F0F7E8" : zebra ? "#FAFBFA" : "#FFFFFF",
+        backgroundColor: selected ? "rgba(126, 179, 65, 0.08)" : zebra ? "#FAFBFA" : "#FFFFFF",
+        boxShadow: selected ? `inset 3px 0 0 ${brand.green}` : undefined,
         opacity: product.activo ? 1 : 0.72,
       }}
     >
-      <td className="px-3 py-1.5">
-        <input
-          type="checkbox"
+      <td className="px-3 py-2.5">
+        <BrandCheckbox
           checked={selected}
-          onChange={(event) => onToggle(event.target.checked)}
-          aria-label={`Seleccionar ${product.nombre}`}
-          className="h-4 w-4 accent-[#7EB341]"
+          onChange={onToggle}
+          label={`Seleccionar ${product.nombre}`}
         />
       </td>
-      <td className="px-3 py-1.5">
+      <td className="px-3 py-2.5">
         <div
           className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg"
           style={{ backgroundColor: "#F3F4F6" }}
@@ -587,7 +631,7 @@ function ProductRow({
           )}
         </div>
       </td>
-      <td className="max-w-[240px] px-3 py-1.5 font-semibold leading-tight">
+      <td className="max-w-[240px] px-3 py-2.5 font-semibold leading-tight">
         <InlineText
           value={product.nombre}
           align="left"
@@ -597,7 +641,7 @@ function ProductRow({
           onError={onError}
         />
       </td>
-      <td className="whitespace-nowrap px-3 py-1.5">
+      <td className="whitespace-nowrap px-3 py-2.5">
         <InlineText
           value={product.marca || ""}
           emptyLabel="—"
@@ -609,7 +653,7 @@ function ProductRow({
           onError={onError}
         />
       </td>
-      <td className="whitespace-nowrap px-3 py-1.5">
+      <td className="whitespace-nowrap px-3 py-2.5">
         <InlineCategory
           value={product.categoria}
           missing={missingCategory}
@@ -620,7 +664,7 @@ function ProductRow({
           onError={onError}
         />
       </td>
-      <td className="whitespace-nowrap px-3 py-1.5 text-right">
+      <td className="whitespace-nowrap px-3 py-2.5 text-right">
         <InlinePrice
           value={product.precio}
           onSave={async (next) => {
@@ -629,15 +673,17 @@ function ProductRow({
           onError={onError}
         />
       </td>
-      <td className="whitespace-nowrap px-3 py-1.5 font-mono text-xs text-brand-muted">
+      <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-brand-muted">
         {product.codigoOdoo ? (
-          <span title={product.codigoOdoo}>{shortOdooCode(product.codigoOdoo)}</span>
+          <span className="cursor-help underline decoration-dotted decoration-gray-300" title={product.codigoOdoo}>
+            {shortOdooCode(product.codigoOdoo)}
+          </span>
         ) : (
           "—"
         )}
       </td>
-      <td className="whitespace-nowrap px-3 py-1.5 font-mono text-xs text-brand-muted">{product.codigoBarras || "—"}</td>
-      <td className="px-3 py-1.5">
+      <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-brand-muted">{product.codigoBarras || "—"}</td>
+      <td className="px-3 py-2.5">
         <button
           type="button"
           role="switch"
@@ -995,8 +1041,10 @@ function InlineCategory({
       title="Editar categoría"
     >
       {missing ? (
-        <span className="inline-flex items-center gap-1 font-semibold" style={{ color: brand.orange }}>
-          <AlertDot />
+        <span
+          className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold"
+          style={{ backgroundColor: "#FEF3C7", color: "#92400E" }}
+        >
           Sin categoría
         </span>
       ) : (
@@ -1007,12 +1055,20 @@ function InlineCategory({
   );
 }
 
-function AlertDot() {
+function DownloadIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-      <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M6 3.4v3.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-      <circle cx="6" cy="8.4" r="0.6" fill="currentColor" />
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 3v7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M5.2 7.8 8 10.6l2.8-2.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3.5 13h9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M3.5 5.2 7 8.7l3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
