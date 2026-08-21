@@ -113,7 +113,9 @@ function findCompressedSize(view: DataView, length: number, dataStart: number): 
 }
 
 async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  const copy = new ArrayBuffer(data.byteLength);
+  new Uint8Array(copy).set(data);
+  const stream = new Blob([copy]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
