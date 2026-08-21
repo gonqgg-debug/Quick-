@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
-import { listAdminCatalogProducts, parseCatalogProductFilters, updateAdminCatalogProduct } from "@/lib/admin-catalog-products";
+import {
+  listAdminCatalogProductIds,
+  listAdminCatalogProducts,
+  parseCatalogProductFilters,
+  updateAdminCatalogProduct,
+} from "@/lib/admin-catalog-products";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +17,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const filters = parseCatalogProductFilters(request.nextUrl.searchParams);
+    if (request.nextUrl.searchParams.get("ids") === "1") {
+      const ids = await listAdminCatalogProductIds(filters);
+      return NextResponse.json({ ids, total: ids.length });
+    }
     const result = await listAdminCatalogProducts(filters);
     return NextResponse.json(result);
   } catch (error) {

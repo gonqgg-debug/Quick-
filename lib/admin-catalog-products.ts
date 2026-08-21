@@ -17,7 +17,8 @@ export type {
 
 const SELECT_FIELDS = "id, nombre, marca, categoria, precio, codigo_odoo, codigo_barras, foto_url, activo";
 const EXPORT_MAX = 5000;
-const BATCH_MAX = 400;
+const BATCH_MAX = 2000;
+const IDS_MAX = 2000;
 
 function sanitizeSearch(raw: string): string {
   return raw
@@ -123,6 +124,26 @@ export async function listAdminCatalogProducts(
     pageSize,
     categories,
   };
+}
+
+export async function listAdminCatalogProductIds(filters: AdminCatalogProductFilters): Promise<string[]> {
+  const supabase = getSupabaseAdminClient();
+  const ids: string[] = [];
+  for (let from = 0; from < IDS_MAX; from += 1000) {
+    const { data, error } = await applyListFilters(
+      supabase.from("products").select("id").order("nombre", { ascending: true }).range(from, from + 999),
+      filters
+    );
+    if (error) {
+      throw error;
+    }
+    const batch = (data ?? []).map((row) => String((row as { id: string }).id));
+    ids.push(...batch);
+    if (batch.length < 1000) {
+      break;
+    }
+  }
+  return ids;
 }
 
 export async function fetchAdminCatalogProductsForExport(
