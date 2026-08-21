@@ -19,6 +19,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
     label: "Catálogo",
     status: "live",
     children: [
+      { href: "/admin/catalogo/productos", label: "Productos" },
       { href: "/admin/catalogo/importar", label: "Importar" },
       { href: "/admin/catalogo/imagenes", label: "Imágenes" },
     ],

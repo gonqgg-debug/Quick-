@@ -216,10 +216,8 @@ export function AdminCatalogImages() {
     }
   }
 
-  const confirmedLabel = stats
-    ? `${stats.confirmed.toLocaleString("es-DO")} de ${stats.total.toLocaleString("es-DO")} con foto confirmada`
-    : "";
   const canBatch = Boolean(stats && (stats.awaitingOff > 0 || stats.awaitingWeb > 0));
+  const progress = stats && stats.total > 0 ? Math.round((stats.confirmed / stats.total) * 100) : 0;
 
   return (
     <div>
@@ -255,15 +253,32 @@ export function AdminCatalogImages() {
       </div>
 
       {stats ? (
-        <p className="mt-4 text-sm font-bold" style={{ color: brand.green }}>
-          {confirmedLabel}
-        </p>
-      ) : null}
-      {stats ? (
-        <p className="mt-1 text-sm text-brand-muted">
-          {stats.pendingReview} en cola · {stats.awaitingOff} pendientes OFF · {stats.awaitingWeb} pendientes web ·{" "}
-          {stats.withoutBarcode} sin código de barras
-        </p>
+        <div className="mt-5">
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <p className="font-bold" style={{ color: brand.green }}>
+              {progress}% del catálogo con foto
+            </p>
+            <p className="text-brand-muted">
+              {stats.confirmed.toLocaleString("es-DO")} de {stats.total.toLocaleString("es-DO")}
+            </p>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full" style={{ backgroundColor: "#E5E7EB" }}>
+            <div
+              className="h-full rounded-full transition-[width]"
+              style={{ width: `${progress}%`, backgroundColor: brand.green }}
+            />
+          </div>
+          <ul className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            <StatChip
+              value={`${stats.confirmed.toLocaleString("es-DO")}/${stats.total.toLocaleString("es-DO")}`}
+              label="Con foto confirmada"
+            />
+            <StatChip value={stats.pendingReview} label="En cola" />
+            <StatChip value={stats.awaitingOff} label="Pendientes OFF" />
+            <StatChip value={stats.awaitingWeb} label="Pendientes web" />
+            <StatChip value={stats.withoutBarcode} label="Sin código de barras" />
+          </ul>
+        </div>
       ) : null}
       {scanNote ? <p className="mt-2 text-sm font-semibold">{scanNote}</p> : null}
 
@@ -281,89 +296,164 @@ export function AdminCatalogImages() {
           <p className="mt-2 text-sm text-brand-muted">Cuando importes más catálogo, aquí se llena la cola.</p>
         </div>
       ) : (
-        <ul className="mt-6 grid gap-4 lg:grid-cols-2">
+        <ul className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {queue.map((item) => (
-            <li key={item.id} className="rounded-[24px] border p-4" style={{ borderColor: "#E5E7EB" }}>
-              <div className="flex gap-4">
-                <div
-                  className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gray-50"
-                  style={{ border: "1px solid #F3F4F6" }}
-                >
-                  {item.suggestion ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.suggestion.imageUrl} alt="" className="h-full w-full object-contain" />
-                  ) : item.fotoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.fotoUrl} alt="" className="h-full w-full object-contain opacity-60" />
-                  ) : (
-                    <span className="px-2 text-center text-xs text-brand-muted">Sin sugerencia</span>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-display text-lg font-bold leading-tight">{item.nombre}</p>
-                  <p className="mt-1 text-sm text-brand-muted">
-                    {item.marca || "Sin marca"} · {item.categoria}
-                  </p>
-                  <p className="mt-1 font-mono text-xs text-brand-muted">
-                    {item.codigoBarras ? `EAN ${item.codigoBarras}` : "Sin código de barras"}
-                  </p>
-                  {item.suggestion ? (
-                    <p className="mt-1 text-xs font-semibold" style={{ color: brand.green }}>
-                      {item.suggestion.source === "web" ? "Sugerida por búsqueda web" : "Sugerida por Open Food Facts"}
-                    </p>
-                  ) : null}
-                </div>
+            <li key={item.id} className="flex flex-col rounded-[24px] border p-3" style={{ borderColor: "#E5E7EB" }}>
+              <div
+                className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl"
+                style={{ backgroundColor: "#F3F4F6" }}
+              >
+                {item.suggestion ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={item.suggestion.imageUrl} alt="" className="h-full w-full object-contain" />
+                ) : item.fotoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={item.fotoUrl} alt="" className="h-full w-full object-contain opacity-60" />
+                ) : (
+                  <span className="px-2 text-center text-xs text-brand-muted">Sin sugerencia</span>
+                )}
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={busyId === item.id || !item.suggestion}
-                  onClick={() => item.suggestion && void accept(item.suggestion.id, item.id)}
-                  className="rounded-full px-3 text-sm font-bold text-white disabled:opacity-40"
-                  style={{ backgroundColor: brand.green, minHeight: 40 }}
-                >
-                  Usar esta
-                </button>
-                <button
-                  type="button"
-                  disabled={busyId === item.id || !item.suggestion}
-                  onClick={() => item.suggestion && void reject(item.suggestion.id, item.id)}
-                  className="rounded-full px-3 text-sm font-bold disabled:opacity-40"
-                  style={{ backgroundColor: "#F3F4F6", minHeight: 40 }}
-                >
-                  {busyId === item.id ? "Buscando..." : "Buscar otra opción"}
-                </button>
-                <label
-                  className="inline-flex cursor-pointer items-center rounded-full px-3 text-sm font-bold"
-                  style={{ backgroundColor: "#F3F4F6", minHeight: 40 }}
-                >
-                  Subir manual
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="sr-only"
-                    disabled={busyId === item.id}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      event.target.value = "";
-                      if (file) {
-                        void upload(item.id, file);
-                      }
-                    }}
-                  />
-                </label>
-              </div>
-              {!item.suggestion ? (
-                <p className="mt-2 text-xs text-brand-muted">
-                  {item.codigoBarras
-                    ? "Sin foto de Open Food Facts. Usa “Buscar sugerencias” para intentar la web."
-                    : "Sin código de barras: la Capa 2 busca por nombre y marca."}
+              <div className="mt-3 flex min-h-[8rem] flex-1 flex-col">
+                <p className="font-display text-lg font-bold leading-tight">{item.nombre}</p>
+                <p className="mt-1 text-sm text-brand-muted">{productMeta(item.marca, item.categoria)}</p>
+                <p className="mt-1 font-mono text-xs text-brand-muted">
+                  {item.codigoBarras ? `EAN ${item.codigoBarras}` : "Sin código de barras"}
                 </p>
-              ) : null}
+                {item.suggestion ? (
+                  <p className="mt-1 text-xs font-semibold" style={{ color: brand.green }}>
+                    {item.suggestion.source === "web" ? "Sugerida por búsqueda web" : "Sugerida por Open Food Facts"}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-brand-muted">
+                    {item.codigoBarras
+                      ? "Sin foto de Open Food Facts. Usa “Buscar sugerencias” para intentar la web."
+                      : "Sin código de barras: la Capa 2 busca por nombre y marca."}
+                  </p>
+                )}
+                <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-3">
+                  <button
+                    type="button"
+                    disabled={busyId === item.id || !item.suggestion}
+                    onClick={() => item.suggestion && void accept(item.suggestion.id, item.id)}
+                    className="rounded-full px-4 text-sm font-bold text-white disabled:opacity-40"
+                    style={{ backgroundColor: brand.green, minHeight: 40 }}
+                  >
+                    Usar esta
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyId === item.id || !item.suggestion}
+                    onClick={() => item.suggestion && void reject(item.suggestion.id, item.id)}
+                    className="inline-flex items-center gap-1.5 text-sm font-semibold disabled:opacity-40"
+                    style={{ minHeight: 40 }}
+                  >
+                    <SearchIcon />
+                    {busyId === item.id ? "Buscando..." : "Buscar otra"}
+                  </button>
+                  <label
+                    className="inline-flex cursor-pointer items-center gap-1.5 text-sm font-semibold"
+                    style={{ color: brand.blue, minHeight: 40 }}
+                  >
+                    <UploadGlyph />
+                    Subir
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="sr-only"
+                      disabled={busyId === item.id}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = "";
+                        if (file) {
+                          void upload(item.id, file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
             </li>
           ))}
         </ul>
       )}
     </div>
+  );
+}
+
+function StatChip({ value, label }: { value: string | number; label: string }) {
+  return (
+    <li className="rounded-[20px] px-3 py-3" style={{ backgroundColor: "#F8FAF7", border: "1px solid #E5E7EB" }}>
+      <p className="font-display text-xl font-bold leading-none" style={{ color: brand.ink }}>
+        {typeof value === "number" ? value.toLocaleString("es-DO") : value}
+      </p>
+      <p className="mt-1.5 text-xs font-semibold text-brand-muted">{label}</p>
+    </li>
+  );
+}
+
+function productMeta(marca: string | null, categoria: string): string {
+  const brandLabel = marca?.trim() || null;
+  const categoryLabel = !categoria || /^(all|todos)$/i.test(categoria.trim()) ? "Sin categoría" : categoria.trim();
+  if (brandLabel && categoryLabel) {
+    return `${brandLabel} · ${categoryLabel}`;
+  }
+  return brandLabel || categoryLabel;
+}
+
+function SearchIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="7" cy="7" r="4.25" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M10.2 10.2 13 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function UploadGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 11.5V4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M5.2 6.7 8 4l2.8 2.7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3.5 12.5h9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function StatChip({ value, label }: { value: string | number; label: string }) {
+  return (
+    <li className="rounded-[20px] px-3 py-3" style={{ backgroundColor: "#F8FAF7", border: "1px solid #E5E7EB" }}>
+      <p className="font-display text-xl font-bold leading-none" style={{ color: brand.ink }}>
+        {typeof value === "number" ? value.toLocaleString("es-DO") : value}
+      </p>
+      <p className="mt-1.5 text-xs font-semibold text-brand-muted">{label}</p>
+    </li>
+  );
+}
+
+function productMeta(marca: string | null, categoria: string): string {
+  const brandLabel = marca?.trim() || null;
+  const categoryLabel = !categoria || /^(all|todos)$/i.test(categoria.trim()) ? "Sin categoría" : categoria.trim();
+  if (brandLabel && categoryLabel) {
+    return `${brandLabel} · ${categoryLabel}`;
+  }
+  return brandLabel || categoryLabel;
+}
+
+function SearchIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="7" cy="7" r="4.25" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M10.2 10.2 13 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function UploadGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 11.5V4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M5.2 6.7 8 4l2.8 2.7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3.5 12.5h9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
   );
 }

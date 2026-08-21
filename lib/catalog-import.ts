@@ -51,15 +51,30 @@ const HEADER_ALIASES: Record<"codigo" | ImportField, string[]> = {
     "internal reference",
     "sku",
   ],
-  nombre: ["nombre", "name", "producto", "product", "product name", "nombre del producto"],
-  marca: ["marca", "brand", "fabricante", "manufacturer"],
+  nombre: ["nombre", "name", "producto", "product", "product name", "nombre del producto", "nombre producto"],
+  marca: [
+    "marca",
+    "marca del producto",
+    "marca producto",
+    "product brand",
+    "brand",
+    "fabricante",
+    "manufacturer",
+  ],
   categoria: [
+    "pos product category",
+    "categoria pos",
+    "categoria de punto de venta",
+    "product category",
+    "categoria del producto",
+    "categoria de producto",
+    "categoria producto",
+    "internal category",
+    "categ id complete name",
+    "categ id",
     "categoria",
     "category",
     "categ",
-    "categoria del producto",
-    "product category",
-    "categoria producto",
   ],
   precio: [
     "precio",
@@ -94,23 +109,97 @@ function normalizeHeader(value: string): string {
     .trim();
 }
 
+function headerScore(header: string, aliases: string[]): number {
+  let best = 0;
+  for (const alias of aliases) {
+    if (header === alias) {
+      best = Math.max(best, 200 + alias.length);
+      continue;
+    }
+    if (alias.includes(" ") && (header.startsWith(`${alias} `) || header.endsWith(` ${alias}`) || header.includes(` ${alias} `))) {
+      best = Math.max(best, 80 + alias.length);
+    }
+  }
+  return best;
+}
+
 function mapHeaders(headerRow: string[]): Partial<Record<"codigo" | ImportField, number>> {
   const map: Partial<Record<"codigo" | ImportField, number>> = {};
-  headerRow.forEach((raw, index) => {
-    const header = normalizeHeader(raw);
-    if (!header) {
-      return;
-    }
-    (Object.keys(HEADER_ALIASES) as Array<"codigo" | ImportField>).forEach((field) => {
-      if (map[field] != null) {
+  const used = new Set<number>();
+  const fields = Object.keys(HEADER_ALIASES) as Array<"codigo" | ImportField>;
+  for (const field of fields) {
+    let bestIndex = -1;
+    let bestScore = 0;
+    headerRow.forEach((raw, index) => {
+      if (used.has(index)) {
         return;
       }
-      if (HEADER_ALIASES[field].includes(header)) {
-        map[field] = index;
+      const score = headerScore(normalizeHeader(raw), HEADER_ALIASES[field]);
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = index;
       }
     });
-  });
+    if (bestIndex >= 0) {
+      map[field] = bestIndex;
+      used.add(bestIndex);
+    }
+  }
   return map;
+}
+
+function categoryColumnIndexes(headerRow: string[], reserved: Set<number>): number[] {
+  const indexes: number[] = [];
+  headerRow.forEach((raw, index) => {
+    if (reserved.has(index)) {
+      return;
+    }
+    if (headerScore(normalizeHeader(raw), HEADER_ALIASES.categoria) > 0) {
+      indexes.push(index);
+    }
+  });
+  return indexes;
+}
+
+function marcaColumnIndexes(headerRow: string[], reserved: Set<number>): number[] {
+  const indexes: number[] = [];
+  headerRow.forEach((raw, index) => {
+    if (reserved.has(index)) {
+      return;
+    }
+    if (headerScore(normalizeHeader(raw), HEADER_ALIASES.marca) > 0) {
+      indexes.push(index);
+    }
+  });
+  return indexes;
+}
+
+function isGenericCategory(value: string): boolean {
+  return /^(all|todos|all products|todos los productos|saleable)$/i.test(value.trim());
+}
+
+function tidyCategory(value: string): string {
+  const parts = value
+    .split("/")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) => !isGenericCategory(part));
+  return parts[parts.length - 1] ?? "";
+}
+
+function pickCategory(raw: string[], indexes: number[], fallback: string | null): string {
+  const values = indexes.map((index) => tidyCategory(cell(raw, index))).filter(Boolean);
+  return values.find((value) => value.length > 0) || fallback || "";
+}
+
+function pickMarca(raw: string[], indexes: number[], fallback: string | null): string | null {
+  for (const index of indexes) {
+    const value = textOrNull(cell(raw, index));
+    if (value) {
+      return value;
+    }
+  }
+  return fallback;
 }
 
 export function parsePrice(raw: string): number | null {
@@ -201,6 +290,11 @@ export function buildImportPreview(buffer: Buffer, fileName: string, existing: D
       "No encontramos las columnas de código, nombre y precio. Revisa que el Excel traiga código Odoo, nombre y precio."
     );
   }
+  const reserved = new Set(
+    ([columns.codigo, columns.nombre, columns.precio, columns.codigoBarras].filter((index) => index != null) as number[])
+  );
+  const categoryIndexes = categoryColumnIndexes(headers, reserved);
+  const brandIndexes = marcaColumnIndexes(headers, reserved);
 
   const byCode = new Map<string, DbProduct>();
   for (const product of existing) {
@@ -223,9 +317,6 @@ export function buildImportPreview(buffer: Buffer, fileName: string, existing: D
     }
     const codigo = cell(raw, columns.codigo);
     const nombre = cell(raw, columns.nombre);
-    const marca =
-      columns.marca == null ? currentMarcaForCode(byCode, codigo) : textOrNull(cell(raw, columns.marca));
-    const categoriaRaw = cell(raw, columns.categoria);
     const precioRaw = cell(raw, columns.precio);
     const precio = parsePrice(precioRaw);
 
@@ -250,7 +341,11 @@ export function buildImportPreview(buffer: Buffer, fileName: string, existing: D
     }
 
     const current = byCode.get(codigo);
-    const categoria = categoriaRaw || current?.categoria || "";
+    const marca = pickMarca(raw, brandIndexes, current?.marca ?? currentMarcaForCode(byCode, codigo));
+    let categoria = pickCategory(raw, categoryIndexes, current?.categoria ?? null);
+    if (current?.categoria && !isGenericCategory(current.categoria) && isGenericCategory(categoria)) {
+      categoria = current.categoria;
+    }
     if (!categoria) {
       invalid.push({ row: rowNumber, codigo, reason: "Falta la categoría" });
       return;
