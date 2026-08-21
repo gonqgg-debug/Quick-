@@ -1001,7 +1001,15 @@ function ProductEditModal({
     setImageFile(file);
   }
 
-  async function save() {
+  async function deactivate() {
+    if (!window.confirm("Este producto dejará de verse en el catálogo público. ¿Desactivar?")) {
+      return;
+    }
+    setDraftActivo(false);
+    await save(false);
+  }
+
+  async function save(activoOverride?: boolean) {
     const nombre = draftNombre.trim();
     if (!nombre) {
       setFormError("El nombre no puede quedar vacío");
@@ -1015,6 +1023,7 @@ function ProductEditModal({
       setFormError("Precio inválido");
       return;
     }
+    const nextActivo = activoOverride ?? draftActivo;
     setSaving(true);
     setFormError(null);
     try {
@@ -1046,8 +1055,8 @@ function ProductEditModal({
       if (parsedPrecio !== product.precio) {
         patch.precio = parsedPrecio;
       }
-      if (draftActivo !== product.activo) {
-        patch.activo = draftActivo;
+      if (nextActivo !== product.activo) {
+        patch.activo = nextActivo;
       }
       if (Object.keys(patch).length > 0) {
         await onPatch(product.id, patch);
@@ -1062,8 +1071,12 @@ function ProductEditModal({
   }
 
   const previewSrc = imagePreview || product.fotoUrl;
+  const displayName = draftNombre.trim() || product.nombre;
+  const displayMarca = draftMarca.trim() || "Sin marca";
+  const displayCategoria = resolvedCategoria || "Sin categoría";
+  const labelClass = "block text-[13px] font-medium text-brand-muted";
   const fieldClass =
-    "mt-1 h-11 w-full rounded-xl border bg-white px-3 text-sm font-semibold outline-none focus:border-[#7EB341]";
+    "mt-1.5 h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium outline-none focus:border-[#7EB341]";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
@@ -1077,183 +1090,220 @@ function ProductEditModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="product-edit-title"
-        className="relative z-10 flex max-h-[calc(100vh-3rem)] w-full max-w-lg flex-col overflow-hidden rounded-[28px] bg-white"
-        style={{ boxShadow: "0 24px 64px rgba(26, 26, 26, 0.22)", color: brand.ink }}
+        className="relative z-10 flex max-h-[calc(100vh-3rem)] w-full max-w-xl flex-col overflow-hidden rounded-[28px] bg-white"
+        style={{ boxShadow: "0 24px 64px rgba(26, 26, 26, 0.18)", color: brand.ink }}
       >
-        <div className="overflow-y-auto px-6 py-6">
-          <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Editar producto</p>
-          <h2 id="product-edit-title" className="mt-1 font-display text-2xl font-bold leading-tight">
-            {product.nombre}
-          </h2>
-
-          <div className="mt-5 flex flex-col items-center">
-            <div
-              className="flex items-center justify-center overflow-hidden rounded-3xl"
-              style={{ width: 200, height: 200, backgroundColor: "#F3F4F6" }}
-            >
-              {previewSrc ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={previewSrc} alt="" className="h-full w-full object-contain" />
-              ) : (
-                <span className="text-sm text-brand-muted">Sin imagen</span>
-              )}
-            </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="sr-only"
-              onChange={(event) => {
-                acceptFile(event.target.files?.[0]);
-                event.target.value = "";
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setDragOver(true);
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(event) => {
-                event.preventDefault();
-                setDragOver(false);
-                acceptFile(event.dataTransfer.files[0]);
-              }}
-              className="mt-3 rounded-full border px-4 text-sm font-bold"
-              style={{
-                minHeight: 40,
-                borderColor: dragOver ? brand.green : "#E5E7EB",
-                backgroundColor: dragOver ? "rgba(126, 179, 65, 0.08)" : "#FFFFFF",
-                color: brand.ink,
-              }}
-            >
-              Cambiar imagen
-            </button>
-            <p className="mt-1.5 text-xs text-brand-muted">JPG, PNG o WebP · máx. 5 MB · o arrastra aquí</p>
-          </div>
-
-          <div className="mt-6 space-y-4">
-            <label className="block text-xs font-bold text-brand-muted">
-              Nombre
+        <div className="overflow-y-auto">
+          <div className="h-[128px] w-full" style={{ backgroundColor: "#F4F5F4" }} />
+          <div className="px-6 pb-8">
+            <div className="-mt-[60px] flex flex-col items-center text-center">
+              <div
+                className="flex items-center justify-center overflow-hidden rounded-2xl bg-white"
+                style={{
+                  width: 120,
+                  height: 120,
+                  border: "4px solid #FFFFFF",
+                  boxShadow: "0 8px 20px rgba(26, 26, 26, 0.10)",
+                  backgroundColor: "#F3F4F6",
+                }}
+              >
+                {previewSrc ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={previewSrc} alt="" className="h-full w-full object-contain" />
+                ) : (
+                  <span className="text-xs text-brand-muted">Sin imagen</span>
+                )}
+              </div>
+              <h2 id="product-edit-title" className="mt-4 max-w-full px-2 font-display text-xl font-bold leading-tight">
+                {displayName}
+              </h2>
+              <p className="mt-1 text-sm text-brand-muted">
+                {displayMarca} · {displayCategoria}
+              </p>
               <input
-                ref={nombreRef}
-                value={draftNombre}
-                onChange={(event) => setDraftNombre(event.target.value)}
-                className={fieldClass}
-                style={{ borderColor: "#E5E7EB", color: brand.ink }}
+                ref={fileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                onChange={(event) => {
+                  acceptFile(event.target.files?.[0]);
+                  event.target.value = "";
+                }}
               />
-            </label>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block text-xs font-bold text-brand-muted">
-                Marca
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragOver(false);
+                  acceptFile(event.dataTransfer.files[0]);
+                }}
+                className="mt-4 rounded-full border px-4 text-sm font-semibold"
+                style={{
+                  minHeight: 40,
+                  borderColor: dragOver ? brand.green : "#E5E7EB",
+                  backgroundColor: dragOver ? "rgba(126, 179, 65, 0.08)" : "#FFFFFF",
+                  color: brand.ink,
+                }}
+              >
+                Cambiar imagen
+              </button>
+            </div>
+
+            <div className="mt-8 space-y-6">
+              <label className={labelClass}>
+                Nombre
                 <input
-                  value={draftMarca}
-                  onChange={(event) => setDraftMarca(event.target.value)}
+                  ref={nombreRef}
+                  value={draftNombre}
+                  onChange={(event) => setDraftNombre(event.target.value)}
                   className={fieldClass}
                   style={{ borderColor: "#E5E7EB", color: brand.ink }}
                 />
               </label>
-              <label className="block text-xs font-bold text-brand-muted">
-                Categoría
-                {categoryMode === "new" ? (
+              <div className="grid gap-6 sm:grid-cols-2">
+                <label className={labelClass}>
+                  Marca
                   <input
-                    value={draftNewCategoria}
-                    placeholder="Nueva categoría"
-                    onChange={(event) => setDraftNewCategoria(event.target.value)}
+                    value={draftMarca}
+                    onChange={(event) => setDraftMarca(event.target.value)}
                     className={fieldClass}
                     style={{ borderColor: "#E5E7EB", color: brand.ink }}
                   />
-                ) : (
-                  <span className="relative mt-1 block">
-                    <select
-                      value={draftCategoria}
-                      onChange={(event) => {
-                        if (event.target.value === "__new__") {
-                          setCategoryMode("new");
-                          setDraftNewCategoria("");
-                          return;
-                        }
-                        setDraftCategoria(event.target.value);
-                      }}
-                      className="h-11 w-full appearance-none rounded-xl border bg-white px-3 pr-9 text-sm font-semibold outline-none focus:border-[#7EB341]"
+                </label>
+                <label className={labelClass}>
+                  Categoría
+                  {categoryMode === "new" ? (
+                    <input
+                      value={draftNewCategoria}
+                      placeholder="Nueva categoría"
+                      onChange={(event) => setDraftNewCategoria(event.target.value)}
+                      className={fieldClass}
                       style={{ borderColor: "#E5E7EB", color: brand.ink }}
-                    >
-                      <option value="" disabled>
-                        Elegir…
-                      </option>
-                      {categories.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
+                    />
+                  ) : (
+                    <span className="relative mt-1.5 block">
+                      <select
+                        value={draftCategoria}
+                        onChange={(event) => {
+                          if (event.target.value === "__new__") {
+                            setCategoryMode("new");
+                            setDraftNewCategoria("");
+                            return;
+                          }
+                          setDraftCategoria(event.target.value);
+                        }}
+                        className="h-11 w-full appearance-none rounded-xl border bg-white px-3 pr-9 text-sm font-medium outline-none focus:border-[#7EB341]"
+                        style={{ borderColor: "#E5E7EB", color: brand.ink }}
+                      >
+                        <option value="" disabled>
+                          Elegir…
                         </option>
-                      ))}
-                      <option value="__new__">Crear nueva…</option>
-                    </select>
-                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-brand-muted">
-                      <ChevronIcon />
+                        {categories.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                        <option value="__new__">Crear nueva…</option>
+                      </select>
+                      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-brand-muted">
+                        <ChevronIcon />
+                      </span>
                     </span>
+                  )}
+                </label>
+              </div>
+              <label className={labelClass}>
+                Precio
+                <span className="relative mt-1.5 block">
+                  <span
+                    className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-semibold"
+                    style={{ color: brand.orange }}
+                  >
+                    RD$
                   </span>
-                )}
-              </label>
-            </div>
-            <label className="block text-xs font-bold text-brand-muted">
-              Precio
-              <span className="relative mt-1 block">
-                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-bold" style={{ color: brand.orange }}>
-                  RD$
+                  <input
+                    value={draftPrecio}
+                    inputMode="decimal"
+                    onChange={(event) => setDraftPrecio(event.target.value)}
+                    className="h-11 w-full rounded-xl border bg-white pl-12 pr-3 text-sm font-semibold tabular-nums outline-none focus:border-[#7EB341]"
+                    style={{ borderColor: "#E5E7EB", color: brand.ink }}
+                  />
                 </span>
-                <input
-                  value={draftPrecio}
-                  inputMode="decimal"
-                  onChange={(event) => setDraftPrecio(event.target.value)}
-                  className="h-11 w-full rounded-xl border bg-white pl-12 pr-3 text-sm font-bold tabular-nums outline-none focus:border-[#7EB341]"
-                  style={{ borderColor: "#E5E7EB", color: brand.ink }}
-                />
-              </span>
-            </label>
-            <div className="grid gap-3 rounded-2xl px-4 py-3 sm:grid-cols-2" style={{ backgroundColor: "#F8FAF7" }}>
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wide text-brand-muted">Código Odoo</p>
-                <p className="mt-1 break-all font-mono text-xs text-brand-muted">{product.codigoOdoo || "—"}</p>
+              </label>
+              <div className="grid gap-4 rounded-2xl px-4 py-3.5 sm:grid-cols-2" style={{ backgroundColor: "#F7F8F7" }}>
+                <div className="min-w-0">
+                  <p className={labelClass}>Código Odoo</p>
+                  <p
+                    className="mt-1.5 truncate font-mono text-sm text-brand-muted"
+                    title={product.codigoOdoo || undefined}
+                  >
+                    {product.codigoOdoo ? shortOdooCode(product.codigoOdoo) : "—"}
+                  </p>
+                </div>
+                <div className="min-w-0">
+                  <p className={labelClass}>Código de barras</p>
+                  <p className="mt-1.5 truncate font-mono text-sm text-brand-muted" title={product.codigoBarras || undefined}>
+                    {product.codigoBarras || "—"}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wide text-brand-muted">Código de barras</p>
-                <p className="mt-1 font-mono text-xs text-brand-muted">{product.codigoBarras || "—"}</p>
+              <div className="flex items-center justify-between">
+                <p className={labelClass}>Estado</p>
+                <ActivoSwitch activo={draftActivo} onToggle={() => setDraftActivo((current) => !current)} />
               </div>
             </div>
-            <div className="flex items-center justify-between rounded-2xl border px-4 py-3" style={{ borderColor: "#E5E7EB" }}>
-              <p className="text-sm font-bold">Visible en el catálogo</p>
-              <ActivoSwitch activo={draftActivo} onToggle={() => setDraftActivo((current) => !current)} />
-            </div>
-          </div>
 
-          {formError ? (
-            <p className="mt-4 rounded-2xl px-3 py-2 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
-              {formError}
-            </p>
-          ) : null}
+            {formError ? (
+              <p className="mt-6 rounded-2xl px-3 py-2 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
+                {formError}
+              </p>
+            ) : null}
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t px-6 py-4" style={{ borderColor: "#F3F4F6" }}>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={requestClose}
-            className="rounded-full border px-4 text-sm font-bold disabled:opacity-40"
-            style={{ minHeight: 44, borderColor: "#E5E7EB", backgroundColor: "#FFFFFF", color: brand.ink }}
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => void save()}
-            className="rounded-full px-5 text-sm font-bold text-white disabled:opacity-40"
-            style={{ minHeight: 44, backgroundColor: brand.green }}
-          >
-            {saving ? "Guardando..." : "Guardar cambios"}
-          </button>
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 border-t px-6 py-4"
+          style={{ borderColor: "#EFEFEF" }}
+        >
+          {draftActivo ? (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void deactivate()}
+              className="rounded-full border px-4 text-sm font-semibold disabled:opacity-40"
+              style={{ minHeight: 44, borderColor: "#FECACA", backgroundColor: "#FFFFFF", color: "#B42318" }}
+            >
+              Desactivar producto
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={requestClose}
+              className="rounded-full border px-4 text-sm font-semibold disabled:opacity-40"
+              style={{ minHeight: 44, borderColor: "#E5E7EB", backgroundColor: "#FFFFFF", color: brand.ink }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void save()}
+              className="rounded-full px-5 text-sm font-bold text-white disabled:opacity-40"
+              style={{ minHeight: 44, backgroundColor: brand.green }}
+            >
+              {saving ? "Guardando..." : "Guardar cambios"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
