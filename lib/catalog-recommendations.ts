@@ -63,7 +63,9 @@ export async function getBestSellers(): Promise<Product[]> {
     totals.set(code, (totals.get(code) ?? 0) + toMoney(row.cantidad_vendida));
   }
 
-  const ranked = [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, BEST_SELLER_LIMIT * 2);
+  const ranked = Array.from(totals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, BEST_SELLER_LIMIT * 2);
   if (ranked.length === 0) {
     return [];
   }
@@ -113,7 +115,7 @@ export async function getRepeatLastOrder(customerId: string): Promise<RepeatLast
   }
 
   const kept = items.filter((item) => String(item.estado ?? "ok") !== "eliminado");
-  const productIds = [...new Set(kept.map((item) => String(item.product_id)))];
+  const productIds = Array.from(new Set(kept.map((item) => String(item.product_id))));
   const { data: products } = await supabase
     .from("products")
     .select("id, nombre, activo")
@@ -187,7 +189,7 @@ export async function getFavoriteProducts(customerId: string): Promise<Product[]
     frequency.set(productId, current);
   }
 
-  const ranked = [...frequency.entries()]
+  const ranked = Array.from(frequency.entries())
     .sort((a, b) => b[1].times - a[1].times || b[1].units - a[1].units)
     .slice(0, FAVORITE_LIMIT);
 
