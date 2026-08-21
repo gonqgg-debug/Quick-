@@ -1,8 +1,17 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { DeliveryAddressFields } from "@/components/catalog/DeliveryAddressFields";
 import { Logo } from "@/components/brand/Logo";
-import { ADDRESS_LABELS, type AddressLabel, type CatalogCustomer } from "@/lib/customers";
+import {
+  ADDRESS_LABELS,
+  EMPTY_ADDRESS_DRAFT,
+  addressDraftToFields,
+  isAddressDraftComplete,
+  type AddressDraft,
+  type AddressLabel,
+  type CatalogCustomer,
+} from "@/lib/customers";
 import { brand } from "@/lib/theme";
 
 type CustomerRegisterFormProps = {
@@ -13,7 +22,7 @@ type CustomerRegisterFormProps = {
 export function CustomerRegisterForm({ sessionId, onRegistered }: CustomerRegisterFormProps) {
   const [nombre, setNombre] = useState("");
   const [apellido, setApellido] = useState("");
-  const [direccion, setDireccion] = useState("");
+  const [address, setAddress] = useState<AddressDraft>(EMPTY_ADDRESS_DRAFT);
   const [etiqueta, setEtiqueta] = useState<AddressLabel>("Casa");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,12 +30,13 @@ export function CustomerRegisterForm({ sessionId, onRegistered }: CustomerRegist
   const canSubmit =
     nombre.trim().length >= 2 &&
     apellido.trim().length >= 2 &&
-    direccion.trim().length >= 6 &&
+    isAddressDraftComplete(address) &&
     !submitting;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!canSubmit) {
+    const fields = addressDraftToFields(address, etiqueta);
+    if (!canSubmit || !fields) {
       return;
     }
     setSubmitting(true);
@@ -39,8 +49,7 @@ export function CustomerRegisterForm({ sessionId, onRegistered }: CustomerRegist
           sessionId,
           nombre: nombre.trim(),
           apellido: apellido.trim(),
-          direccion: direccion.trim(),
-          etiqueta,
+          ...fields,
         }),
       });
       const body = (await response.json()) as {
@@ -96,18 +105,7 @@ export function CustomerRegisterForm({ sessionId, onRegistered }: CustomerRegist
             </label>
           </div>
 
-          <label className="block">
-            <span className="text-sm font-bold text-brand-ink">Dirección de entrega</span>
-            <textarea
-              value={direccion}
-              onChange={(event) => setDireccion(event.target.value)}
-              rows={3}
-              autoComplete="street-address"
-              placeholder="Calle, número, piso, referencias..."
-              className="mt-2 w-full resize-none rounded-2xl border bg-white px-4 py-3 text-base outline-none placeholder:text-brand-muted"
-              style={{ borderColor: `${brand.muted}40` }}
-            />
-          </label>
+          <DeliveryAddressFields value={address} onChange={setAddress} />
 
           <fieldset>
             <legend className="text-sm font-bold text-brand-ink">¿Qué dirección es?</legend>

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getCustomerForChat, isAddressLabel, registerCustomerForChat } from "@/lib/customers";
+import { getCustomerForChat, parseStructuredAddress, registerCustomerForChat } from "@/lib/customers";
 import { jsonError } from "@/lib/order-request";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
@@ -11,6 +11,9 @@ type RegisterBody = {
   apellido?: unknown;
   direccion?: unknown;
   etiqueta?: unknown;
+  residencial?: unknown;
+  edificio?: unknown;
+  apartamento?: unknown;
 };
 
 async function sessionChatId(sessionId: string): Promise<{ chatId: string } | { error: ReturnType<typeof jsonError> }> {
@@ -47,8 +50,7 @@ export async function POST(request: NextRequest) {
   const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
   const nombre = typeof body.nombre === "string" ? body.nombre.trim() : "";
   const apellido = typeof body.apellido === "string" ? body.apellido.trim() : "";
-  const direccion = typeof body.direccion === "string" ? body.direccion.trim() : "";
-  const etiqueta = isAddressLabel(body.etiqueta) ? body.etiqueta : "Casa";
+  const address = parseStructuredAddress(body);
 
   if (!sessionId) {
     return jsonError("Falta la sesión.", 400);
@@ -59,8 +61,8 @@ export async function POST(request: NextRequest) {
   if (apellido.length < 2) {
     return jsonError("Escribe tu apellido.", 400);
   }
-  if (direccion.length < 6) {
-    return jsonError("Escribe una dirección de entrega más completa.", 400);
+  if (!address) {
+    return jsonError("Completa la dirección de entrega.", 400);
   }
 
   const session = await sessionChatId(sessionId);
@@ -76,8 +78,7 @@ export async function POST(request: NextRequest) {
     const customer = await registerCustomerForChat(session.chatId, {
       nombre,
       apellido,
-      direccion,
-      etiqueta,
+      ...address,
     });
     return Response.json({ success: true, customer });
   } catch (error) {

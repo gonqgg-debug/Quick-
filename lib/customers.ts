@@ -4,6 +4,33 @@ import { normalizePhoneNumber } from "@/lib/whatsapp";
 export const ADDRESS_LABELS = ["Casa", "Trabajo", "Otro"] as const;
 export type AddressLabel = (typeof ADDRESS_LABELS)[number];
 
+export const KNOWN_RESIDENCIALES = ["Jardines III", "Crisfer", "Cañas del Este"] as const;
+export const RESIDENCIAL_OPTIONS = [...KNOWN_RESIDENCIALES, "Otro"] as const;
+export type KnownResidencial = (typeof KNOWN_RESIDENCIALES)[number];
+export type ResidencialOption = (typeof RESIDENCIAL_OPTIONS)[number];
+
+export type AddressDraft = {
+  residencial: ResidencialOption | "";
+  edificio: string;
+  apartamento: string;
+  direccionLibre: string;
+};
+
+export const EMPTY_ADDRESS_DRAFT: AddressDraft = {
+  residencial: "",
+  edificio: "",
+  apartamento: "",
+  direccionLibre: "",
+};
+
+export type StructuredAddressFields = {
+  direccion: string;
+  etiqueta: AddressLabel;
+  residencial: ResidencialOption | null;
+  edificio: string | null;
+  apartamento: string | null;
+};
+
 export type CustomerAddress = {
   id: string;
   direccion: string;
@@ -35,18 +62,106 @@ export function isAddressLabel(value: unknown): value is AddressLabel {
   return typeof value === "string" && ADDRESS_LABELS.includes(value as AddressLabel);
 }
 
-export function parseNuevaDireccion(
-  value: unknown
-): { direccion: string; etiqueta: AddressLabel } | null {
+export function isResidencialOption(value: unknown): value is ResidencialOption {
+  return typeof value === "string" && RESIDENCIAL_OPTIONS.includes(value as ResidencialOption);
+}
+
+export function isKnownResidencial(value: unknown): value is KnownResidencial {
+  return typeof value === "string" && KNOWN_RESIDENCIALES.includes(value as KnownResidencial);
+}
+
+export function formatKnownDireccion(
+  residencial: KnownResidencial,
+  edificio: string,
+  apartamento: string
+): string {
+  return `${residencial}, Edif. ${edificio.trim()}, Apto ${apartamento.trim()}`;
+}
+
+export function isAddressDraftComplete(draft: AddressDraft): boolean {
+  if (isKnownResidencial(draft.residencial)) {
+    return draft.edificio.trim().length > 0 && draft.apartamento.trim().length > 0;
+  }
+  if (draft.residencial === "Otro") {
+    return draft.direccionLibre.trim().length >= 6;
+  }
+  return false;
+}
+
+export function addressDraftToFields(
+  draft: AddressDraft,
+  etiqueta: AddressLabel
+): StructuredAddressFields | null {
+  if (!isAddressDraftComplete(draft) || !isResidencialOption(draft.residencial)) {
+    return null;
+  }
+  if (isKnownResidencial(draft.residencial)) {
+    const edificio = draft.edificio.trim();
+    const apartamento = draft.apartamento.trim();
+    return {
+      direccion: formatKnownDireccion(draft.residencial, edificio, apartamento),
+      etiqueta,
+      residencial: draft.residencial,
+      edificio,
+      apartamento,
+    };
+  }
+  return {
+    direccion: draft.direccionLibre.trim(),
+    etiqueta,
+    residencial: "Otro",
+    edificio: null,
+    apartamento: null,
+  };
+}
+
+function textField(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export function parseStructuredAddress(
+  value: unknown,
+  etiquetaFallback: AddressLabel = "Casa"
+): StructuredAddressFields | null {
   if (!value || typeof value !== "object") {
     return null;
   }
-  const direccion = "direccion" in value && typeof value.direccion === "string" ? value.direccion.trim() : "";
-  const etiqueta = "etiqueta" in value ? value.etiqueta : "Casa";
-  if (direccion.length < 6 || !isAddressLabel(etiqueta)) {
+  const record = value as Record<string, unknown>;
+  const etiqueta = isAddressLabel(record.etiqueta) ? record.etiqueta : etiquetaFallback;
+  if (!isAddressLabel(etiqueta)) {
     return null;
   }
-  return { direccion, etiqueta };
+
+  if (isKnownResidencial(record.residencial)) {
+    const edificio = textField(record.edificio);
+    const apartamento = textField(record.apartamento);
+    if (!edificio || !apartamento) {
+      return null;
+    }
+    return {
+      direccion: formatKnownDireccion(record.residencial, edificio, apartamento),
+      etiqueta,
+      residencial: record.residencial,
+      edificio,
+      apartamento,
+    };
+  }
+
+  const direccion = textField(record.direccion);
+  if (direccion.length < 6) {
+    return null;
+  }
+  return {
+    direccion,
+    etiqueta,
+    residencial: record.residencial === "Otro" ? "Otro" : null,
+    edificio: null,
+    apartamento: null,
+  };
+}
+
+export function parseNuevaDireccion(value: unknown): StructuredAddressFields | null {
+  return parseStructuredAddress(value);
 }
 
 function mapAddress(row: AddressRow): CustomerAddress {
@@ -149,9 +264,7 @@ export async function registerCustomerForChat(
   input: {
     nombre: string;
     apellido: string;
-    direccion: string;
-    etiqueta: AddressLabel;
-  }
+  } & StructuredAddressFields
 ): Promise<CatalogCustomer> {
   const existing = await getCustomerForChat(chatId);
   if (existing) {
@@ -199,6 +312,9 @@ export async function registerCustomerForChat(
     customer_id: created.id,
     direccion: input.direccion,
     etiqueta: input.etiqueta,
+    residencial: input.residencial,
+    edificio: input.edificio,
+    apartamento: input.apartamento,
     es_predeterminada: true,
   });
 
@@ -225,7 +341,7 @@ export async function registerCustomerForChat(
 
 export async function addCustomerAddress(
   customerId: string,
-  input: { direccion: string; etiqueta: AddressLabel }
+  input: StructuredAddressFields
 ): Promise<CustomerAddress> {
   const supabase = getSupabaseAdminClient();
   const current = await loadCustomerById(customerId);
@@ -237,6 +353,9 @@ export async function addCustomerAddress(
       customer_id: customerId,
       direccion: input.direccion,
       etiqueta: input.etiqueta,
+      residencial: input.residencial,
+      edificio: input.edificio,
+      apartamento: input.apartamento,
       es_predeterminada: makeDefault,
     })
     .select("id, direccion, etiqueta, es_predeterminada")
@@ -255,7 +374,7 @@ export async function resolveCheckoutAddress(
   input: {
     direccion: string;
     addressId?: string | null;
-    nuevaDireccion?: { direccion: string; etiqueta: AddressLabel } | null;
+    nuevaDireccion?: StructuredAddressFields | null;
   }
 ): Promise<{ direccion: string; customerId: string | null }> {
   if (!customer) {

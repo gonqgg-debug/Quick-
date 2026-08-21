@@ -41,7 +41,13 @@ export type CreateOrderPayload = {
   direccion: string;
   metodoPago: MetodoPago;
   addressId?: string | null;
-  nuevaDireccion?: { direccion: string; etiqueta: "Casa" | "Trabajo" | "Otro" } | null;
+  nuevaDireccion?: {
+    direccion?: string;
+    etiqueta: "Casa" | "Trabajo" | "Otro";
+    residencial?: string;
+    edificio?: string;
+    apartamento?: string;
+  } | null;
 };
 
 export type CreateOrderResponse = {

@@ -2,10 +2,20 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CustomerRegisterForm } from "@/components/catalog/CustomerRegisterForm";
+import { DeliveryAddressFields } from "@/components/catalog/DeliveryAddressFields";
 import { Badge } from "@/components/brand/Badge";
 import { CartIcon } from "@/components/brand/CartIcon";
 import { Logo } from "@/components/brand/Logo";
-import { ADDRESS_LABELS, type AddressLabel, type CatalogCustomer, type CustomerAddress } from "@/lib/customers";
+import {
+  ADDRESS_LABELS,
+  EMPTY_ADDRESS_DRAFT,
+  addressDraftToFields,
+  isAddressDraftComplete,
+  type AddressDraft,
+  type AddressLabel,
+  type CatalogCustomer,
+  type CustomerAddress,
+} from "@/lib/customers";
 import { formatPrice } from "@/lib/money";
 import { brand, brandChipColor, isPharmaCategory } from "@/lib/theme";
 import type { CreateOrderPayload, MetodoPago, OrderDraft, Product } from "@/lib/types";
@@ -105,6 +115,7 @@ export function CatalogExperience({
     defaultAddress(initialCustomer)?.id ?? "new"
   );
   const [newEtiqueta, setNewEtiqueta] = useState<AddressLabel>("Casa");
+  const [newAddress, setNewAddress] = useState<AddressDraft>(EMPTY_ADDRESS_DRAFT);
   const [metodoPago, setMetodoPago] = useState<MetodoPago | null>(editOrder?.metodoPago ?? null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -194,9 +205,13 @@ export function CatalogExperience({
   }
 
   async function confirmOrder() {
-    const usingNewAddress = Boolean(customer && selectedAddressId === "new");
-    const delivery = usingNewAddress ? direccion.trim() : direccion.trim();
+    const addingNew = !customer || selectedAddressId === "new";
+    const newFields = addingNew ? addressDraftToFields(newAddress, newEtiqueta) : null;
+    const delivery = addingNew ? newFields?.direccion ?? "" : direccion.trim();
     if (!metodoPago || delivery.length < 6 || lines.length === 0) {
+      return;
+    }
+    if (addingNew && !newFields) {
       return;
     }
 
@@ -209,10 +224,7 @@ export function CatalogExperience({
       direccion: delivery,
       metodoPago: metodoPago,
       addressId: customer && selectedAddressId !== "new" ? selectedAddressId : null,
-      nuevaDireccion:
-        usingNewAddress && customer
-          ? { direccion: delivery, etiqueta: newEtiqueta }
-          : null,
+      nuevaDireccion: customer && addingNew && newFields ? newFields : null,
     };
 
     setSubmitting(true);
@@ -290,16 +302,17 @@ export function CatalogExperience({
         addresses={customer?.addresses ?? []}
         selectedAddressId={selectedAddressId}
         newEtiqueta={newEtiqueta}
-        onDireccionChange={setDireccion}
+        newAddress={newAddress}
         onSelectAddress={(id, value) => {
           setSelectedAddressId(id);
           if (id === "new") {
-            setDireccion("");
+            setNewAddress(EMPTY_ADDRESS_DRAFT);
             return;
           }
           setDireccion(value);
         }}
         onNewEtiquetaChange={setNewEtiqueta}
+        onNewAddressChange={setNewAddress}
         onMetodoPagoChange={setMetodoPago}
         onBack={() => {
           setSubmitError(null);
@@ -722,9 +735,10 @@ function CheckoutScreen({
   addresses,
   selectedAddressId,
   newEtiqueta,
-  onDireccionChange,
+  newAddress,
   onSelectAddress,
   onNewEtiquetaChange,
+  onNewAddressChange,
   onMetodoPagoChange,
   onBack,
   onConfirm,
@@ -739,15 +753,17 @@ function CheckoutScreen({
   addresses: CustomerAddress[];
   selectedAddressId: string | "new";
   newEtiqueta: AddressLabel;
-  onDireccionChange: (value: string) => void;
+  newAddress: AddressDraft;
   onSelectAddress: (id: string | "new", direccion: string) => void;
   onNewEtiquetaChange: (value: AddressLabel) => void;
+  onNewAddressChange: (value: AddressDraft) => void;
   onMetodoPagoChange: (value: MetodoPago) => void;
   onBack: () => void;
   onConfirm: () => void;
 }) {
   const addingNew = selectedAddressId === "new" || addresses.length === 0;
-  const canConfirm = direccion.trim().length >= 6 && metodoPago !== null && !submitting;
+  const addressOk = addingNew ? isAddressDraftComplete(newAddress) : direccion.trim().length >= 6;
+  const canConfirm = addressOk && metodoPago !== null && !submitting;
 
   return (
     <div className="mx-auto min-h-screen max-w-lg bg-white px-4 pb-10 pt-5">
@@ -814,33 +830,16 @@ function CheckoutScreen({
             </button>
           </div>
         </fieldset>
-      ) : (
-        <label className="mt-8 block">
-          <span className="text-sm font-bold text-brand-ink">Dirección de entrega</span>
-          <textarea
-            value={direccion}
-            onChange={(event) => onDireccionChange(event.target.value)}
-            rows={3}
-            placeholder="Calle, número, piso, referencias..."
-            className="mt-2 w-full resize-none rounded-2xl border bg-white px-4 py-3 text-base text-brand-ink outline-none placeholder:text-brand-muted"
-            style={{ borderColor: `${brand.muted}40` }}
-          />
-        </label>
-      )}
+      ) : null}
 
-      {addresses.length > 0 && addingNew ? (
-        <div className="mt-4">
-          <label className="block">
-            <span className="text-sm font-bold text-brand-ink">Nueva dirección</span>
-            <textarea
-              value={direccion}
-              onChange={(event) => onDireccionChange(event.target.value)}
-              rows={3}
-              placeholder="Calle, número, piso, referencias..."
-              className="mt-2 w-full resize-none rounded-2xl border bg-white px-4 py-3 text-base text-brand-ink outline-none placeholder:text-brand-muted"
-              style={{ borderColor: `${brand.muted}40` }}
-            />
-          </label>
+      {addingNew ? (
+        <div className={addresses.length > 0 ? "mt-4" : "mt-8"}>
+          {addresses.length > 0 ? (
+            <p className="mb-3 text-sm font-bold text-brand-ink">Nueva dirección</p>
+          ) : (
+            <p className="mb-3 text-sm font-bold text-brand-ink">Dirección de entrega</p>
+          )}
+          <DeliveryAddressFields value={newAddress} onChange={onNewAddressChange} />
           <div className="mt-3 grid grid-cols-3 gap-2">
             {ADDRESS_LABELS.map((label) => {
               const selected = newEtiqueta === label;
