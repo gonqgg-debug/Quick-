@@ -1,6 +1,7 @@
 import { CatalogExperience } from "@/components/catalog/CatalogExperience";
 import { InvalidSession } from "@/components/catalog/InvalidSession";
 import { getActiveOrderSession, getActiveProducts, getOrderDraft } from "@/lib/catalog";
+import { getCatalogRecommendations } from "@/lib/catalog-recommendations";
 import { getCustomerForChat } from "@/lib/customers";
 import type { OrderDraft, Product } from "@/lib/types";
 
@@ -17,6 +18,7 @@ export default async function OrderCatalogPage({ params }: OrderCatalogPageProps
   let products: Product[] = [];
   let editOrder: OrderDraft | null = null;
   let customer = null;
+  let recommendations = { bestSellers: [] as Product[], lastOrder: null, favorites: [] as Product[] };
   let unavailable = false;
 
   try {
@@ -24,6 +26,7 @@ export default async function OrderCatalogPage({ params }: OrderCatalogPageProps
     if (session) {
       products = await getActiveProducts();
       customer = await getCustomerForChat(session.chat_id);
+      recommendations = await getCatalogRecommendations(customer?.id ?? null);
       if (session.edit_order_id) {
         editOrder = await getOrderDraft(session.edit_order_id);
       }
@@ -60,6 +63,7 @@ export default async function OrderCatalogPage({ params }: OrderCatalogPageProps
       products={products}
       editOrder={editOrder}
       customer={customer}
+      recommendations={recommendations}
     />
   );
 }

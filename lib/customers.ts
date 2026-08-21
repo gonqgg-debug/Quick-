@@ -36,6 +36,9 @@ export type CustomerAddress = {
   direccion: string;
   etiqueta: AddressLabel | null;
   esPredeterminada: boolean;
+  residencial: ResidencialOption | null;
+  edificio: string | null;
+  apartamento: string | null;
 };
 
 export type CatalogCustomer = {
@@ -51,7 +54,13 @@ type AddressRow = {
   direccion: unknown;
   etiqueta: unknown;
   es_predeterminada: unknown;
+  residencial?: unknown;
+  edificio?: unknown;
+  apartamento?: unknown;
 };
+
+const ADDRESS_SELECT =
+  "id, direccion, etiqueta, es_predeterminada, residencial, edificio, apartamento";
 
 function phoneVariants(phoneNumber: string): string[] {
   const normalized = normalizePhoneNumber(phoneNumber);
@@ -164,13 +173,68 @@ export function parseNuevaDireccion(value: unknown): StructuredAddressFields | n
   return parseStructuredAddress(value);
 }
 
+export function formatCustomerPhone(phoneNumber: string): string {
+  const digits = phoneNumber.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+1 ${digits.slice(1, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+  }
+  return phoneNumber.trim() || "—";
+}
+
+const KNOWN_DIRECCION_RE = /^(Jardines III|Crisfer|Canas del Este), Edif\. (.+), Apto (.+)$/;
+
+export function customerAddressToDraft(address: Pick<CustomerAddress, "direccion" | "residencial" | "edificio" | "apartamento">): AddressDraft {
+  if (isKnownResidencial(address.residencial) && address.edificio && address.apartamento) {
+    return {
+      residencial: address.residencial,
+      edificio: address.edificio,
+      apartamento: address.apartamento,
+      direccionLibre: "",
+    };
+  }
+  const match = KNOWN_DIRECCION_RE.exec(address.direccion.trim());
+  if (match && isKnownResidencial(match[1])) {
+    return {
+      residencial: match[1],
+      edificio: match[2].trim(),
+      apartamento: match[3].trim(),
+      direccionLibre: "",
+    };
+  }
+  if (address.direccion.trim().length > 0) {
+    return {
+      residencial: "Otro",
+      edificio: "",
+      apartamento: "",
+      direccionLibre: address.direccion.trim(),
+    };
+  }
+  return { ...EMPTY_ADDRESS_DRAFT };
+}
+
 function mapAddress(row: AddressRow): CustomerAddress {
   const etiqueta = isAddressLabel(row.etiqueta) ? row.etiqueta : null;
+  const direccion = String(row.direccion ?? "").trim();
+  const residencial = isResidencialOption(row.residencial) ? row.residencial : null;
+  const edificio = textField(row.edificio) || null;
+  const apartamento = textField(row.apartamento) || null;
+  const inferred = customerAddressToDraft({
+    direccion,
+    residencial,
+    edificio,
+    apartamento,
+  });
   return {
     id: String(row.id),
-    direccion: String(row.direccion ?? "").trim(),
+    direccion,
     etiqueta,
     esPredeterminada: Boolean(row.es_predeterminada),
+    residencial: isResidencialOption(inferred.residencial) ? inferred.residencial : residencial,
+    edificio: isKnownResidencial(inferred.residencial) ? inferred.edificio : null,
+    apartamento: isKnownResidencial(inferred.residencial) ? inferred.apartamento : null,
   };
 }
 
@@ -207,10 +271,7 @@ async function loadCustomerById(customerId: string): Promise<CatalogCustomer | n
       apellido,
       phone_number,
       customer_addresses (
-        id,
-        direccion,
-        etiqueta,
-        es_predeterminada
+        ${ADDRESS_SELECT}
       )
     `
     )
@@ -358,7 +419,7 @@ export async function addCustomerAddress(
       apartamento: input.apartamento,
       es_predeterminada: makeDefault,
     })
-    .select("id, direccion, etiqueta, es_predeterminada")
+    .select(ADDRESS_SELECT)
     .single();
 
   if (error || !data) {
@@ -404,7 +465,7 @@ export async function getAddressForCustomer(
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("customer_addresses")
-    .select("id, direccion, etiqueta, es_predeterminada")
+    .select(ADDRESS_SELECT)
     .eq("id", addressId)
     .eq("customer_id", customerId)
     .maybeSingle();
@@ -413,4 +474,122 @@ export async function getAddressForCustomer(
     return null;
   }
   return mapAddress(data);
+}
+
+export type ProfileAddressInput = {
+  id?: string | null;
+  esPredeterminada: boolean;
+} & StructuredAddressFields;
+
+export async function saveCustomerProfile(
+  customerId: string,
+  input: {
+    nombre: string;
+    apellido: string;
+    addresses: ProfileAddressInput[];
+  }
+): Promise<CatalogCustomer> {
+  const nombre = input.nombre.trim();
+  const apellido = input.apellido.trim();
+  if (nombre.length < 2) {
+    throw new Error("Escribe tu nombre.");
+  }
+  if (apellido.length < 2) {
+    throw new Error("Escribe tu apellido.");
+  }
+  if (input.addresses.length === 0) {
+    throw new Error("Deja al menos una dirección para tus pedidos.");
+  }
+
+  const defaultIndex = input.addresses.findIndex((address) => address.esPredeterminada);
+  const normalized = input.addresses.map((address, index) => ({
+    ...address,
+    esPredeterminada: (defaultIndex >= 0 ? defaultIndex : 0) === index,
+  }));
+
+  const supabase = getSupabaseAdminClient();
+  const current = await loadCustomerById(customerId);
+  if (!current) {
+    throw new Error("No encontramos tu perfil.");
+  }
+
+  const { error: nameError } = await supabase
+    .from("customers")
+    .update({ nombre, apellido })
+    .eq("id", customerId);
+
+  if (nameError) {
+    console.error("[customers] no se pudo actualizar el perfil", nameError);
+    throw new Error("No pudimos guardar tus datos");
+  }
+
+  const fullName = `${nombre} ${apellido}`.trim();
+  await supabase.from("chats").update({ nombre: fullName }).eq("customer_id", customerId);
+
+  const keptIds = new Set(
+    normalized.map((address) => address.id).filter((id): id is string => Boolean(id && current.addresses.some((item) => item.id === id)))
+  );
+  const removedIds = current.addresses.map((address) => address.id).filter((id) => !keptIds.has(id));
+
+  const { error: unsetError } = await supabase
+    .from("customer_addresses")
+    .update({ es_predeterminada: false })
+    .eq("customer_id", customerId);
+
+  if (unsetError) {
+    console.error("[customers] no se pudieron resetear las direcciones", unsetError);
+    throw new Error("No pudimos guardar las direcciones");
+  }
+
+  if (removedIds.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("customer_addresses")
+      .delete()
+      .eq("customer_id", customerId)
+      .in("id", removedIds);
+
+    if (deleteError) {
+      console.error("[customers] no se pudieron eliminar direcciones", deleteError);
+      throw new Error("No pudimos eliminar esa dirección");
+    }
+  }
+
+  for (const address of normalized) {
+    const payload = {
+      direccion: address.direccion,
+      etiqueta: address.etiqueta,
+      residencial: address.residencial,
+      edificio: address.edificio,
+      apartamento: address.apartamento,
+      es_predeterminada: address.esPredeterminada,
+    };
+
+    if (address.id && keptIds.has(address.id)) {
+      const { error: updateError } = await supabase
+        .from("customer_addresses")
+        .update(payload)
+        .eq("id", address.id)
+        .eq("customer_id", customerId);
+      if (updateError) {
+        console.error("[customers] no se pudo editar la dirección", updateError);
+        throw new Error("No pudimos guardar las direcciones");
+      }
+      continue;
+    }
+
+    const { error: insertError } = await supabase.from("customer_addresses").insert({
+      customer_id: customerId,
+      ...payload,
+    });
+    if (insertError) {
+      console.error("[customers] no se pudo agregar dirección", insertError);
+      throw new Error("No pudimos guardar la nueva dirección");
+    }
+  }
+
+  const updated = await loadCustomerById(customerId);
+  if (!updated) {
+    throw new Error("No pudimos leer el perfil actualizado");
+  }
+  return updated;
 }

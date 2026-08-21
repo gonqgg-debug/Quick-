@@ -16,3 +16,7 @@ export function publicOrderUrl(sessionId: string): string {
 export function publicMyOrdersUrl(sessionId: string): string {
   return `${publicOrderUrl(sessionId)}#mis-pedidos`;
 }
+
+export function publicMyProfileUrl(sessionId: string): string {
+  return `${publicOrderUrl(sessionId)}#mi-perfil`;
+}

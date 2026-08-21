@@ -1,6 +1,7 @@
 import type { OrderEstado } from "@/lib/types";
 
 export const MY_ORDERS_HASH = "mis-pedidos";
+export const MY_PROFILE_HASH = "mi-perfil";
 
 export const CUSTOMER_PROGRESS_STEPS = ["Recibido", "Preparando", "En camino", "Entregado"] as const;
 

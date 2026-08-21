@@ -4,12 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { CustomerRegisterForm } from "@/components/catalog/CustomerRegisterForm";
 import { DeliveryAddressFields } from "@/components/catalog/DeliveryAddressFields";
 import { MyOrders, orderMetodoPago, orderToCart } from "@/components/catalog/MyOrders";
+import { MyProfile } from "@/components/catalog/MyProfile";
+import { CatalogRecommendations } from "@/components/catalog/CatalogRecommendations";
 import { PromoBanner } from "@/components/catalog/PromoBanner";
 import { Badge } from "@/components/brand/Badge";
 import { CartIcon } from "@/components/brand/CartIcon";
 import { Logo } from "@/components/brand/Logo";
 import { CATALOG_PROMO_BANNERS } from "@/lib/catalog-promo";
-import { MY_ORDERS_HASH, type CustomerOrder } from "@/lib/customer-orders-shared";
+import { MY_ORDERS_HASH, MY_PROFILE_HASH, type CustomerOrder } from "@/lib/customer-orders-shared";
+import type { CatalogRecommendations as CatalogRecommendationsData } from "@/lib/catalog-recommendations";
 import {
   ADDRESS_LABELS,
   EMPTY_ADDRESS_DRAFT,
@@ -29,10 +32,11 @@ type CatalogExperienceProps = {
   products: Product[];
   editOrder?: OrderDraft | null;
   customer?: CatalogCustomer | null;
+  recommendations?: CatalogRecommendationsData;
 };
 
 type Step = "register" | "catalog" | "checkout" | "success";
-type CatalogView = "shop" | "orders";
+type CatalogView = "shop" | "orders" | "profile";
 type CartMap = Record<string, number>;
 type CartLine = { product: Product; cantidad: number; subtotal: number };
 
@@ -100,11 +104,18 @@ function defaultAddress(customer: CatalogCustomer | null | undefined): CustomerA
   return customer.addresses.find((address) => address.esPredeterminada) ?? customer.addresses[0];
 }
 
+const EMPTY_RECOMMENDATIONS: CatalogRecommendationsData = {
+  bestSellers: [],
+  lastOrder: null,
+  favorites: [],
+};
+
 export function CatalogExperience({
   sessionId,
   products,
   editOrder = null,
   customer: initialCustomer = null,
+  recommendations = EMPTY_RECOMMENDATIONS,
 }: CatalogExperienceProps) {
   const [customer, setCustomer] = useState<CatalogCustomer | null>(initialCustomer);
   const [step, setStep] = useState<Step>(initialCustomer ? "catalog" : "register");
@@ -129,6 +140,7 @@ export function CatalogExperience({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [reorderNotice, setReorderNotice] = useState<string | null>(null);
 
   const productById = useMemo(
     () => new Map(products.map((product) => [product.id, product])),
@@ -207,9 +219,11 @@ export function CatalogExperience({
     }
 
     function applyHash() {
-      const showOrders = window.location.hash === `#${MY_ORDERS_HASH}`;
-      setView(showOrders ? "orders" : "shop");
-      if (showOrders) {
+      const hash = window.location.hash;
+      const nextView: CatalogView =
+        hash === `#${MY_ORDERS_HASH}` ? "orders" : hash === `#${MY_PROFILE_HASH}` ? "profile" : "shop";
+      setView(nextView);
+      if (nextView !== "shop") {
         window.scrollTo({ top: 0, left: 0 });
       }
     }
@@ -234,6 +248,32 @@ export function CatalogExperience({
       }
       return next;
     });
+  }
+
+  function repeatLastOrder() {
+    const lastOrder = recommendations.lastOrder;
+    if (!lastOrder) {
+      return;
+    }
+    const missing = lastOrder.items
+      .filter((item) => !item.available || !productById.has(item.productId))
+      .map((item) => item.nombre);
+    setCart((current) => {
+      const next = { ...current };
+      for (const item of lastOrder.items) {
+        if (!item.available || !productById.has(item.productId)) {
+          continue;
+        }
+        next[item.productId] = (next[item.productId] ?? 0) + item.cantidad;
+      }
+      return next;
+    });
+    if (missing.length > 0) {
+      setReorderNotice(`No pudimos agregar: ${missing.join(", ")}.`);
+    } else {
+      setReorderNotice("Listo, agregamos tu último pedido al carrito.");
+    }
+    setCartOpen(true);
   }
 
   async function confirmOrder() {
@@ -300,18 +340,26 @@ export function CatalogExperience({
     }
   }
 
-  function goToMyOrders() {
+  function goToHashView(next: Exclude<CatalogView, "shop">, hash: string) {
     setCartOpen(false);
-    setView("orders");
-    if (window.location.hash !== `#${MY_ORDERS_HASH}`) {
-      window.location.hash = MY_ORDERS_HASH;
+    setView(next);
+    if (window.location.hash !== `#${hash}`) {
+      window.location.hash = hash;
     }
     window.scrollTo({ top: 0, left: 0 });
   }
 
+  function goToMyOrders() {
+    goToHashView("orders", MY_ORDERS_HASH);
+  }
+
+  function goToMyProfile() {
+    goToHashView("profile", MY_PROFILE_HASH);
+  }
+
   function goToShop() {
     setView("shop");
-    if (window.location.hash === `#${MY_ORDERS_HASH}`) {
+    if (window.location.hash === `#${MY_ORDERS_HASH}` || window.location.hash === `#${MY_PROFILE_HASH}`) {
       window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
     }
   }
@@ -412,6 +460,19 @@ export function CatalogExperience({
             </button>
             <div className="flex shrink-0 items-center gap-2">
               <a
+                href={`#${MY_PROFILE_HASH}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  goToMyProfile();
+                }}
+                className="relative flex h-11 w-11 items-center justify-center rounded-full"
+                style={{ backgroundColor: view === "profile" ? `${brand.blue}22` : `${brand.blue}14` }}
+                aria-label="Mi perfil"
+                aria-current={view === "profile" ? "page" : undefined}
+              >
+                <ProfileIcon className="h-6 w-6" color={brand.blue} />
+              </a>
+              <a
                 href={`#${MY_ORDERS_HASH}`}
                 onClick={(event) => {
                   event.preventDefault();
@@ -445,10 +506,7 @@ export function CatalogExperience({
           </div>
 
           {!hashReady ? null : view === "shop" ? (
-            <>
-              <PromoBanner banners={CATALOG_PROMO_BANNERS} />
-
-              <label className="relative mt-3 block">
+            <label className="relative mt-3 block">
                 <span className="sr-only">Buscar productos</span>
                 <SearchIcon />
                 <input
@@ -459,9 +517,10 @@ export function CatalogExperience({
                   style={{ borderColor: query ? brand.green : `${brand.muted}40` }}
                 />
               </label>
-            </>
           ) : (
-            <p className="mt-3 font-display text-xl font-bold text-brand-ink">Mis pedidos</p>
+            <p className="mt-3 font-display text-xl font-bold text-brand-ink">
+              {view === "profile" ? "Mi perfil" : "Mis pedidos"}
+            </p>
           )}
         </div>
       </div>
@@ -477,13 +536,54 @@ export function CatalogExperience({
           </p>
           <MyOrders sessionId={sessionId} onModify={startModify} />
         </div>
+      ) : view === "profile" ? (
+        <div id="mi-perfil" className="mx-auto max-w-lg px-4 pb-16 pt-2">
+          {customer ? (
+            <MyProfile
+              sessionId={sessionId}
+              customer={customer}
+              onSaved={(updated) => {
+                setCustomer(updated);
+                const nextDefault = defaultAddress(updated);
+                if (nextDefault) {
+                  setDireccion(nextDefault.direccion);
+                  setSelectedAddressId(nextDefault.id);
+                }
+              }}
+            />
+          ) : (
+            <p className="mt-4 text-sm text-brand-muted">No encontramos tus datos. Recarga el catálogo o pide un enlace nuevo.</p>
+          )}
+        </div>
       ) : (
       <div className="mx-auto max-w-lg px-4 pb-32 pt-4">
-        <p className="text-sm leading-relaxed text-brand-muted">
+        <PromoBanner banners={CATALOG_PROMO_BANNERS} />
+        <p className="mt-4 text-sm leading-relaxed text-brand-muted">
           {isEditing
             ? "Ya cargamos tu pedido. Cambia lo que necesites y guarda los cambios."
             : "Elige lo que necesitas. Te lo preparamos y te confirmamos por WhatsApp."}
         </p>
+
+        {reorderNotice ? (
+          <p
+            className="mt-3 rounded-2xl px-4 py-3 text-sm font-semibold"
+            style={{
+              backgroundColor: reorderNotice.startsWith("No pudimos") ? "#FEE2E2" : "#EAF6D8",
+              color: reorderNotice.startsWith("No pudimos") ? brand.error : "#3F7A12",
+            }}
+          >
+            {reorderNotice}
+          </p>
+        ) : null}
+
+        {!normalizedQuery ? (
+          <CatalogRecommendations
+            recommendations={recommendations}
+            cart={cart}
+            onQuantityChange={setQuantity}
+            onRepeatLastOrder={repeatLastOrder}
+          />
+        ) : null}
 
         {chipCategories.length > 0 ? (
           <nav
@@ -578,6 +678,14 @@ export function CatalogExperience({
         />
       ) : null}
     </div>
+  );
+}
+
+function ProfileIcon({ className, color }: { className?: string; color: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill={color} aria-hidden="true">
+      <path d="M12 3.6A4.2 4.2 0 1 1 12 12a4.2 4.2 0 0 1 0-8.4zm0 10.1c4.4 0 8 2.6 8 5.7 0 .9-.8 1.6-1.7 1.6H5.7c-.9 0-1.7-.7-1.7-1.6 0-3.1 3.6-5.7 8-5.7z" />
+    </svg>
   );
 }
 
