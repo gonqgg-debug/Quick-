@@ -22,5 +22,3 @@ export const CATALOG_PROMO_BANNERS: CatalogPromoBanner[] = [
     imagePosition: "center",
   },
 ];
-
-export const CATALOG_PROMO_STORAGE_PREFIX = "quick-orders:promo-dismissed:";

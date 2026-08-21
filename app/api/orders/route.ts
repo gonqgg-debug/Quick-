@@ -137,18 +137,6 @@ export async function POST(request: NextRequest) {
     return jsonError("El pedido se creó, pero no pudimos guardar los productos.", 500);
   }
 
-  const { data: usedSession, error: sessionUpdateError } = await supabase
-    .from("order_sessions")
-    .update({ estado: "usada" })
-    .eq("id", session.id)
-    .eq("estado", "activa")
-    .select("id")
-    .maybeSingle();
-
-  if (sessionUpdateError || !usedSession) {
-    return jsonError("El pedido se creó, pero no pudimos cerrar la sesión.", 500);
-  }
-
   if (!esPrueba) {
     const notifications = await Promise.allSettled([
       sendOrderToStaff(order.id),

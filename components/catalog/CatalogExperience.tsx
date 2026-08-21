@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { CustomerRegisterForm } from "@/components/catalog/CustomerRegisterForm";
 import { DeliveryAddressFields } from "@/components/catalog/DeliveryAddressFields";
+import { MyOrders, orderMetodoPago, orderToCart } from "@/components/catalog/MyOrders";
 import { PromoBanner } from "@/components/catalog/PromoBanner";
 import { Badge } from "@/components/brand/Badge";
 import { CartIcon } from "@/components/brand/CartIcon";
 import { Logo } from "@/components/brand/Logo";
 import { CATALOG_PROMO_BANNERS } from "@/lib/catalog-promo";
+import { MY_ORDERS_HASH, type CustomerOrder } from "@/lib/customer-orders-shared";
 import {
   ADDRESS_LABELS,
   EMPTY_ADDRESS_DRAFT,
@@ -30,6 +32,7 @@ type CatalogExperienceProps = {
 };
 
 type Step = "register" | "catalog" | "checkout" | "success";
+type CatalogView = "shop" | "orders";
 type CartMap = Record<string, number>;
 type CartLine = { product: Product; cantidad: number; subtotal: number };
 
@@ -103,11 +106,15 @@ export function CatalogExperience({
   editOrder = null,
   customer: initialCustomer = null,
 }: CatalogExperienceProps) {
-  const isEditing = Boolean(editOrder);
   const [customer, setCustomer] = useState<CatalogCustomer | null>(initialCustomer);
   const [step, setStep] = useState<Step>(initialCustomer ? "catalog" : "register");
+  const [view, setView] = useState<CatalogView>("shop");
+  const [hashReady, setHashReady] = useState(false);
+  const [catalogEditOrderId, setCatalogEditOrderId] = useState<string | null>(null);
   const [cart, setCart] = useState<CartMap>(() => cartFromDraft(editOrder));
   const [cartOpen, setCartOpen] = useState(false);
+  const activeEditOrderId = catalogEditOrderId ?? editOrder?.orderId ?? null;
+  const isEditing = Boolean(activeEditOrderId);
   const [hydrated, setHydrated] = useState(false);
   const [query, setQuery] = useState("");
   const [direccion, setDireccion] = useState(
@@ -194,6 +201,29 @@ export function CatalogExperience({
     };
   }, [cartOpen]);
 
+  useEffect(() => {
+    if (step !== "catalog") {
+      return;
+    }
+
+    function applyHash() {
+      const showOrders = window.location.hash === `#${MY_ORDERS_HASH}`;
+      setView(showOrders ? "orders" : "shop");
+      if (showOrders) {
+        window.scrollTo({ top: 0, left: 0 });
+      }
+    }
+
+    applyHash();
+    setHashReady(true);
+    window.addEventListener("hashchange", applyHash);
+    window.addEventListener("popstate", applyHash);
+    return () => {
+      window.removeEventListener("hashchange", applyHash);
+      window.removeEventListener("popstate", applyHash);
+    };
+  }, [step]);
+
   function setQuantity(productId: string, cantidad: number) {
     setCart((current) => {
       const next = { ...current };
@@ -233,9 +263,9 @@ export function CatalogExperience({
     setSubmitError(null);
 
     try {
-      const endpoint = isEditing && editOrder ? `/api/orders/${editOrder.orderId}` : "/api/orders";
+      const endpoint = activeEditOrderId ? `/api/orders/${activeEditOrderId}` : "/api/orders";
       const response = await fetch(endpoint, {
-        method: isEditing ? "PATCH" : "POST",
+        method: activeEditOrderId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -248,7 +278,7 @@ export function CatalogExperience({
       if (!response.ok || !body.success || !body.orderId) {
         setSubmitError(
           body.error ??
-            (isEditing
+            (activeEditOrderId
               ? "No pudimos guardar los cambios. Inténtalo de nuevo."
               : "No pudimos confirmar el pedido. Inténtalo de nuevo.")
         );
@@ -261,13 +291,45 @@ export function CatalogExperience({
       setStep("success");
     } catch {
       setSubmitError(
-        isEditing
+        activeEditOrderId
           ? "No pudimos guardar los cambios. Revisa tu conexión."
           : "No pudimos confirmar el pedido. Revisa tu conexión."
       );
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function goToMyOrders() {
+    setCartOpen(false);
+    setView("orders");
+    if (window.location.hash !== `#${MY_ORDERS_HASH}`) {
+      window.location.hash = MY_ORDERS_HASH;
+    }
+    window.scrollTo({ top: 0, left: 0 });
+  }
+
+  function goToShop() {
+    setView("shop");
+    if (window.location.hash === `#${MY_ORDERS_HASH}`) {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    }
+  }
+
+  function startModify(order: CustomerOrder) {
+    setCatalogEditOrderId(order.id);
+    setCart(orderToCart(order));
+    setDireccion(order.direccion);
+    const match = customer?.addresses.find((address) => address.direccion === order.direccion);
+    if (match) {
+      setSelectedAddressId(match.id);
+    }
+    const metodo = orderMetodoPago(order);
+    if (metodo) {
+      setMetodoPago(metodo);
+    }
+    goToShop();
+    setCartOpen(true);
   }
 
   if (step === "register") {
@@ -288,7 +350,22 @@ export function CatalogExperience({
   }
 
   if (step === "success") {
-    return <SuccessScreen orderId={orderId} isEditing={isEditing} />;
+    return (
+      <SuccessScreen
+        orderId={orderId}
+        isEditing={isEditing}
+        onViewOrders={() => {
+          setCatalogEditOrderId(null);
+          setStep("catalog");
+          goToMyOrders();
+        }}
+        onKeepShopping={() => {
+          setCatalogEditOrderId(null);
+          goToShop();
+          setStep("catalog");
+        }}
+      />
+    );
   }
 
   if (step === "checkout") {
@@ -330,42 +407,77 @@ export function CatalogExperience({
       <div className="sticky top-0 z-20 border-b border-black/5 bg-white/95 backdrop-blur-md">
         <div className="mx-auto max-w-lg px-4 pb-3 pt-4">
           <div className="flex items-center justify-between gap-3">
-            <Logo />
-            <button
-              type="button"
-              onClick={() => setCartOpen(true)}
-              className="relative flex h-11 w-11 items-center justify-center rounded-full"
-              style={{ backgroundColor: `${brand.orange}18` }}
-              aria-label="Ver carrito"
-            >
-              <CartIcon className="h-6 w-6" color={brand.orange} />
-              {itemCount > 0 ? (
-                <span
-                  className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
-                  style={{ backgroundColor: brand.orange }}
-                >
-                  {itemCount}
-                </span>
-              ) : null}
+            <button type="button" onClick={goToShop} className="min-w-0 text-left" aria-label="Ir al catálogo">
+              <Logo />
             </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <a
+                href={`#${MY_ORDERS_HASH}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  goToMyOrders();
+                }}
+                className="relative flex h-11 w-11 items-center justify-center rounded-full"
+                style={{ backgroundColor: view === "orders" ? `${brand.green}22` : `${brand.green}14` }}
+                aria-label="Mis pedidos"
+                aria-current={view === "orders" ? "page" : undefined}
+              >
+                <OrdersIcon className="h-6 w-6" color={brand.green} />
+              </a>
+              <button
+                type="button"
+                onClick={() => setCartOpen(true)}
+                className="relative flex h-11 w-11 items-center justify-center rounded-full"
+                style={{ backgroundColor: `${brand.orange}18` }}
+                aria-label="Ver carrito"
+              >
+                <CartIcon className="h-6 w-6" color={brand.orange} />
+                {itemCount > 0 ? (
+                  <span
+                    className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+                    style={{ backgroundColor: brand.orange }}
+                  >
+                    {itemCount}
+                  </span>
+                ) : null}
+              </button>
+            </div>
           </div>
 
-          <PromoBanner banners={CATALOG_PROMO_BANNERS} />
+          {!hashReady ? null : view === "shop" ? (
+            <>
+              <PromoBanner banners={CATALOG_PROMO_BANNERS} />
 
-          <label className="relative mt-3 block">
-            <span className="sr-only">Buscar productos</span>
-            <SearchIcon />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar producto, marca o categoría"
-              className="w-full rounded-full border bg-white py-2.5 pl-11 pr-4 text-sm text-brand-ink outline-none placeholder:text-brand-muted"
-              style={{ borderColor: query ? brand.green : `${brand.muted}40` }}
-            />
-          </label>
+              <label className="relative mt-3 block">
+                <span className="sr-only">Buscar productos</span>
+                <SearchIcon />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Buscar producto, marca o categoría"
+                  className="w-full rounded-full border bg-white py-2.5 pl-11 pr-4 text-sm text-brand-ink outline-none placeholder:text-brand-muted"
+                  style={{ borderColor: query ? brand.green : `${brand.muted}40` }}
+                />
+              </label>
+            </>
+          ) : (
+            <p className="mt-3 font-display text-xl font-bold text-brand-ink">Mis pedidos</p>
+          )}
         </div>
       </div>
 
+      {!hashReady ? (
+        <div className="mx-auto max-w-lg px-4 pb-16 pt-4">
+          <div className="h-40 animate-pulse rounded-[24px] bg-gray-100" />
+        </div>
+      ) : view === "orders" ? (
+        <div id="mis-pedidos" className="mx-auto max-w-lg px-4 pb-16 pt-2">
+          <p className="text-sm leading-relaxed text-brand-muted">
+            Tus pedidos, del más reciente al más antiguo.
+          </p>
+          <MyOrders sessionId={sessionId} onModify={startModify} />
+        </div>
+      ) : (
       <div className="mx-auto max-w-lg px-4 pb-32 pt-4">
         <p className="text-sm leading-relaxed text-brand-muted">
           {isEditing
@@ -433,8 +545,9 @@ export function CatalogExperience({
           </div>
         )}
       </div>
+      )}
 
-      {itemCount > 0 && !cartOpen ? (
+      {itemCount > 0 && !cartOpen && view === "shop" ? (
         <button
           type="button"
           onClick={() => setCartOpen(true)}
@@ -465,6 +578,14 @@ export function CatalogExperience({
         />
       ) : null}
     </div>
+  );
+}
+
+function OrdersIcon({ className, color }: { className?: string; color: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill={color} aria-hidden="true">
+      <path d="M7 3.5A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8.2L14.8 3.5H7zm7.2 1.4 3.1 3.6h-3.1V4.9zM8.5 12a.9.9 0 1 1 0-1.8h7a.9.9 0 1 1 0 1.8h-7zm0 3.2a.9.9 0 1 1 0-1.8h7a.9.9 0 1 1 0 1.8h-7z" />
+    </svg>
   );
 }
 
@@ -933,7 +1054,17 @@ function PaymentOption({
   );
 }
 
-function SuccessScreen({ orderId, isEditing }: { orderId: string | null; isEditing: boolean }) {
+function SuccessScreen({
+  orderId,
+  isEditing,
+  onViewOrders,
+  onKeepShopping,
+}: {
+  orderId: string | null;
+  isEditing: boolean;
+  onViewOrders: () => void;
+  onKeepShopping: () => void;
+}) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-white px-5 py-16">
       <section className="w-full max-w-md rounded-[28px] border border-black/[0.06] bg-white px-6 py-10 text-center shadow-[0_16px_40px_rgba(26,26,26,0.08)]">
@@ -956,6 +1087,24 @@ function SuccessScreen({ orderId, isEditing }: { orderId: string | null; isEditi
             N.º {orderId.slice(0, 8).toUpperCase()}
           </p>
         ) : null}
+        <div className="mt-8 space-y-3">
+          <button
+            type="button"
+            onClick={onViewOrders}
+            className="w-full rounded-full py-3.5 text-sm font-bold text-white"
+            style={{ backgroundColor: brand.green }}
+          >
+            Ver mis pedidos
+          </button>
+          <button
+            type="button"
+            onClick={onKeepShopping}
+            className="w-full text-sm font-bold"
+            style={{ color: brand.blue }}
+          >
+            Seguir comprando
+          </button>
+        </div>
       </section>
     </main>
   );

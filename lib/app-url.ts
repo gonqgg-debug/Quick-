@@ -12,3 +12,7 @@ export function appBaseUrl(): string {
 export function publicOrderUrl(sessionId: string): string {
   return `${appBaseUrl()}/order/${sessionId}`;
 }
+
+export function publicMyOrdersUrl(sessionId: string): string {
+  return `${publicOrderUrl(sessionId)}#mis-pedidos`;
+}

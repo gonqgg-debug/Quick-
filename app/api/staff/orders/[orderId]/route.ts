@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import { isStaffAuthorized, unauthorized } from "@/lib/staff-auth";
 import type { OrderEstado } from "@/lib/types";
-import { notifyOrderDispatched } from "@/lib/whatsapp";
+import { notifyCustomerOfOrderStatus } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -41,9 +41,14 @@ export async function PATCH(
   }
 
   const supabase = getSupabaseAdminClient();
+  const patch: Record<string, unknown> = { estado };
+  if (estado === "completada") {
+    patch.completada_en = new Date().toISOString();
+  }
+
   const { data, error } = await supabase
     .from("orders")
-    .update({ estado })
+    .update(patch)
     .eq("id", orderId)
     .select("id")
     .maybeSingle();
@@ -57,12 +62,14 @@ export async function PATCH(
     return NextResponse.json({ error: "No encontramos ese pedido" }, { status: 404 });
   }
 
-  if (estado === "despachada") {
-    try {
-      await notifyOrderDispatched(orderId);
-    } catch (notifyError) {
-      console.error("[staff] no se pudo avisar el despacho por WhatsApp", notifyError);
-    }
+  try {
+    await notifyCustomerOfOrderStatus(orderId, estado as OrderEstado);
+  } catch (notifyError) {
+    console.error("[staff] no se pudo avisar el cambio de estado por WhatsApp", {
+      orderId,
+      estado,
+      error: notifyError,
+    });
   }
 
   return NextResponse.json({ ok: true, orderId, estado });

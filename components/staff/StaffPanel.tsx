@@ -15,7 +15,7 @@ import {
   orderAgingLevel,
   usesOrderAging,
 } from "@/lib/order-aging";
-import { formatOrderNumber, orderStatusLabel } from "@/lib/order-display";
+import { formatOrderNumber, orderStatusColor, orderStatusLabel } from "@/lib/order-display";
 import {
   playStaffAlert,
   readStaffSoundMuted,
@@ -97,10 +97,7 @@ function stripeColor(estado: OrderEstado): string {
 }
 
 function statusColor(estado: OrderEstado): string {
-  if (estado === "faltante_reportado" || estado === "cancelada") return brand.error;
-  if (estado === "en_proceso" || estado === "confirmada" || estado === "despachada") return brand.blue;
-  if (estado === "completada") return brand.green;
-  return brand.orange;
+  return orderStatusColor(estado);
 }
 
 function formatWhen(iso: string): string {

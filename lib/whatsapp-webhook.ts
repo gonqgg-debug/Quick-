@@ -1,4 +1,6 @@
-import { appBaseUrl } from "@/lib/app-url";
+import { publicMyOrdersUrl, publicOrderUrl } from "@/lib/app-url";
+import { createCatalogSession, ensureActiveCatalogSession } from "@/lib/catalog";
+import { parseFeedbackButton, recordFeedbackComment, recordFeedbackRating } from "@/lib/order-feedback";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import {
   mediaAckMessage,
@@ -45,19 +47,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
-}
-
-function orderStatusLabel(estado: string): string {
-  const labels: Record<string, string> = {
-    nueva: "nueva",
-    en_proceso: "en proceso",
-    faltante_reportado: "con un faltante reportado",
-    confirmada: "confirmada",
-    despachada: "despachada",
-    completada: "completada",
-    cancelada: "cancelada",
-  };
-  return labels[estado] ?? estado;
 }
 
 function extractIncomingMessages(payload: unknown): IncomingMessage[] {
@@ -261,29 +250,8 @@ function isMissingDeleteAction(message: IncomingMessage): boolean {
 }
 
 async function handleNewOrder(phoneNumber: string, chatId: string): Promise<void> {
-  const supabase = getSupabaseAdminClient();
-
-  await supabase
-    .from("order_sessions")
-    .update({ estado: "expirada" })
-    .eq("chat_id", chatId)
-    .eq("estado", "activa");
-
-  const { data: session, error } = await supabase
-    .from("order_sessions")
-    .insert({
-      chat_id: chatId,
-      estado: "activa",
-      expira_en: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-    })
-    .select("id")
-    .single();
-
-  if (error || !session) {
-    throw new Error("No pudimos crear la sesión de pedido");
-  }
-
-  const link = `${appBaseUrl()}/order/${session.id}`;
+  const sessionId = await createCatalogSession(chatId);
+  const link = publicOrderUrl(sessionId);
   await sendTextMessage(
     phoneNumber,
     `Perfecto. Arma tu pedido aquí (el enlace vence en 2 horas):\n${link}`
@@ -291,29 +259,9 @@ async function handleNewOrder(phoneNumber: string, chatId: string): Promise<void
 }
 
 async function handleViewOrder(phoneNumber: string, chatId: string): Promise<void> {
-  const supabase = getSupabaseAdminClient();
-  const { data: order, error } = await supabase
-    .from("orders")
-    .select("id, estado")
-    .eq("chat_id", chatId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error("No pudimos buscar el pedido");
-  }
-
-  if (!order) {
-    await sendTextMessage(phoneNumber, "Aún no tienes un pedido. Elige *Nueva orden* para empezar.");
-    return;
-  }
-
-  const numero = formatShortOrderId(order.id as string);
-  await sendTextMessage(
-    phoneNumber,
-    `Tu pedido #${numero} está ${orderStatusLabel(String(order.estado))}.`
-  );
+  const sessionId = await ensureActiveCatalogSession(chatId);
+  const link = publicMyOrdersUrl(sessionId);
+  await sendTextMessage(phoneNumber, `Aquí puedes ver el estado de tus pedidos:\n${link}`);
 }
 
 async function handleStaffMissing(phoneNumber: string, text: string): Promise<void> {
@@ -435,6 +383,32 @@ async function handleIncomingMessage(message: IncomingMessage): Promise<void> {
     });
   } catch (error) {
     console.error("[whatsapp] no se pudo registrar el mensaje en whatsapp_log", error);
+  }
+
+  if (!fromStaff) {
+    const rating = parseFeedbackButton(message.buttonId);
+    if (rating) {
+      try {
+        const waiting = await isWaitingForHuman(chat.id);
+        await recordFeedbackRating(message.from, chat.id, rating.orderId, rating.calificacion, {
+          skipFollowUp: waiting,
+        });
+      } catch (error) {
+        console.error("[whatsapp] error al guardar calificación", error);
+      }
+      return;
+    }
+
+    if (!message.buttonId && message.text) {
+      try {
+        const savedComment = await recordFeedbackComment(message.from, chat.id, message.text);
+        if (savedComment) {
+          return;
+        }
+      } catch (error) {
+        console.error("[whatsapp] error al guardar comentario de feedback", error);
+      }
+    }
   }
 
   if (!fromStaff) {

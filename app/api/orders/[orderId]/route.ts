@@ -74,14 +74,6 @@ export async function PATCH(
     return jsonError("No encontramos ese pedido.", 404);
   }
 
-  const estado = String(order.estado) as OrderEstado;
-  if (!EDITABLE_ORDER_STATES.includes(estado)) {
-    return jsonError(
-      "Este pedido ya no se puede modificar porque está despachado, completado o cancelado.",
-      409
-    );
-  }
-
   const { data: session, error: sessionError } = await supabase
     .from("order_sessions")
     .select("id, chat_id, estado, expira_en, edit_order_id")
@@ -108,7 +100,24 @@ export async function PATCH(
     return jsonError("Esta sesión no corresponde a este pedido.", 409);
   }
 
-  if (session.edit_order_id !== order.id) {
+  const estado = String(order.estado) as OrderEstado;
+  const isDedicatedEdit = session.edit_order_id === order.id;
+  const isCatalogNuevaEdit = !session.edit_order_id && estado === "nueva";
+
+  if (isDedicatedEdit) {
+    if (!EDITABLE_ORDER_STATES.includes(estado)) {
+      return jsonError(
+        "Este pedido ya no se puede modificar porque está despachado, completado o cancelado.",
+        409
+      );
+    }
+  } else if (!isCatalogNuevaEdit) {
+    if (estado !== "nueva") {
+      return jsonError(
+        "Tu pedido ya está en preparación. Escríbenos por WhatsApp si necesitas un cambio.",
+        409
+      );
+    }
     return jsonError("Esta sesión no es para editar este pedido.", 409);
   }
 
@@ -166,16 +175,18 @@ export async function PATCH(
     return jsonError("Los productos se actualizaron, pero no pudimos guardar el resto del pedido.", 500);
   }
 
-  const { data: usedSession, error: sessionUpdateError } = await supabase
-    .from("order_sessions")
-    .update({ estado: "usada" })
-    .eq("id", session.id)
-    .eq("estado", "activa")
-    .select("id")
-    .maybeSingle();
+  if (isDedicatedEdit) {
+    const { data: usedSession, error: sessionUpdateError } = await supabase
+      .from("order_sessions")
+      .update({ estado: "usada" })
+      .eq("id", session.id)
+      .eq("estado", "activa")
+      .select("id")
+      .maybeSingle();
 
-  if (sessionUpdateError || !usedSession) {
-    return jsonError("El pedido se actualizó, pero no pudimos cerrar la sesión.", 500);
+    if (sessionUpdateError || !usedSession) {
+      return jsonError("El pedido se actualizó, pero no pudimos cerrar la sesión.", 500);
+    }
   }
 
   if (!Boolean(order.es_prueba)) {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { OrderSnapshot } from "@/components/staff/OrderSnapshot";
 import { PruebaBadge } from "@/components/order/PruebaBadge";
 import { formatOrderNumber, orderStatusLabel } from "@/lib/order-display";
+import { feedbackEmoji } from "@/lib/order-feedback";
 import {
   HISTORY_PAGE_SIZE,
   HISTORY_STATES,
@@ -15,8 +16,9 @@ import {
 } from "@/lib/staff-history-shared";
 import { brand } from "@/lib/theme";
 
-const STATUS_FILTERS: { id: "todos" | HistoryEstado; label: string }[] = [
+const STATUS_FILTERS: { id: "todos" | "atencion" | HistoryEstado; label: string }[] = [
   { id: "todos", label: "Todos" },
+  { id: "atencion", label: "Requieren atención" },
   { id: "completada", label: "Completada" },
   { id: "cancelada", label: "Cancelada" },
   { id: "despachada", label: "Despachada" },
@@ -41,7 +43,7 @@ export function AdminHistory() {
   const [query, setQuery] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [estado, setEstado] = useState<"todos" | HistoryEstado>("todos");
+  const [estado, setEstado] = useState<"todos" | "atencion" | HistoryEstado>("todos");
   const [includePruebas, setIncludePruebas] = useState(false);
   const [minTotal, setMinTotal] = useState("");
   const [maxTotal, setMaxTotal] = useState("");
@@ -56,7 +58,8 @@ export function AdminHistory() {
   }, [searchInput]);
 
   const filterParams = useMemo(() => {
-    const estados = estado === "todos" ? Array.from(HISTORY_STATES) : [estado];
+    const estados =
+      estado === "todos" || estado === "atencion" ? Array.from(HISTORY_STATES) : [estado];
     const min = minTotal.trim() === "" ? null : Number(minTotal);
     const max = maxTotal.trim() === "" ? null : Number(maxTotal);
     return {
@@ -67,6 +70,7 @@ export function AdminHistory() {
       minTotal: Number.isFinite(min) ? min : null,
       maxTotal: Number.isFinite(max) ? max : null,
       includePruebas,
+      requiereAtencion: estado === "atencion",
     };
   }, [query, from, to, estado, minTotal, maxTotal, includePruebas]);
 
@@ -256,7 +260,7 @@ export function AdminHistory() {
                 className="rounded-full px-3 text-sm font-bold"
                 style={{
                   minHeight: 40,
-                  backgroundColor: active ? brand.green : "#F3F4F6",
+                  backgroundColor: active ? (filter.id === "atencion" ? brand.error : brand.green) : "#F3F4F6",
                   color: active ? "#FFFFFF" : "#4B5563",
                 }}
               >
@@ -303,7 +307,7 @@ export function AdminHistory() {
         ) : (
           <>
             <div className="overflow-x-auto rounded-[24px] border" style={{ borderColor: "#E5E7EB" }}>
-              <table className="w-full min-w-[920px] text-left text-sm">
+              <table className="w-full min-w-[1020px] text-left text-sm">
                 <thead>
                   <tr
                     className="text-xs font-bold uppercase tracking-wide text-brand-muted"
@@ -317,6 +321,7 @@ export function AdminHistory() {
                     <th className="whitespace-nowrap px-3 py-3 text-right"># Ítems</th>
                     <th className="whitespace-nowrap px-3 py-3 text-right">Total</th>
                     <th className="px-3 py-3">Estado</th>
+                    <th className="whitespace-nowrap px-3 py-3">Calificación</th>
                     <th className="whitespace-nowrap px-3 py-3">Tiempo que tardó</th>
                     <th className="w-10 px-2 py-3">
                       <span className="sr-only">Detalle</span>
@@ -387,7 +392,14 @@ function HistoryRow({
     <>
       <tr
         className="cursor-pointer border-t"
-        style={{ borderColor: "#F3F4F6", backgroundColor: open ? "#FAFBFA" : undefined }}
+        style={{
+          borderColor: "#F3F4F6",
+          backgroundColor: open
+            ? "#FAFBFA"
+            : order.feedback?.requiereAtencion
+              ? "#FEF2F2"
+              : undefined,
+        }}
         onClick={onToggle}
       >
         <td className="whitespace-nowrap px-3 py-2.5 text-xs text-brand-muted">
@@ -397,6 +409,14 @@ function HistoryRow({
           <span className="inline-flex items-center gap-1.5">
             #{formatOrderNumber(order.id)}
             {order.esPrueba ? <PruebaBadge /> : null}
+            {order.feedback?.requiereAtencion ? (
+              <span
+                className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
+                style={{ backgroundColor: brand.error }}
+              >
+                Atención
+              </span>
+            ) : null}
           </span>
         </td>
         <td className="max-w-[140px] truncate px-3 py-2.5">{order.clienteNombre || "—"}</td>
@@ -414,6 +434,19 @@ function HistoryRow({
             {orderStatusLabel(order.estado)}
           </span>
         </td>
+        <td className="whitespace-nowrap px-3 py-2.5">
+          {order.feedback ? (
+            <span
+              className="inline-flex items-center gap-1 text-sm font-bold"
+              style={{ color: order.feedback.requiereAtencion ? brand.error : brand.green }}
+            >
+              <span aria-hidden>{feedbackEmoji(order.feedback.calificacion)}</span>
+              {order.feedback.calificacion}/5
+            </span>
+          ) : (
+            <span className="text-xs text-brand-muted">—</span>
+          )}
+        </td>
         <td className="whitespace-nowrap px-3 py-2.5 font-mono text-sm tabular-nums text-brand-muted">
           {order.durationLabel}
         </td>
@@ -429,7 +462,25 @@ function HistoryRow({
       </tr>
       {open ? (
         <tr style={{ backgroundColor: "#FFFFFF" }}>
-          <td colSpan={10} className="px-3 pb-4 pt-1">
+          <td colSpan={11} className="px-3 pb-4 pt-1">
+            {order.feedback ? (
+              <div
+                className="mb-3 rounded-2xl px-4 py-3"
+                style={{
+                  backgroundColor: order.feedback.requiereAtencion ? "#FEF2F2" : "#F8FAF7",
+                }}
+              >
+                <p className="text-sm font-bold" style={{ color: order.feedback.requiereAtencion ? brand.error : brand.ink }}>
+                  {feedbackEmoji(order.feedback.calificacion)} {order.feedback.calificacion}/5
+                  {order.feedback.requiereAtencion ? " · Requiere atención" : ""}
+                </p>
+                {order.feedback.comentario ? (
+                  <p className="mt-1 text-sm text-brand-ink">“{order.feedback.comentario}”</p>
+                ) : (
+                  <p className="mt-1 text-xs text-brand-muted">Sin comentario</p>
+                )}
+              </div>
+            ) : null}
             <OrderSnapshot
               direccion={order.direccion}
               metodoPago={order.metodoPago}

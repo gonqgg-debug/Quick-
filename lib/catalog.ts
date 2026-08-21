@@ -31,6 +31,57 @@ export async function getActiveOrderSession(
   };
 }
 
+const CATALOG_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
+
+export async function createCatalogSession(chatId: string): Promise<string> {
+  const supabase = getSupabaseAdminClient();
+
+  await supabase
+    .from("order_sessions")
+    .update({ estado: "expirada" })
+    .eq("chat_id", chatId)
+    .eq("estado", "activa");
+
+  const { data: session, error } = await supabase
+    .from("order_sessions")
+    .insert({
+      chat_id: chatId,
+      estado: "activa",
+      expira_en: new Date(Date.now() + CATALOG_SESSION_TTL_MS).toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (error || !session) {
+    throw new Error("No pudimos crear la sesión de pedido");
+  }
+
+  return session.id as string;
+}
+
+export async function ensureActiveCatalogSession(chatId: string): Promise<string> {
+  const supabase = getSupabaseAdminClient();
+  const { data: existing } = await supabase
+    .from("order_sessions")
+    .select("id, expira_en, edit_order_id")
+    .eq("chat_id", chatId)
+    .eq("estado", "activa")
+    .order("expira_en", { ascending: false })
+    .limit(8);
+
+  const reusable = (existing ?? []).find((row) => {
+    const notExpired = new Date(String(row.expira_en)).getTime() > Date.now();
+    const notEdit = !row.edit_order_id;
+    return notExpired && notEdit;
+  });
+
+  if (reusable?.id) {
+    return String(reusable.id);
+  }
+
+  return createCatalogSession(chatId);
+}
+
 export async function getOrderDraft(orderId: string): Promise<OrderDraft | null> {
   const supabase = getSupabaseAdminClient();
   const { data: order, error } = await supabase

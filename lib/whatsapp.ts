@@ -1,6 +1,7 @@
 import { appBaseUrl } from "@/lib/app-url";
 import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
+import type { OrderEstado } from "@/lib/types";
 
 const GRAPH_API_VERSION = "v20.0";
 const GRAPH_API_BASE = "https://graph.facebook.com";
@@ -398,7 +399,8 @@ async function sendButtonMenu(
 async function sendListMenu(
   phoneNumber: string,
   bodyText: string,
-  rows: MenuChoice[]
+  rows: MenuChoice[],
+  listButton = "Ver opciones"
 ): Promise<WhatsAppSendResult> {
   if (isTestChatPhone(phoneNumber)) {
     return skippedTestWhatsApp();
@@ -413,7 +415,7 @@ async function sendListMenu(
       type: "list",
       body: { text: bodyText },
       action: {
-        button: "Ver opciones",
+        button: listButton,
         sections: [
           {
             title: "Opciones",
@@ -444,6 +446,25 @@ async function sendChoiceMenu(
     return sendButtonMenu(phoneNumber, bodyText, choices);
   }
   return sendListMenu(phoneNumber, bodyText, choices);
+}
+
+export async function sendFeedbackSurvey(
+  phoneNumber: string,
+  orderId: string
+): Promise<WhatsAppSendResult> {
+  const numero = shortOrderId(orderId);
+  return sendListMenu(
+    phoneNumber,
+    `¿Cómo estuvo tu pedido #${numero}? Elige una cara:`,
+    [
+      { id: `feedback_${orderId}_1`, title: "😞 Mala" },
+      { id: `feedback_${orderId}_2`, title: "😐 Regular" },
+      { id: `feedback_${orderId}_3`, title: "🙂 Bien" },
+      { id: `feedback_${orderId}_4`, title: "😊 Muy bien" },
+      { id: `feedback_${orderId}_5`, title: "🤩 Excelente" },
+    ],
+    "Calificar"
+  );
 }
 
 async function getRegisteredCustomerName(phoneNumber: string): Promise<string | null> {
@@ -757,36 +778,69 @@ export async function confirmOrderToCustomer(
   await sendTextMessage(phoneNumber, message);
 }
 
-export async function notifyOrderDispatched(orderId: string): Promise<void> {
+export async function notifyCustomerOfOrderStatus(
+  orderId: string,
+  estado: OrderEstado
+): Promise<void> {
+  const textByEstado: Partial<Record<OrderEstado, (numero: string) => string>> = {
+    en_proceso: (numero) => `Tu pedido #${numero} ya está en preparación 🛍️`,
+    despachada: (numero) => `Tu pedido #${numero} va en camino 🚗`,
+    completada: (numero) => `Tu pedido #${numero} fue entregado. ¡Gracias por tu compra! 🙌`,
+  };
+
+  const buildText = textByEstado[estado];
+  if (!buildText) {
+    return;
+  }
+
   const supabase = getSupabaseAdminClient();
   const { data: order, error } = await supabase
     .from("orders")
-    .select("id, chats ( phone_number )")
+    .select("id, chat_id, es_prueba, chats ( phone_number )")
     .eq("id", orderId)
     .maybeSingle();
 
   if (error) {
-    throw new Error("No pudimos leer el pedido para avisar el despacho");
+    console.error("[whatsapp] no se pudo leer el pedido para notificar el estado", {
+      orderId,
+      estado,
+      error,
+    });
+    return;
   }
 
   if (!order) {
-    throw new Error(`No existe el pedido ${orderId}`);
+    console.error("[whatsapp] no se pudo notificar el estado: pedido no encontrado", {
+      orderId,
+      estado,
+    });
+    return;
+  }
+
+  if (Boolean(order.es_prueba)) {
+    return;
   }
 
   const chat = unwrapOne(
     order.chats as { phone_number: string } | { phone_number: string }[] | null
   );
-  const phoneNumber = chat?.phone_number;
+  const phoneNumber = typeof chat?.phone_number === "string" ? chat.phone_number.trim() : "";
 
-  if (!phoneNumber) {
-    throw new Error("El pedido no tiene un teléfono de cliente");
+  if (!order.chat_id || !phoneNumber) {
+    console.error("[whatsapp] no se pudo notificar el estado: falta chat_id o phone_number", {
+      orderId,
+      estado,
+      chatId: order.chat_id ?? null,
+    });
+    return;
   }
 
   const numero = shortOrderId(order.id as string);
-  await sendTextMessage(
-    phoneNumber,
-    `🚚 Tu pedido #${numero} ya salió. Para hacer un pedido nuevo, escríbenos cuando quieras.`
-  );
+  await sendTextMessage(phoneNumber, buildText(numero));
+}
+
+export async function notifyOrderDispatched(orderId: string): Promise<void> {
+  await notifyCustomerOfOrderStatus(orderId, "despachada");
 }
 
 async function sendMissingItemPrompt(phoneNumber: string, bodyText: string): Promise<void> {

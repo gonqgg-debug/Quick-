@@ -23,6 +23,9 @@ const HEADERS = [
   "Total",
   "Estado",
   "Tiempo que tardó",
+  "Calificación",
+  "Requiere atención",
+  "Comentario",
 ];
 
 export async function GET(request: NextRequest) {

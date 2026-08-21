@@ -28,6 +28,11 @@ export type HistoryOrder = {
   durationLabel: string;
   items: HistoryOrderItem[];
   esPrueba: boolean;
+  feedback: {
+    calificacion: number;
+    comentario: string | null;
+    requiereAtencion: boolean;
+  } | null;
 };
 
 export type HistoryFilters = {
@@ -38,6 +43,7 @@ export type HistoryFilters = {
   minTotal: number | null;
   maxTotal: number | null;
   includePruebas: boolean;
+  requiereAtencion: boolean;
   page: number;
   pageSize: number;
 };
@@ -79,8 +85,9 @@ export function parseHistoryFilters(searchParams: URLSearchParams): HistoryFilte
   const pageSizeRaw = Number(searchParams.get("pageSize") ?? HISTORY_PAGE_SIZE) || HISTORY_PAGE_SIZE;
   const pageSize = Math.min(100, Math.max(10, pageSizeRaw));
   const includePruebas = searchParams.get("pruebas") === "1";
+  const requiereAtencion = searchParams.get("atencion") === "1";
 
-  return { q, from, to, estados, minTotal, maxTotal, includePruebas, page, pageSize };
+  return { q, from, to, estados, minTotal, maxTotal, includePruebas, requiereAtencion, page, pageSize };
 }
 
 export function historyQueryString(filters: Omit<HistoryFilters, "page" | "pageSize"> & { page?: number }): string {
@@ -105,6 +112,9 @@ export function historyQueryString(filters: Omit<HistoryFilters, "page" | "pageS
   }
   if (filters.includePruebas) {
     params.set("pruebas", "1");
+  }
+  if (filters.requiereAtencion) {
+    params.set("atencion", "1");
   }
   if (filters.page && filters.page > 1) {
     params.set("page", String(filters.page));

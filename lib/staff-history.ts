@@ -49,6 +49,11 @@ const SELECT = `
     precio_unitario,
     estado,
     products!order_items_product_id_fkey ( nombre )
+  ),
+  order_feedback (
+    calificacion,
+    comentario,
+    requiere_atencion
   )
 `;
 
@@ -85,6 +90,7 @@ export function mapHistoryOrder(row: {
   chats?: unknown;
   customers?: unknown;
   order_items?: unknown;
+  order_feedback?: unknown;
 }): HistoryOrder {
   const chat = unwrapOne(
     row.chats as { phone_number?: string; nombre?: string | null } | { phone_number?: string; nombre?: string | null }[] | null
@@ -121,6 +127,22 @@ export function mapHistoryOrder(row: {
     .filter(Boolean)
     .join(" ");
 
+  const feedbackRow = unwrapOne(
+    row.order_feedback as
+      | { calificacion?: unknown; comentario?: unknown; requiere_atencion?: unknown }
+      | { calificacion?: unknown; comentario?: unknown; requiere_atencion?: unknown }[]
+      | null
+  );
+  const calificacion = feedbackRow ? Number(feedbackRow.calificacion) : NaN;
+  const feedback =
+    feedbackRow && Number.isInteger(calificacion) && calificacion >= 1 && calificacion <= 5
+      ? {
+          calificacion,
+          comentario: typeof feedbackRow.comentario === "string" ? feedbackRow.comentario : null,
+          requiereAtencion: Boolean(feedbackRow.requiere_atencion),
+        }
+      : null;
+
   return {
     id: String(row.id),
     createdAt,
@@ -140,6 +162,7 @@ export function mapHistoryOrder(row: {
     durationLabel,
     items,
     esPrueba: Boolean(row.es_prueba),
+    feedback,
   };
 }
 
@@ -147,10 +170,21 @@ export async function fetchHistoryPage(
   supabase: SupabaseClient,
   filters: HistoryFilters
 ): Promise<{ orders: HistoryOrder[]; total: number }> {
+  const attentionIds = await attentionOrderIds(supabase, filters);
+  if (attentionIds && attentionIds.length === 0) {
+    return { orders: [], total: 0 };
+  }
+
   const from = (filters.page - 1) * filters.pageSize;
   const to = from + filters.pageSize - 1;
   const search = await resolveHistorySearch(supabase, filters.q);
-  const { data, error, count } = await buildHistoryQuery(supabase, filters, { count: true }, search).range(from, to);
+  const { data, error, count } = await buildHistoryQuery(
+    supabase,
+    filters,
+    { count: true },
+    search,
+    attentionIds
+  ).range(from, to);
 
   if (error) {
     throw error;
@@ -166,12 +200,23 @@ export async function fetchHistoryForExport(
   supabase: SupabaseClient,
   filters: HistoryFilters
 ): Promise<HistoryOrder[]> {
+  const attentionIds = await attentionOrderIds(supabase, filters);
+  if (attentionIds && attentionIds.length === 0) {
+    return [];
+  }
+
   const search = await resolveHistorySearch(supabase, filters.q);
   const orders: HistoryOrder[] = [];
   let offset = 0;
   while (offset < HISTORY_EXPORT_MAX_ROWS) {
     const to = Math.min(offset + HISTORY_EXPORT_BATCH - 1, HISTORY_EXPORT_MAX_ROWS - 1);
-    const { data, error } = await buildHistoryQuery(supabase, filters, { count: false }, search).range(offset, to);
+    const { data, error } = await buildHistoryQuery(
+      supabase,
+      filters,
+      { count: false },
+      search,
+      attentionIds
+    ).range(offset, to);
     if (error) {
       throw error;
     }
@@ -195,6 +240,24 @@ type HistorySearch = {
   customerIds: string[];
   range: { gte: string; lte: string } | null;
 };
+
+async function attentionOrderIds(
+  supabase: SupabaseClient,
+  filters: HistoryFilters
+): Promise<string[] | null> {
+  if (!filters.requiereAtencion) {
+    return null;
+  }
+  const { data, error } = await supabase
+    .from("order_feedback")
+    .select("order_id")
+    .eq("requiere_atencion", true)
+    .limit(2000);
+  if (error) {
+    throw error;
+  }
+  return Array.from(new Set((data ?? []).map((row) => String(row.order_id))));
+}
 
 async function resolveHistorySearch(supabase: SupabaseClient, rawQuery: string): Promise<HistorySearch | null> {
   const needle = rawQuery.toLowerCase();
@@ -228,13 +291,18 @@ function buildHistoryQuery(
   supabase: SupabaseClient,
   filters: HistoryFilters,
   options: { count: boolean },
-  search: HistorySearch | null
+  search: HistorySearch | null,
+  attentionIds: string[] | null
 ) {
   let query = supabase
     .from("orders")
     .select(SELECT, options.count ? { count: "exact" } : undefined)
     .in("estado", filters.estados)
     .order("created_at", { ascending: false });
+
+  if (attentionIds) {
+    query = query.in("id", attentionIds);
+  }
 
   if (!filters.includePruebas) {
     query = query.eq("es_prueba", false);
@@ -297,5 +365,8 @@ export function historyExportRows(orders: HistoryOrder[]): (string | number)[][]
     order.totalEstimado,
     orderStatusLabel(order.estado),
     order.durationLabel,
+    order.feedback ? `${order.feedback.calificacion}/5` : "",
+    order.feedback?.requiereAtencion ? "Sí" : "",
+    order.feedback?.comentario || "",
   ]);
 }
