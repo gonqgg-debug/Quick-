@@ -32,6 +32,7 @@ export async function GET() {
       total_estimado,
       notas,
       chat_id,
+      es_prueba,
       chats (
         id,
         phone_number,
@@ -88,6 +89,7 @@ export async function GET() {
       clienteNombre: chat?.nombre ? String(chat.nombre) : null,
       clienteTelefono: chat?.phone_number ? String(chat.phone_number) : "Sin teléfono",
       mensajePendiente: Boolean(chat?.mensaje_pendiente),
+      esPrueba: Boolean(order.es_prueba),
       items: items.map((item) => {
         const product = unwrapOne(
           item.products as { nombre: string } | { nombre: string }[] | null

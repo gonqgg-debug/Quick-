@@ -38,7 +38,7 @@ export function AdminLoginForm() {
       const safeNext =
         next && (next === "/admin" || next.startsWith("/admin/")) && !next.startsWith("//")
           ? next
-          : "/admin/historial";
+          : "/admin";
       router.replace(safeNext);
       router.refresh();
     } catch {

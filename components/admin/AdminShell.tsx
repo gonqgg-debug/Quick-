@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Logo } from "@/components/brand/Logo";
 import { createAdminBrowserClient } from "@/lib/admin-browser";
-import { ADMIN_NAV, ADMIN_SOON_NAV } from "@/lib/admin-nav";
+import { ADMIN_DELIVERY_NAV, ADMIN_HOME, ADMIN_NAV, ADMIN_SOON_NAV } from "@/lib/admin-nav";
 import { brand } from "@/lib/theme";
 
 type AdminShellProps = {
@@ -13,6 +13,9 @@ type AdminShellProps = {
 };
 
 function isActivePath(pathname: string, href: string): boolean {
+  if (href === "/admin") {
+    return pathname === "/admin";
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -35,7 +38,7 @@ export function AdminShell({ email, children }: AdminShellProps) {
           className="hidden w-[232px] shrink-0 flex-col border-r px-3 py-5 md:flex"
           style={{ borderColor: "#F3F4F6", backgroundColor: "#FAFBFA" }}
         >
-          <Link href="/admin/historial" className="px-2" aria-label="Administración Quick!">
+          <Link href="/admin" className="px-2" aria-label="Administración Quick!">
             <Logo className="h-9 w-auto max-w-[160px]" />
           </Link>
           <p className="mt-4 px-2 text-[11px] font-bold uppercase tracking-wide text-brand-muted">Admin</p>
@@ -56,7 +59,7 @@ export function AdminShell({ email, children }: AdminShellProps) {
         <div className="min-w-0 flex-1">
           <header className="border-b px-4 py-3 md:hidden" style={{ borderColor: "#F3F4F6", backgroundColor: "#FAFBFA" }}>
             <div className="flex items-center justify-between gap-3">
-              <Link href="/admin/historial" aria-label="Administración Quick!">
+              <Link href="/admin" aria-label="Administración Quick!">
                 <Logo className="h-8 w-auto max-w-[140px]" />
               </Link>
               <button type="button" onClick={() => void handleLogout()} className="text-sm font-bold">
@@ -89,7 +92,7 @@ export function AdminShell({ email, children }: AdminShellProps) {
             </nav>
             {catalogOpen ? (
               <nav className="mt-2 flex flex-wrap gap-1" aria-label="Catálogo">
-                {(ADMIN_NAV.find((item) => item.href === "/admin/catalogo")?.children ?? []).map((child) => {
+                {(ADMIN_DELIVERY_NAV.find((item) => item.href === "/admin/catalogo")?.children ?? []).map((child) => {
                   const active = pathname === child.href;
                   return (
                     <Link
@@ -116,9 +119,24 @@ export function AdminShell({ email, children }: AdminShellProps) {
 }
 
 function NavLinks({ pathname }: { pathname: string }) {
+  const homeActive = isActivePath(pathname, ADMIN_HOME.href);
+
   return (
     <nav className="mt-2 flex flex-col gap-0.5" aria-label="Administración">
-      {ADMIN_NAV.map((item) => {
+      <Link
+        href={ADMIN_HOME.href}
+        className="block rounded-xl px-3 py-2.5 text-sm font-semibold"
+        style={{
+          backgroundColor: homeActive ? `${brand.green}18` : "transparent",
+          color: homeActive ? brand.green : brand.ink,
+        }}
+      >
+        {ADMIN_HOME.label}
+      </Link>
+      <div className="mt-4 px-2">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-brand-muted">Delivery</p>
+      </div>
+      {ADMIN_DELIVERY_NAV.map((item) => {
         const active = isActivePath(pathname, item.href);
         return (
           <div key={item.href}>

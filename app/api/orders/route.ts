@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 
   const { data: session, error: sessionError } = await supabase
     .from("order_sessions")
-    .select("id, chat_id, estado, expira_en, edit_order_id")
+    .select("id, chat_id, estado, expira_en, edit_order_id, es_prueba")
     .eq("id", sessionId)
     .maybeSingle();
 
@@ -106,6 +106,7 @@ export async function POST(request: NextRequest) {
     return jsonError("La dirección de entrega es obligatoria.", 400);
   }
 
+  const esPrueba = Boolean(session.es_prueba);
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .insert({
@@ -116,6 +117,7 @@ export async function POST(request: NextRequest) {
       metodo_pago: body.metodoPago,
       estado: "nueva",
       total_estimado: priced.totalEstimado,
+      es_prueba: esPrueba,
     })
     .select("id")
     .single();
@@ -147,16 +149,18 @@ export async function POST(request: NextRequest) {
     return jsonError("El pedido se creó, pero no pudimos cerrar la sesión.", 500);
   }
 
-  const notifications = await Promise.allSettled([
-    sendOrderToStaff(order.id),
-    confirmOrderToCustomer(order.id),
-  ]);
+  if (!esPrueba) {
+    const notifications = await Promise.allSettled([
+      sendOrderToStaff(order.id),
+      confirmOrderToCustomer(order.id),
+    ]);
 
-  notifications.forEach((result) => {
-    if (result.status === "rejected") {
-      console.error("No se pudo notificar el pedido por WhatsApp", result.reason);
-    }
-  });
+    notifications.forEach((result) => {
+      if (result.status === "rejected") {
+        console.error("No se pudo notificar el pedido por WhatsApp", result.reason);
+      }
+    });
+  }
 
   return NextResponse.json({ success: true, orderId: order.id });
 }

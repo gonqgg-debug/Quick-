@@ -27,6 +27,7 @@ export type HistoryOrder = {
   itemCount: number;
   durationLabel: string;
   items: HistoryOrderItem[];
+  esPrueba: boolean;
 };
 
 export type HistoryFilters = {
@@ -36,6 +37,7 @@ export type HistoryFilters = {
   estados: HistoryEstado[];
   minTotal: number | null;
   maxTotal: number | null;
+  includePruebas: boolean;
   page: number;
   pageSize: number;
 };
@@ -76,8 +78,9 @@ export function parseHistoryFilters(searchParams: URLSearchParams): HistoryFilte
   const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
   const pageSizeRaw = Number(searchParams.get("pageSize") ?? HISTORY_PAGE_SIZE) || HISTORY_PAGE_SIZE;
   const pageSize = Math.min(100, Math.max(10, pageSizeRaw));
+  const includePruebas = searchParams.get("pruebas") === "1";
 
-  return { q, from, to, estados, minTotal, maxTotal, page, pageSize };
+  return { q, from, to, estados, minTotal, maxTotal, includePruebas, page, pageSize };
 }
 
 export function historyQueryString(filters: Omit<HistoryFilters, "page" | "pageSize"> & { page?: number }): string {
@@ -99,6 +102,9 @@ export function historyQueryString(filters: Omit<HistoryFilters, "page" | "pageS
   }
   if (filters.maxTotal != null) {
     params.set("max", String(filters.maxTotal));
+  }
+  if (filters.includePruebas) {
+    params.set("pruebas", "1");
   }
   if (filters.page && filters.page > 1) {
     params.set("page", String(filters.page));

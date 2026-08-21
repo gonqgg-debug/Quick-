@@ -61,7 +61,7 @@ export async function updateAdminSession(request: NextRequest) {
 
   if (isLogin && isAdmin) {
     const redirect = request.nextUrl.clone();
-    redirect.pathname = "/admin/historial";
+    redirect.pathname = "/admin";
     redirect.search = "";
     return NextResponse.redirect(redirect);
   }

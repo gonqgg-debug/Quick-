@@ -1,3 +1,4 @@
+import { appBaseUrl } from "@/lib/app-url";
 import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
@@ -39,18 +40,19 @@ function getMessagesEndpoint(): string {
 }
 
 function catalogBaseUrl(): string {
-  const explicit = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
-  if (explicit) {
-    return explicit.replace(/\/$/, "");
-  }
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL.replace(/\/$/, "")}`;
-  }
-  return "http://localhost:3000";
+  return appBaseUrl();
 }
 
 export function normalizePhoneNumber(phoneNumber: string): string {
   return phoneNumber.replace(/[^\d]/g, "");
+}
+
+function isTestChatPhone(phoneNumber: string): boolean {
+  return phoneNumber.trim().toLowerCase().startsWith("prueba");
+}
+
+function skippedTestWhatsApp(): WhatsAppSendResult {
+  return { ok: true, status: 200, data: { skipped: true } };
 }
 
 function formatRd(value: unknown): string {
@@ -228,6 +230,9 @@ export async function logIncomingMessage(
 }
 
 export async function sendTextMessage(phoneNumber: string, text: string): Promise<WhatsAppSendResult> {
+  if (isTestChatPhone(phoneNumber)) {
+    return skippedTestWhatsApp();
+  }
   const to = normalizePhoneNumber(phoneNumber);
   const result = await postWhatsAppMessage({
     messaging_product: "whatsapp",
@@ -254,6 +259,9 @@ export async function sendImageMessage(
     storagePath: string;
   }
 ): Promise<WhatsAppSendResult> {
+  if (isTestChatPhone(phoneNumber)) {
+    return skippedTestWhatsApp();
+  }
   const { uploadMediaToWhatsApp } = await import("@/lib/whatsapp-media");
   let mediaId: string;
   try {
@@ -363,6 +371,9 @@ async function sendButtonMenu(
   bodyText: string,
   buttons: MenuChoice[]
 ): Promise<WhatsAppSendResult> {
+  if (isTestChatPhone(phoneNumber)) {
+    return skippedTestWhatsApp();
+  }
   const to = normalizePhoneNumber(phoneNumber);
   const result = await postWhatsAppMessage({
     messaging_product: "whatsapp",
@@ -393,6 +404,9 @@ async function sendListMenu(
   bodyText: string,
   rows: MenuChoice[]
 ): Promise<WhatsAppSendResult> {
+  if (isTestChatPhone(phoneNumber)) {
+    return skippedTestWhatsApp();
+  }
   const to = normalizePhoneNumber(phoneNumber);
   const result = await postWhatsAppMessage({
     messaging_product: "whatsapp",

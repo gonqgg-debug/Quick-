@@ -11,9 +11,14 @@ export type AdminNavItem = {
   children?: AdminNavChild[];
 };
 
-/** Active and reserved admin sections. Add new live/slot items here. */
-export const ADMIN_NAV: AdminNavItem[] = [
-  { href: "/admin/historial", label: "Historial", status: "live" },
+export const ADMIN_HOME: AdminNavItem = {
+  href: "/admin",
+  label: "Inicio",
+  status: "live",
+};
+
+export const ADMIN_DELIVERY_NAV: AdminNavItem[] = [
+  { href: "/admin/historial", label: "Historial de Delivery", status: "live" },
   {
     href: "/admin/catalogo",
     label: "Catálogo",
@@ -25,6 +30,9 @@ export const ADMIN_NAV: AdminNavItem[] = [
     ],
   },
 ];
+
+/** Live admin links, home first. Used by the mobile nav. */
+export const ADMIN_NAV: AdminNavItem[] = [ADMIN_HOME, ...ADMIN_DELIVERY_NAV];
 
 /** Future sections — visible in the menu, not routed yet. */
 export const ADMIN_SOON_NAV = ["Caja", "Compras", "P&L", "Metas"] as const;

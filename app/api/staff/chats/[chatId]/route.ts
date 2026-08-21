@@ -109,6 +109,7 @@ export async function GET(
       estado,
       direccion,
       total_estimado,
+      es_prueba,
       order_items (
         cantidad,
         products!order_items_product_id_fkey ( nombre )
@@ -131,6 +132,7 @@ export async function GET(
       estado: String(order.estado),
       direccion: String(order.direccion ?? ""),
       totalLabel: formatPrice(order.total_estimado),
+      esPrueba: Boolean(order.es_prueba),
       items: items.map((item) => {
         const product = unwrapOne(item.products as { nombre: string } | { nombre: string }[] | null);
         return {

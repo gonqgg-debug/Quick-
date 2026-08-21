@@ -8,6 +8,22 @@ export function isAdminUser(user: User | null | undefined): boolean {
   return Boolean(user && user.app_metadata?.role === ADMIN_ROLE);
 }
 
+export function adminGreetingName(user: User): string {
+  const meta = user.user_metadata ?? {};
+  const fromMeta = [meta.full_name, meta.name, meta.nombre, meta.display_name].find(
+    (value) => typeof value === "string" && value.trim().length > 0
+  );
+  if (typeof fromMeta === "string") {
+    return fromMeta.trim().split(/\s+/)[0];
+  }
+
+  const local = (user.email ?? "").split("@")[0]?.replace(/[._-]+/g, " ").trim();
+  if (!local) {
+    return "admin";
+  }
+  return local.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 export function createAdminServerClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

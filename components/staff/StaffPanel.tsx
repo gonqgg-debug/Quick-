@@ -5,6 +5,7 @@ import { StaffChatPanel } from "@/components/staff/StaffChatPanel";
 import { StaffChrome } from "@/components/staff/StaffChrome";
 import { StaffLogin, staffLogout } from "@/components/staff/StaffLogin";
 import { OrderSnapshot } from "@/components/staff/OrderSnapshot";
+import { PruebaBadge } from "@/components/order/PruebaBadge";
 import { isToday } from "@/lib/local-day";
 import {
   elapsedMinutes,
@@ -47,6 +48,7 @@ type StaffOrder = {
   clienteNombre: string | null;
   clienteTelefono: string;
   mensajePendiente?: boolean;
+  esPrueba?: boolean;
   items: StaffOrderItem[];
 };
 
@@ -590,12 +592,15 @@ function OrderCard({
       >
         <div className="min-w-0">
           <p className="font-display text-xl font-bold">
-            #{formatOrderNumber(order.id)}
-            {agingLevel === "urgent" ? (
-              <span className="ml-1.5 text-base" aria-label="Pedido urgente">
-                ⚠️
-              </span>
-            ) : null}
+            <span className="inline-flex items-center gap-1.5">
+              #{formatOrderNumber(order.id)}
+              {order.esPrueba ? <PruebaBadge /> : null}
+              {agingLevel === "urgent" ? (
+                <span className="text-base" aria-label="Pedido urgente">
+                  ⚠️
+                </span>
+              ) : null}
+            </span>
           </p>
           {aging && agingLevel ? (
             <>
@@ -756,8 +761,11 @@ function TableRowFragment({
       <tr className="border-t" style={{ borderColor: "#F3F4F6" }}>
         <td className="px-4 py-3">
           <button type="button" onClick={() => onSelect(open ? null : order.id)} className="text-left font-bold">
-            #{formatOrderNumber(order.id)}
-            {agingLevel === "urgent" ? " ⚠️" : ""}
+            <span className="inline-flex items-center gap-1.5">
+              #{formatOrderNumber(order.id)}
+              {order.esPrueba ? <PruebaBadge /> : null}
+              {agingLevel === "urgent" ? " ⚠️" : ""}
+            </span>
           </button>
           {order.mensajePendiente && order.chatId ? (
             <div className="mt-2">

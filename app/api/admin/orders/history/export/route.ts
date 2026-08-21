@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const buffer = buildXlsx(HEADERS, historyExportRows(orders));
+    const buffer = buildXlsx(HEADERS, historyExportRows(orders), "Historial de Delivery");
     const filename = `historial-pedidos-${localDayKey(new Date().toISOString())}.xlsx`;
 
     return new NextResponse(Uint8Array.from(buffer), {

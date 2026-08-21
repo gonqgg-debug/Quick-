@@ -4,6 +4,7 @@ export type OrderSession = {
   estado: "activa" | "usada" | "expirada";
   expira_en: string;
   edit_order_id: string | null;
+  es_prueba?: boolean;
 };
 
 export type Product = {

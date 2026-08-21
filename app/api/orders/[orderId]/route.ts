@@ -62,7 +62,7 @@ export async function PATCH(
 
   const { data: order, error: orderError } = await supabase
     .from("orders")
-    .select("id, chat_id, estado, direccion, metodo_pago")
+    .select("id, chat_id, estado, direccion, metodo_pago, es_prueba")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -178,16 +178,18 @@ export async function PATCH(
     return jsonError("El pedido se actualizó, pero no pudimos cerrar la sesión.", 500);
   }
 
-  const notifications = await Promise.allSettled([
-    sendOrderToStaff(order.id, true),
-    confirmOrderToCustomer(order.id, true),
-  ]);
+  if (!Boolean(order.es_prueba)) {
+    const notifications = await Promise.allSettled([
+      sendOrderToStaff(order.id, true),
+      confirmOrderToCustomer(order.id, true),
+    ]);
 
-  notifications.forEach((result) => {
-    if (result.status === "rejected") {
-      console.error("No se pudo notificar la modificación por WhatsApp", result.reason);
-    }
-  });
+    notifications.forEach((result) => {
+      if (result.status === "rejected") {
+        console.error("No se pudo notificar la modificación por WhatsApp", result.reason);
+      }
+    });
+  }
 
   return NextResponse.json({ success: true, orderId: order.id, updated: true });
 }

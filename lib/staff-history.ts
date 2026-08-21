@@ -33,6 +33,7 @@ const SELECT = `
   direccion,
   metodo_pago,
   total_estimado,
+  es_prueba,
   chats (
     phone_number,
     nombre
@@ -80,6 +81,7 @@ export function mapHistoryOrder(row: {
   direccion: unknown;
   metodo_pago?: unknown;
   total_estimado: unknown;
+  es_prueba?: unknown;
   chats?: unknown;
   customers?: unknown;
   order_items?: unknown;
@@ -137,6 +139,7 @@ export function mapHistoryOrder(row: {
     itemCount,
     durationLabel,
     items,
+    esPrueba: Boolean(row.es_prueba),
   };
 }
 
@@ -233,6 +236,10 @@ function buildHistoryQuery(
     .in("estado", filters.estados)
     .order("created_at", { ascending: false });
 
+  if (!filters.includePruebas) {
+    query = query.eq("es_prueba", false);
+  }
+
   const fromDay = filters.from && filters.to && filters.from > filters.to ? filters.to : filters.from;
   const toDay = filters.from && filters.to && filters.from > filters.to ? filters.from : filters.to;
   if (fromDay) {
@@ -282,7 +289,7 @@ function buildHistoryQuery(
 export function historyExportRows(orders: HistoryOrder[]): (string | number)[][] {
   return orders.map((order) => [
     formatHistoryDateTime(order.createdAt),
-    `#${formatOrderNumber(order.id)}`,
+    `#${formatOrderNumber(order.id)}${order.esPrueba ? " PRUEBA" : ""}`,
     order.clienteNombre || "—",
     order.clienteTelefono,
     order.direccion,

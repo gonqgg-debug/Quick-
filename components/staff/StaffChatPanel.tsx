@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { formatOrderNumber, orderStatusLabel } from "@/lib/order-display";
+import { PruebaBadge } from "@/components/order/PruebaBadge";
 import { brand } from "@/lib/theme";
 
 type ChatMessage = {
@@ -26,6 +27,7 @@ type RelatedOrder = {
   estado: string;
   direccion: string;
   totalLabel: string;
+  esPrueba?: boolean;
   items: { cantidad: number; nombre: string }[];
 };
 
@@ -339,7 +341,8 @@ export function StaffChatPanel({ chatId, onClose, onUnauthorized, onConcluded }:
               >
                 {orders.map((order) => (
                   <option key={order.id} value={order.id}>
-                    #{formatOrderNumber(order.id)} · {orderStatusLabel(order.estado)}
+                    #{formatOrderNumber(order.id)}
+                    {order.esPrueba ? " PRUEBA" : ""} · {orderStatusLabel(order.estado)}
                   </option>
                 ))}
               </select>
@@ -574,7 +577,10 @@ function OrderSummary({ order, showTitle }: { order: RelatedOrder; showTitle: bo
     <div>
       {showTitle ? (
         <p className="font-display text-base font-bold">
-          #{formatOrderNumber(order.id)}{" "}
+          <span className="inline-flex items-center gap-1.5">
+            #{formatOrderNumber(order.id)}
+            {order.esPrueba ? <PruebaBadge /> : null}
+          </span>{" "}
           <span className="text-sm font-semibold text-brand-muted">· {orderStatusLabel(order.estado)}</span>
         </p>
       ) : (

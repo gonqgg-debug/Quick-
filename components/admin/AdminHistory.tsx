@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { OrderSnapshot } from "@/components/staff/OrderSnapshot";
+import { PruebaBadge } from "@/components/order/PruebaBadge";
 import { formatOrderNumber, orderStatusLabel } from "@/lib/order-display";
 import {
   HISTORY_PAGE_SIZE,
@@ -41,6 +42,7 @@ export function AdminHistory() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [estado, setEstado] = useState<"todos" | HistoryEstado>("todos");
+  const [includePruebas, setIncludePruebas] = useState(false);
   const [minTotal, setMinTotal] = useState("");
   const [maxTotal, setMaxTotal] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -64,8 +66,9 @@ export function AdminHistory() {
       estados,
       minTotal: Number.isFinite(min) ? min : null,
       maxTotal: Number.isFinite(max) ? max : null,
+      includePruebas,
     };
-  }, [query, from, to, estado, minTotal, maxTotal]);
+  }, [query, from, to, estado, minTotal, maxTotal, includePruebas]);
 
   const queryString = useMemo(() => historyQueryString({ ...filterParams, page }), [filterParams, page]);
 
@@ -154,8 +157,8 @@ export function AdminHistory() {
       <div className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Historial</p>
-            <h1 className="font-display text-2xl font-bold">Pedidos cerrados</h1>
+            <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Delivery</p>
+            <h1 className="font-display text-2xl font-bold">Historial de Delivery</h1>
           </div>
           <button
             type="button"
@@ -262,6 +265,24 @@ export function AdminHistory() {
             );
           })}
         </div>
+
+        <label className="flex items-start gap-2 text-sm font-semibold" style={{ color: brand.ink }}>
+          <input
+            type="checkbox"
+            checked={includePruebas}
+            onChange={(event) => {
+              setIncludePruebas(event.target.checked);
+              setPage(1);
+            }}
+            className="mt-0.5 h-4 w-4 accent-[#7EB341]"
+          />
+          <span>
+            Incluir pedidos de prueba
+            <span className="block text-xs font-medium text-brand-muted">
+              Por defecto quedan fuera de la lista, las métricas y la exportación.
+            </span>
+          </span>
+        </label>
       </div>
 
       <div className="mt-6">
@@ -372,7 +393,12 @@ function HistoryRow({
         <td className="whitespace-nowrap px-3 py-2.5 text-xs text-brand-muted">
           {formatHistoryDateTime(order.createdAt)}
         </td>
-        <td className="whitespace-nowrap px-3 py-2.5 font-bold">#{formatOrderNumber(order.id)}</td>
+        <td className="whitespace-nowrap px-3 py-2.5 font-bold">
+          <span className="inline-flex items-center gap-1.5">
+            #{formatOrderNumber(order.id)}
+            {order.esPrueba ? <PruebaBadge /> : null}
+          </span>
+        </td>
         <td className="max-w-[140px] truncate px-3 py-2.5">{order.clienteNombre || "—"}</td>
         <td className="whitespace-nowrap px-3 py-2.5">{order.clienteTelefono}</td>
         <td className="max-w-[220px] truncate px-3 py-2.5" title={order.direccion}>
