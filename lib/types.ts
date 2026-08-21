@@ -1,3 +1,5 @@
+import type { StructuredAddressFields } from "@/lib/customers";
+
 export type OrderSession = {
   id: string;
   chat_id: string;
@@ -41,13 +43,7 @@ export type CreateOrderPayload = {
   direccion: string;
   metodoPago: MetodoPago;
   addressId?: string | null;
-  nuevaDireccion?: {
-    direccion?: string;
-    etiqueta: "Casa" | "Trabajo" | "Otro";
-    residencial?: string;
-    edificio?: string;
-    apartamento?: string;
-  } | null;
+  nuevaDireccion?: StructuredAddressFields | null;
 };
 
 export type CreateOrderResponse = {
