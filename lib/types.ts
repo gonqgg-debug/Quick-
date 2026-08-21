@@ -7,6 +7,7 @@ export type OrderSession = {
   expira_en: string;
   edit_order_id: string | null;
   es_prueba?: boolean;
+  tienda?: string;
 };
 
 export type Product = {

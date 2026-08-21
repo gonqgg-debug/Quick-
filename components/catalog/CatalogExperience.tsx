@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { CustomerRegisterForm } from "@/components/catalog/CustomerRegisterForm";
 import { DeliveryAddressFields } from "@/components/catalog/DeliveryAddressFields";
+import { PromoBanner } from "@/components/catalog/PromoBanner";
 import { Badge } from "@/components/brand/Badge";
 import { CartIcon } from "@/components/brand/CartIcon";
 import { Logo } from "@/components/brand/Logo";
+import { CATALOG_PROMO_BANNERS } from "@/lib/catalog-promo";
 import {
   ADDRESS_LABELS,
   EMPTY_ADDRESS_DRAFT,
@@ -348,6 +350,8 @@ export function CatalogExperience({
             </button>
           </div>
 
+          <PromoBanner banners={CATALOG_PROMO_BANNERS} />
+
           <label className="relative mt-3 block">
             <span className="sr-only">Buscar productos</span>
             <SearchIcon />
@@ -409,9 +413,9 @@ export function CatalogExperience({
             {pharmaGroups.length > 0 ? (
               <div className="space-y-4">
                 <div className="overflow-hidden rounded-3xl text-white" style={{ backgroundColor: brand.blue }}>
-                  <div className="px-4 py-4">
-                    <Logo variant="pharma" onDark />
-                    <p className="mt-2 text-sm text-white/90">Farmacia y cuidado personal</p>
+                  <div className="px-5 py-6">
+                    <Logo variant="pharma" onDark className="h-20 w-auto max-w-full sm:h-24" />
+                    <p className="mt-3 text-base text-white/90">Farmacia y cuidado personal</p>
                   </div>
                 </div>
                 {pharmaGroups.map(([categoria, items]) => (

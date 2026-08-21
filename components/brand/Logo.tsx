@@ -22,9 +22,9 @@ export function Logo({ className = "", variant = "market", onDark = false }: Log
     <img
       src={src}
       alt={variant === "pharma" ? "PharmaQuick!" : "Quick! Mini Market"}
-      className={`h-16 w-auto max-w-[280px] object-contain object-left ${
+      className={`w-auto object-contain object-left ${
         onDark ? "brightness-0 invert" : ""
-      } ${className}`}
+      } ${className || "h-16 max-w-[280px]"}`}
       onError={() => setFailed(true)}
     />
   );
