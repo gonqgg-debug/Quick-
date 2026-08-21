@@ -7,6 +7,8 @@ import { brand } from "@/lib/theme";
 import {
   CATALOG_PRODUCTS_PAGE_SIZE,
   catalogProductsQueryString,
+  isUncategorized,
+  shortOdooCode,
   type AdminCatalogProduct,
   type AdminCatalogProductList,
 } from "@/lib/admin-catalog-products-shared";
@@ -17,6 +19,16 @@ const ESTADO_FILTERS: Array<{ id: "todos" | "activo" | "inactivo"; label: string
   { id: "inactivo", label: "Inactivos" },
 ];
 
+const BATCH_CONFIRM = 20;
+
+type PatchPayload = {
+  nombre?: string;
+  marca?: string | null;
+  categoria?: string;
+  precio?: number;
+  activo?: boolean;
+};
+
 export function AdminCatalogProducts() {
   const router = useRouter();
   const [products, setProducts] = useState<AdminCatalogProduct[]>([]);
@@ -25,6 +37,11 @@ export function AdminCatalogProducts() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [batchCategory, setBatchCategory] = useState("");
+  const [batchNewCategory, setBatchNewCategory] = useState("");
 
   const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
@@ -39,9 +56,17 @@ export function AdminCatalogProducts() {
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
+  useEffect(() => {
+    setSelected([]);
+  }, [query, categoria, estado]);
+
   const queryString = useMemo(
     () => catalogProductsQueryString({ q: query, categoria, estado, page }),
     [query, categoria, estado, page]
+  );
+  const filterQueryString = useMemo(
+    () => catalogProductsQueryString({ q: query, categoria, estado, page: 1 }),
+    [query, categoria, estado]
   );
 
   const load = useCallback(async () => {
@@ -83,7 +108,17 @@ export function AdminCatalogProducts() {
     };
   }, [load]);
 
-  async function patchProduct(id: string, payload: { precio?: number; activo?: boolean }) {
+  function rememberCategory(value: string) {
+    const next = value.trim();
+    if (!next || isUncategorized(next)) {
+      return;
+    }
+    setCategories((current) =>
+      current.includes(next) ? current : [...current, next].sort((left, right) => left.localeCompare(right, "es"))
+    );
+  }
+
+  async function patchProduct(id: string, payload: PatchPayload) {
     const response = await fetch("/api/admin/catalogo/productos", {
       method: "PATCH",
       credentials: "include",
@@ -98,6 +133,9 @@ export function AdminCatalogProducts() {
     if (!response.ok || !body?.product) {
       throw new Error(body?.error || "No pudimos guardar");
     }
+    if (payload.categoria) {
+      rememberCategory(payload.categoria);
+    }
     setProducts((current) => {
       const next = current.map((item) => (item.id === id ? body.product! : item));
       if (estado === "activo" && !body.product!.activo) {
@@ -111,19 +149,130 @@ export function AdminCatalogProducts() {
     return body.product;
   }
 
+  async function runBatch(payload: { activo?: boolean; categoria?: string }) {
+    if (selected.length === 0) {
+      return;
+    }
+    const needsConfirm =
+      selected.length > BATCH_CONFIRM && (payload.activo !== undefined || Boolean(payload.categoria));
+    if (needsConfirm) {
+      const action =
+        payload.activo === true ? "activar" : payload.activo === false ? "desactivar" : "cambiar de categoría";
+      if (!window.confirm(`Vas a ${action} ${selected.length} productos. ¿Continuar?`)) {
+        return;
+      }
+    }
+    setBatchBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/admin/catalogo/productos/batch", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selected, ...payload }),
+      });
+      if (response.status === 401) {
+        router.replace("/admin/login");
+        return;
+      }
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) {
+        throw new Error(body?.error || "No pudimos actualizar los seleccionados");
+      }
+      if (payload.categoria) {
+        rememberCategory(payload.categoria);
+      }
+      setSelected([]);
+      setBatchCategory("");
+      setBatchNewCategory("");
+      await load();
+    } catch (batchError) {
+      setError(batchError instanceof Error ? batchError.message : "Error en la acción masiva");
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  async function exportWorkbook(ids?: string[]) {
+    setExporting(true);
+    setError(null);
+    try {
+      const response = ids
+        ? await fetch("/api/admin/catalogo/productos/export", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids }),
+          })
+        : await fetch(`/api/admin/catalogo/productos/export?${filterQueryString}`, { credentials: "include" });
+      if (response.status === 401) {
+        router.replace("/admin/login");
+        return;
+      }
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || "No pudimos exportar");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const stamp = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `catalogo-productos-${stamp}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : "Error al exportar");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const pageIds = products.map((product) => product.id);
+  const selectedOnPage = pageIds.filter((id) => selected.includes(id));
+  const allPageSelected = pageIds.length > 0 && selectedOnPage.length === pageIds.length;
+  const somePageSelected = selectedOnPage.length > 0 && !allPageSelected;
+  const usableCategories = categories.filter((item) => !isUncategorized(item));
   const pageCount = Math.max(1, Math.ceil(total / CATALOG_PRODUCTS_PAGE_SIZE));
   const fromRow = total === 0 ? 0 : (page - 1) * CATALOG_PRODUCTS_PAGE_SIZE + 1;
   const toRow = Math.min(page * CATALOG_PRODUCTS_PAGE_SIZE, total);
 
+  function togglePage(checked: boolean) {
+    setSelected((current) => {
+      if (checked) {
+        return Array.from(new Set([...current, ...pageIds]));
+      }
+      return current.filter((id) => !pageIds.includes(id));
+    });
+  }
+
+  function toggleRow(id: string, checked: boolean) {
+    setSelected((current) => (checked ? Array.from(new Set([...current, id])) : current.filter((item) => item !== id)));
+  }
+
+  const assignCategory = batchCategory === "__new__" ? batchNewCategory.trim() : batchCategory;
+
   return (
-    <div>
+    <div className={selected.length > 0 ? "pb-24" : undefined}>
       <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Catálogo</p>
-      <div className="mt-1">
-        <h1 className="font-display text-2xl font-bold">Productos</h1>
-        <p className="mt-1 max-w-xl text-sm text-brand-muted">
-          Lista completa para revisar precios y desactivar lo que ya no se vende. El catálogo público solo muestra
-          productos activos.
-        </p>
+      <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-bold">Productos</h1>
+          <p className="mt-1 max-w-xl text-sm text-brand-muted">
+            Click en nombre, marca, categoría o precio para editar. El catálogo público solo muestra productos activos.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={exporting || loading || total === 0}
+          onClick={() => void exportWorkbook()}
+          className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
+          style={{ minHeight: 44, backgroundColor: "#F3F4F6" }}
+        >
+          {exporting ? "Exportando..." : "Exportar a Excel"}
+        </button>
       </div>
 
       <div className="mt-5 space-y-3">
@@ -152,7 +301,7 @@ export function AdminCatalogProducts() {
               <option value="">Todas</option>
               {categories.map((item) => (
                 <option key={item} value={item}>
-                  {item === "All" ? "Sin categoría (All)" : item}
+                  {isUncategorized(item) ? "Sin categoría (All)" : item}
                 </option>
               ))}
             </select>
@@ -202,12 +351,19 @@ export function AdminCatalogProducts() {
         ) : (
           <>
             <div className="overflow-x-auto rounded-[24px] border" style={{ borderColor: "#E5E7EB" }}>
-              <table className="w-full min-w-[980px] text-left text-sm">
+              <table className="w-full min-w-[1080px] text-left text-sm">
                 <thead>
                   <tr
                     className="text-xs font-bold uppercase tracking-wide text-brand-muted"
                     style={{ backgroundColor: "#F8FAF7" }}
                   >
+                    <th className="w-10 px-3 py-3">
+                      <HeaderCheckbox
+                        checked={allPageSelected}
+                        indeterminate={somePageSelected}
+                        onChange={togglePage}
+                      />
+                    </th>
                     <th className="px-3 py-3">Foto</th>
                     <th className="px-3 py-3">Nombre</th>
                     <th className="px-3 py-3">Marca</th>
@@ -224,6 +380,9 @@ export function AdminCatalogProducts() {
                       key={product.id}
                       product={product}
                       zebra={index % 2 === 1}
+                      selected={selected.includes(product.id)}
+                      categories={usableCategories}
+                      onToggle={(checked) => toggleRow(product.id, checked)}
                       onPatch={patchProduct}
                       onError={setError}
                     />
@@ -262,75 +421,128 @@ export function AdminCatalogProducts() {
           </>
         )}
       </div>
+
+      {selected.length > 0 ? (
+        <div
+          className="fixed bottom-4 left-4 right-4 z-20 mx-auto flex max-w-5xl flex-wrap items-center gap-2 rounded-[24px] px-4 py-3 shadow-lg md:left-[248px]"
+          style={{ backgroundColor: brand.ink, color: "#FFFFFF" }}
+        >
+          <p className="mr-2 text-sm font-bold">{selected.length} seleccionados</p>
+          <button
+            type="button"
+            disabled={batchBusy}
+            onClick={() => void runBatch({ activo: true })}
+            className="rounded-full px-3 text-sm font-bold disabled:opacity-40"
+            style={{ minHeight: 36, backgroundColor: brand.green, color: "#FFFFFF" }}
+          >
+            Activar
+          </button>
+          <button
+            type="button"
+            disabled={batchBusy}
+            onClick={() => void runBatch({ activo: false })}
+            className="rounded-full px-3 text-sm font-bold disabled:opacity-40"
+            style={{ minHeight: 36, backgroundColor: "#FFFFFF", color: brand.ink }}
+          >
+            Desactivar
+          </button>
+          <button
+            type="button"
+            disabled={exporting || batchBusy}
+            onClick={() => void exportWorkbook(selected)}
+            className="rounded-full px-3 text-sm font-bold disabled:opacity-40"
+            style={{ minHeight: 36, backgroundColor: "#374151", color: "#FFFFFF" }}
+          >
+            Exportar seleccionados
+          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={batchCategory}
+              disabled={batchBusy}
+              onChange={(event) => setBatchCategory(event.target.value)}
+              className="h-9 rounded-full px-3 text-sm font-semibold"
+              style={{ color: brand.ink }}
+            >
+              <option value="">Asignar categoría</option>
+              {usableCategories.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+              <option value="__new__">Nueva categoría…</option>
+            </select>
+            {batchCategory === "__new__" ? (
+              <input
+                value={batchNewCategory}
+                disabled={batchBusy}
+                onChange={(event) => setBatchNewCategory(event.target.value)}
+                placeholder="Nombre de la categoría"
+                className="h-9 rounded-full px-3 text-sm font-semibold"
+                style={{ color: brand.ink }}
+              />
+            ) : null}
+            <button
+              type="button"
+              disabled={batchBusy || !assignCategory}
+              onClick={() => void runBatch({ categoria: assignCategory })}
+              className="rounded-full px-3 text-sm font-bold disabled:opacity-40"
+              style={{ minHeight: 36, backgroundColor: brand.orange, color: "#FFFFFF" }}
+            >
+              Aplicar
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+function HeaderCheckbox({
+  checked,
+  indeterminate,
+  onChange,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const ref = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.indeterminate = indeterminate;
+    }
+  }, [indeterminate]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      onChange={(event) => onChange(event.target.checked)}
+      aria-label="Seleccionar todos los visibles"
+      className="h-4 w-4 accent-[#7EB341]"
+    />
   );
 }
 
 function ProductRow({
   product,
   zebra,
+  selected,
+  categories,
+  onToggle,
   onPatch,
   onError,
 }: {
   product: AdminCatalogProduct;
   zebra: boolean;
-  onPatch: (id: string, payload: { precio?: number; activo?: boolean }) => Promise<AdminCatalogProduct>;
+  selected: boolean;
+  categories: string[];
+  onToggle: (checked: boolean) => void;
+  onPatch: (id: string, payload: PatchPayload) => Promise<AdminCatalogProduct>;
   onError: (message: string | null) => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(String(product.precio));
-  const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const savingRef = useRef(false);
-  const categoryLabel = !product.categoria || /^(all|todos)$/i.test(product.categoria) ? "Sin categoría" : product.categoria;
-
-  useEffect(() => {
-    if (!editing) {
-      setDraft(String(product.precio));
-    }
-  }, [product.precio, editing]);
-
-  useEffect(() => {
-    if (editing) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [editing]);
-
-  async function savePrice() {
-    if (savingRef.current) {
-      return;
-    }
-    const parsed = Number(draft.replace(",", "."));
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      onError("Precio inválido");
-      setDraft(String(product.precio));
-      setEditing(false);
-      return;
-    }
-    const next = Math.round(parsed * 100) / 100;
-    if (next === product.precio) {
-      setEditing(false);
-      return;
-    }
-    savingRef.current = true;
-    setBusy(true);
-    try {
-      await onPatch(product.id, { precio: next });
-      onError(null);
-      setEditing(false);
-      setSaved(true);
-      window.setTimeout(() => setSaved(false), 1400);
-    } catch (saveError) {
-      onError(saveError instanceof Error ? saveError.message : "No pudimos guardar el precio");
-      setDraft(String(product.precio));
-      setEditing(false);
-    } finally {
-      savingRef.current = false;
-      setBusy(false);
-    }
-  }
+  const missingCategory = isUncategorized(product.categoria);
 
   async function toggleActivo() {
     setBusy(true);
@@ -349,10 +561,19 @@ function ProductRow({
       className="border-t"
       style={{
         borderColor: "#F3F4F6",
-        backgroundColor: zebra ? "#FAFBFA" : "#FFFFFF",
+        backgroundColor: selected ? "#F0F7E8" : zebra ? "#FAFBFA" : "#FFFFFF",
         opacity: product.activo ? 1 : 0.72,
       }}
     >
+      <td className="px-3 py-1.5">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={(event) => onToggle(event.target.checked)}
+          aria-label={`Seleccionar ${product.nombre}`}
+          className="h-4 w-4 accent-[#7EB341]"
+        />
+      </td>
       <td className="px-3 py-1.5">
         <div
           className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg"
@@ -366,44 +587,55 @@ function ProductRow({
           )}
         </div>
       </td>
-      <td className="max-w-[220px] px-3 py-1.5 font-semibold leading-tight">{product.nombre}</td>
-      <td className="whitespace-nowrap px-3 py-1.5 text-brand-muted">{product.marca || "—"}</td>
-      <td className="whitespace-nowrap px-3 py-1.5 text-brand-muted">{categoryLabel}</td>
+      <td className="max-w-[240px] px-3 py-1.5 font-semibold leading-tight">
+        <InlineText
+          value={product.nombre}
+          align="left"
+          onSave={async (next) => {
+            await onPatch(product.id, { nombre: next });
+          }}
+          onError={onError}
+        />
+      </td>
+      <td className="whitespace-nowrap px-3 py-1.5">
+        <InlineText
+          value={product.marca || ""}
+          emptyLabel="—"
+          muted
+          allowEmpty
+          onSave={async (next) => {
+            await onPatch(product.id, { marca: next || null });
+          }}
+          onError={onError}
+        />
+      </td>
+      <td className="whitespace-nowrap px-3 py-1.5">
+        <InlineCategory
+          value={product.categoria}
+          missing={missingCategory}
+          categories={categories}
+          onSave={async (next) => {
+            await onPatch(product.id, { categoria: next });
+          }}
+          onError={onError}
+        />
+      </td>
       <td className="whitespace-nowrap px-3 py-1.5 text-right">
-        {editing ? (
-          <input
-            ref={inputRef}
-            value={draft}
-            disabled={busy}
-            inputMode="decimal"
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={() => void savePrice()}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void savePrice();
-              }
-              if (event.key === "Escape") {
-                setDraft(String(product.precio));
-                setEditing(false);
-              }
-            }}
-            className="h-8 w-[7.5rem] rounded-lg border px-2 text-right text-sm font-bold tabular-nums"
-            style={{ borderColor: brand.green }}
-          />
+        <InlinePrice
+          value={product.precio}
+          onSave={async (next) => {
+            await onPatch(product.id, { precio: next });
+          }}
+          onError={onError}
+        />
+      </td>
+      <td className="whitespace-nowrap px-3 py-1.5 font-mono text-xs text-brand-muted">
+        {product.codigoOdoo ? (
+          <span title={product.codigoOdoo}>{shortOdooCode(product.codigoOdoo)}</span>
         ) : (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="inline-flex items-center justify-end gap-1 font-bold tabular-nums"
-            title="Editar precio"
-          >
-            {formatPrice(product.precio)}
-            {saved ? <span style={{ color: brand.green }}>✓</span> : null}
-          </button>
+          "—"
         )}
       </td>
-      <td className="whitespace-nowrap px-3 py-1.5 font-mono text-xs text-brand-muted">{product.codigoOdoo || "—"}</td>
       <td className="whitespace-nowrap px-3 py-1.5 font-mono text-xs text-brand-muted">{product.codigoBarras || "—"}</td>
       <td className="px-3 py-1.5">
         <button
@@ -429,5 +661,358 @@ function ProductRow({
         </button>
       </td>
     </tr>
+  );
+}
+
+function InlineText({
+  value,
+  emptyLabel = "",
+  muted = false,
+  allowEmpty = false,
+  align = "left",
+  onSave,
+  onError,
+}: {
+  value: string;
+  emptyLabel?: string;
+  muted?: boolean;
+  allowEmpty?: boolean;
+  align?: "left" | "right";
+  onSave: (next: string) => Promise<void>;
+  onError: (message: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [saved, setSaved] = useState(false);
+  const savingRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!editing) {
+      setDraft(value);
+    }
+  }, [value, editing]);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  async function commit() {
+    if (savingRef.current) {
+      return;
+    }
+    const next = draft.trim();
+    if (!allowEmpty && !next) {
+      onError("Ese campo no puede quedar vacío");
+      setDraft(value);
+      setEditing(false);
+      return;
+    }
+    if (next === value.trim()) {
+      setEditing(false);
+      return;
+    }
+    savingRef.current = true;
+    try {
+      await onSave(next);
+      onError(null);
+      setEditing(false);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 1400);
+    } catch (saveError) {
+      onError(saveError instanceof Error ? saveError.message : "No pudimos guardar");
+      setDraft(value);
+      setEditing(false);
+    } finally {
+      savingRef.current = false;
+    }
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => void commit()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            void commit();
+          }
+          if (event.key === "Escape") {
+            setDraft(value);
+            setEditing(false);
+          }
+        }}
+        className="h-8 w-full min-w-[8rem] rounded-lg border px-2 text-sm font-semibold"
+        style={{ borderColor: brand.green, textAlign: align }}
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="inline-flex max-w-full items-center gap-1 text-left"
+      title="Editar"
+    >
+      <span className={muted ? "text-brand-muted" : undefined}>{value || emptyLabel || "—"}</span>
+      {saved ? <span style={{ color: brand.green }}>✓</span> : null}
+    </button>
+  );
+}
+
+function InlinePrice({
+  value,
+  onSave,
+  onError,
+}: {
+  value: number;
+  onSave: (next: number) => Promise<void>;
+  onError: (message: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+  const [saved, setSaved] = useState(false);
+  const savingRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!editing) {
+      setDraft(String(value));
+    }
+  }, [value, editing]);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  async function commit() {
+    if (savingRef.current) {
+      return;
+    }
+    const parsed = Number(draft.replace(",", "."));
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      onError("Precio inválido");
+      setDraft(String(value));
+      setEditing(false);
+      return;
+    }
+    const next = Math.round(parsed * 100) / 100;
+    if (next === value) {
+      setEditing(false);
+      return;
+    }
+    savingRef.current = true;
+    try {
+      await onSave(next);
+      onError(null);
+      setEditing(false);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 1400);
+    } catch (saveError) {
+      onError(saveError instanceof Error ? saveError.message : "No pudimos guardar el precio");
+      setDraft(String(value));
+      setEditing(false);
+    } finally {
+      savingRef.current = false;
+    }
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        inputMode="decimal"
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => void commit()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            void commit();
+          }
+          if (event.key === "Escape") {
+            setDraft(String(value));
+            setEditing(false);
+          }
+        }}
+        className="h-8 w-[7.5rem] rounded-lg border px-2 text-right text-sm font-bold tabular-nums"
+        style={{ borderColor: brand.green }}
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="inline-flex items-center justify-end gap-1 font-bold tabular-nums"
+      title="Editar precio"
+    >
+      {formatPrice(value)}
+      {saved ? <span style={{ color: brand.green }}>✓</span> : null}
+    </button>
+  );
+}
+
+function InlineCategory({
+  value,
+  missing,
+  categories,
+  onSave,
+  onError,
+}: {
+  value: string;
+  missing: boolean;
+  categories: string[];
+  onSave: (next: string) => Promise<void>;
+  onError: (message: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [mode, setMode] = useState<"select" | "new">("select");
+  const [draft, setDraft] = useState(missing ? "" : value);
+  const [saved, setSaved] = useState(false);
+  const savingRef = useRef(false);
+  const selectRef = useRef<HTMLSelectElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!editing) {
+      setDraft(missing ? "" : value);
+      setMode("select");
+    }
+  }, [value, missing, editing]);
+
+  useEffect(() => {
+    if (editing && mode === "select") {
+      selectRef.current?.focus();
+    }
+    if (editing && mode === "new") {
+      inputRef.current?.focus();
+    }
+  }, [editing, mode]);
+
+  async function commit(nextRaw: string) {
+    if (savingRef.current) {
+      return;
+    }
+    const next = nextRaw.trim();
+    if (!next) {
+      onError("La categoría no puede quedar vacía");
+      setEditing(false);
+      return;
+    }
+    if (!missing && next === value) {
+      setEditing(false);
+      return;
+    }
+    savingRef.current = true;
+    try {
+      await onSave(next);
+      onError(null);
+      setEditing(false);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 1400);
+    } catch (saveError) {
+      onError(saveError instanceof Error ? saveError.message : "No pudimos guardar la categoría");
+      setEditing(false);
+    } finally {
+      savingRef.current = false;
+    }
+  }
+
+  if (editing && mode === "new") {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        placeholder="Nueva categoría"
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => void commit(draft)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            void commit(draft);
+          }
+          if (event.key === "Escape") {
+            setEditing(false);
+          }
+        }}
+        className="h-8 min-w-[9rem] rounded-lg border px-2 text-sm font-semibold"
+        style={{ borderColor: brand.green }}
+      />
+    );
+  }
+
+  if (editing) {
+    return (
+      <select
+        ref={selectRef}
+        value={missing ? "" : value}
+        onChange={(event) => {
+          if (event.target.value === "__new__") {
+            setMode("new");
+            setDraft("");
+            return;
+          }
+          void commit(event.target.value);
+        }}
+        onBlur={() => {
+          if (mode === "select") {
+            setEditing(false);
+          }
+        }}
+        className="h-8 min-w-[9rem] rounded-lg border px-2 text-sm font-semibold"
+        style={{ borderColor: brand.green }}
+      >
+        <option value="" disabled>
+          Elegir…
+        </option>
+        {categories.map((item) => (
+          <option key={item} value={item}>
+            {item}
+          </option>
+        ))}
+        <option value="__new__">Nueva categoría…</option>
+      </select>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="inline-flex items-center gap-1 text-left"
+      title="Editar categoría"
+    >
+      {missing ? (
+        <span className="inline-flex items-center gap-1 font-semibold" style={{ color: brand.orange }}>
+          <AlertDot />
+          Sin categoría
+        </span>
+      ) : (
+        <span className="text-brand-muted">{value}</span>
+      )}
+      {saved ? <span style={{ color: brand.green }}>✓</span> : null}
+    </button>
+  );
+}
+
+function AlertDot() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M6 3.4v3.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <circle cx="6" cy="8.4" r="0.6" fill="currentColor" />
+    </svg>
   );
 }

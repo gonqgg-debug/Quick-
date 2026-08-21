@@ -27,12 +27,22 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    const body = (await request.json()) as { id?: unknown; precio?: unknown; activo?: unknown };
+    const body = (await request.json()) as {
+      id?: unknown;
+      nombre?: unknown;
+      marca?: unknown;
+      categoria?: unknown;
+      precio?: unknown;
+      activo?: unknown;
+    };
     if (typeof body.id !== "string" || !body.id) {
       return NextResponse.json({ error: "Falta el producto" }, { status: 400 });
     }
     const product = await updateAdminCatalogProduct({
       id: body.id,
+      nombre: body.nombre,
+      marca: body.marca,
+      categoria: body.categoria,
       precio: body.precio,
       activo: body.activo,
     });

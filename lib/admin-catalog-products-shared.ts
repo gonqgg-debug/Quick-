@@ -43,3 +43,15 @@ export function catalogProductsQueryString(filters: AdminCatalogProductFilters):
   }
   return params.toString();
 }
+
+export function isUncategorized(categoria: string | null | undefined): boolean {
+  return !categoria?.trim() || /^(all|todos)$/i.test(categoria.trim());
+}
+
+export function shortOdooCode(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length <= 14) {
+    return trimmed;
+  }
+  return `…${trimmed.slice(-8)}`;
+}

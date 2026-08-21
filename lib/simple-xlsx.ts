@@ -129,7 +129,8 @@ function zipStore(files: { name: string; data: Buffer }[]): Buffer {
   return Buffer.concat([localBuf, centralBuf, end]);
 }
 
-export function buildXlsx(headers: string[], rows: CellValue[][]): Buffer {
+export function buildXlsx(headers: string[], rows: CellValue[][], sheetName = "Historial"): Buffer {
+  const safeName = xmlText(sheetName.slice(0, 31) || "Datos");
   const files = [
     {
       name: "[Content_Types].xml",
@@ -159,7 +160,7 @@ export function buildXlsx(headers: string[], rows: CellValue[][]): Buffer {
       data: Buffer.from(
         `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheets><sheet name="Historial" sheetId="1" r:id="rId1"/></sheets>
+<sheets><sheet name="${safeName}" sheetId="1" r:id="rId1"/></sheets>
 </workbook>`,
         "utf8"
       ),
