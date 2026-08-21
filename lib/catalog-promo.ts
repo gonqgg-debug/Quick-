@@ -14,12 +14,12 @@ export type CatalogPromoBanner = {
  */
 export const CATALOG_PROMO_BANNERS: CatalogPromoBanner[] = [
   {
-    id: "pide-en-casa-2026",
+    id: "celular-2026",
     eyebrow: "Nuevo",
-    title: "Pide en un toque. Te llega a casa.",
-    imageSrc: "/images/hero.jpeg",
+    title: "Tu mini market, ahora en el celular.",
+    imageSrc: "/images/Banner1.jpeg",
     imageAlt: "Entrega a domicilio de Quick! Mini Market",
-    imagePosition: "center 30%",
+    imagePosition: "center",
   },
 ];
 
