@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Logo } from "@/components/brand/Logo";
 import { createAdminBrowserClient } from "@/lib/admin-browser";
 import { ADMIN_DELIVERY_NAV, ADMIN_HOME, ADMIN_NAV, ADMIN_SOON_NAV } from "@/lib/admin-nav";
+import { PRODUCT_REQUESTS_CHANGED_EVENT } from "@/lib/product-requests-shared";
 import { brand } from "@/lib/theme";
 
 type AdminShellProps = {
@@ -19,10 +21,49 @@ function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function PendingBadge({ count }: { count: number }) {
+  if (count <= 0) {
+    return null;
+  }
+  return (
+    <span
+      className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+      style={{ backgroundColor: brand.orange }}
+    >
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
+
 export function AdminShell({ email, children }: AdminShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const catalogOpen = pathname.startsWith("/admin/catalogo");
+  const [pendingRequests, setPendingRequests] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPending() {
+      const response = await fetch("/api/admin/catalogo/solicitudes?countOnly=1", { credentials: "include" });
+      if (!response.ok) {
+        return;
+      }
+      const body = (await response.json()) as { pendingCount?: number };
+      if (!cancelled && typeof body.pendingCount === "number") {
+        setPendingRequests(body.pendingCount);
+      }
+    }
+    void loadPending();
+    const timer = window.setInterval(() => {
+      void loadPending();
+    }, 20000);
+    window.addEventListener(PRODUCT_REQUESTS_CHANGED_EVENT, loadPending);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener(PRODUCT_REQUESTS_CHANGED_EVENT, loadPending);
+    };
+  }, []);
 
   async function handleLogout() {
     const supabase = createAdminBrowserClient();
@@ -42,7 +83,7 @@ export function AdminShell({ email, children }: AdminShellProps) {
             <Logo className="h-9 w-auto max-w-[160px]" />
           </Link>
           <p className="mt-4 px-2 text-[11px] font-bold uppercase tracking-wide text-brand-muted">Admin</p>
-          <NavLinks pathname={pathname} />
+          <NavLinks pathname={pathname} pendingRequests={pendingRequests} />
           <SoonNav />
           <div className="mt-auto border-t px-2 pt-4" style={{ borderColor: "#E5E7EB" }}>
             <p className="truncate text-xs text-brand-muted">{email}</p>
@@ -74,13 +115,14 @@ export function AdminShell({ email, children }: AdminShellProps) {
                   <Link
                     key={item.href}
                     href={item.children?.[0]?.href ?? item.href}
-                    className="rounded-full px-3 py-1.5 text-sm font-semibold"
+                    className="inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold"
                     style={{
                       backgroundColor: active ? brand.green : "#F3F4F6",
                       color: active ? "#FFFFFF" : brand.ink,
                     }}
                   >
                     {item.label}
+                    {item.href === "/admin/catalogo" ? <PendingBadge count={pendingRequests} /> : null}
                   </Link>
                 );
               })}
@@ -98,13 +140,14 @@ export function AdminShell({ email, children }: AdminShellProps) {
                     <Link
                       key={child.href}
                       href={child.href}
-                      className="rounded-full px-3 py-1.5 text-sm font-semibold"
+                      className="inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold"
                       style={{
                         backgroundColor: active ? brand.green : "#F3F4F6",
                         color: active ? "#FFFFFF" : brand.ink,
                       }}
                     >
                       {child.label}
+                      {child.href === "/admin/catalogo/solicitudes" ? <PendingBadge count={pendingRequests} /> : null}
                     </Link>
                   );
                 })}
@@ -118,7 +161,7 @@ export function AdminShell({ email, children }: AdminShellProps) {
   );
 }
 
-function NavLinks({ pathname }: { pathname: string }) {
+function NavLinks({ pathname, pendingRequests }: { pathname: string; pendingRequests: number }) {
   const homeActive = isActivePath(pathname, ADMIN_HOME.href);
 
   return (
@@ -158,13 +201,14 @@ function NavLinks({ pathname }: { pathname: string }) {
                     <Link
                       key={child.href}
                       href={child.href}
-                      className="rounded-lg px-2.5 py-2 text-sm font-semibold"
+                      className="inline-flex items-center rounded-lg px-2.5 py-2 text-sm font-semibold"
                       style={{
                         backgroundColor: childActive ? `${brand.green}18` : "transparent",
                         color: childActive ? brand.green : brand.muted,
                       }}
                     >
                       {child.label}
+                      {child.href === "/admin/catalogo/solicitudes" ? <PendingBadge count={pendingRequests} /> : null}
                     </Link>
                   );
                 })}

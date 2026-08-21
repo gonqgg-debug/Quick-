@@ -20,6 +20,7 @@ type MyProfileProps = {
   sessionId: string;
   customer: CatalogCustomer;
   onSaved: (customer: CatalogCustomer) => void;
+  onRequestProduct?: () => void;
 };
 
 type AddressEditor = {
@@ -50,7 +51,7 @@ function newEditor(makeDefault: boolean): AddressEditor {
   };
 }
 
-export function MyProfile({ sessionId, customer, onSaved }: MyProfileProps) {
+export function MyProfile({ sessionId, customer, onSaved, onRequestProduct }: MyProfileProps) {
   const [nombre, setNombre] = useState(customer.nombre);
   const [apellido, setApellido] = useState(customer.apellido);
   const [addresses, setAddresses] = useState<AddressEditor[]>(() => customer.addresses.map(toEditor));
@@ -340,6 +341,18 @@ export function MyProfile({ sessionId, customer, onSaved }: MyProfileProps) {
       >
         {submitting ? "Guardando..." : "Guardar cambios"}
       </button>
+      {onRequestProduct ? (
+        <p className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={onRequestProduct}
+            className="text-sm font-semibold underline-offset-2 hover:underline"
+            style={{ color: brand.muted }}
+          >
+            Solicitar un producto
+          </button>
+        </p>
+      ) : null}
     </form>
   );
 }

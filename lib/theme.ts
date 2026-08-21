@@ -21,6 +21,36 @@ export function isPharmaCategory(categoria: string): boolean {
   return /pharma|farmacia|medicament|salud/i.test(categoria);
 }
 
+const CATEGORY_EMOJI: Record<string, string> = {
+  all: "🛒",
+  todos: "🛒",
+  almacen: "🥫",
+  bebidas: "🥤",
+  "bebidas no alcoholicas": "🥤",
+  "bebidas alcoholicas": "🍷",
+  frutas: "🍎",
+  farmacia: "💊",
+  "snacks y dulces": "🍪",
+  "cereales y desayunos": "🥣",
+  verduras: "🥬",
+  "condimentos y especias": "🧂",
+  lacteos: "🥛",
+  "lacteos y derivados": "🧀",
+  "carnes y embutidos": "🥓",
+};
+
+function normalizeCategoryKey(categoria: string): string {
+  return categoria
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+export function categoryEmoji(categoria: string): string {
+  return CATEGORY_EMOJI[normalizeCategoryKey(categoria)] ?? "🏷️";
+}
+
 export const logoPublicPath = "/brand/logo.svg";
 export const pharmaLogoPublicPath = "/brand/pharma-logo.svg";
 

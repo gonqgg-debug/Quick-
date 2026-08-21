@@ -14,9 +14,10 @@ import type { MetodoPago } from "@/lib/types";
 type MyOrdersProps = {
   sessionId: string;
   onModify: (order: CustomerOrder) => void;
+  onRequestProduct?: () => void;
 };
 
-export function MyOrders({ sessionId, onModify }: MyOrdersProps) {
+export function MyOrders({ sessionId, onModify, onRequestProduct }: MyOrdersProps) {
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,11 +62,22 @@ export function MyOrders({ sessionId, onModify }: MyOrdersProps) {
         <p className="text-4xl">🧾</p>
         <p className="font-display mt-3 text-xl font-bold">Aún no tienes pedidos</p>
         <p className="mt-2 text-sm text-brand-muted">Cuando confirmes uno, aparece aquí con su estado.</p>
+        {onRequestProduct ? (
+          <button
+            type="button"
+            onClick={onRequestProduct}
+            className="mt-4 text-sm font-semibold underline-offset-2 hover:underline"
+            style={{ color: brand.muted }}
+          >
+            Solicitar un producto
+          </button>
+        ) : null}
       </div>
     );
   }
 
   return (
+    <>
     <ul className="mt-4 space-y-3">
       {orders.map((order) => {
         const open = openId === order.id;
@@ -99,6 +111,19 @@ export function MyOrders({ sessionId, onModify }: MyOrdersProps) {
         );
       })}
     </ul>
+    {onRequestProduct ? (
+      <p className="mt-6 text-center">
+        <button
+          type="button"
+          onClick={onRequestProduct}
+          className="text-sm font-semibold underline-offset-2 hover:underline"
+          style={{ color: brand.muted }}
+        >
+          Solicitar un producto
+        </button>
+      </p>
+    ) : null}
+    </>
   );
 }
 

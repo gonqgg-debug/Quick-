@@ -27,6 +27,7 @@ export const ADMIN_DELIVERY_NAV: AdminNavItem[] = [
       { href: "/admin/catalogo/productos", label: "Productos" },
       { href: "/admin/catalogo/importar", label: "Importar" },
       { href: "/admin/catalogo/imagenes", label: "Imágenes" },
+      { href: "/admin/catalogo/solicitudes", label: "Solicitudes" },
     ],
   },
 ];

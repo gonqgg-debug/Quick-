@@ -6,11 +6,14 @@ import { DeliveryAddressFields } from "@/components/catalog/DeliveryAddressField
 import { MyOrders, orderMetodoPago, orderToCart } from "@/components/catalog/MyOrders";
 import { MyProfile } from "@/components/catalog/MyProfile";
 import { CatalogRecommendations } from "@/components/catalog/CatalogRecommendations";
+import { CatalogSearch, ProductRequestEmpty } from "@/components/catalog/CatalogSearch";
+import { ProductRequestSheet } from "@/components/catalog/ProductRequestSheet";
 import { PromoBanner } from "@/components/catalog/PromoBanner";
 import { Badge } from "@/components/brand/Badge";
 import { CartIcon } from "@/components/brand/CartIcon";
 import { Logo } from "@/components/brand/Logo";
 import { CATALOG_PROMO_BANNERS } from "@/lib/catalog-promo";
+import { productAnchor } from "@/lib/catalog-search";
 import { MY_ORDERS_HASH, MY_PROFILE_HASH, type CustomerOrder } from "@/lib/customer-orders-shared";
 import type { CatalogRecommendations as CatalogRecommendationsData } from "@/lib/catalog-recommendations";
 import {
@@ -24,7 +27,7 @@ import {
   type CustomerAddress,
 } from "@/lib/customers";
 import { formatPrice } from "@/lib/money";
-import { brand, brandChipColor, isPharmaCategory } from "@/lib/theme";
+import { brand, brandChipColor, categoryEmoji, isPharmaCategory } from "@/lib/theme";
 import type { CreateOrderPayload, MetodoPago, OrderDraft, Product } from "@/lib/types";
 
 type CatalogExperienceProps = {
@@ -128,6 +131,9 @@ export function CatalogExperience({
   const isEditing = Boolean(activeEditOrderId);
   const [hydrated, setHydrated] = useState(false);
   const [query, setQuery] = useState("");
+  const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [requestPrefill, setRequestPrefill] = useState("");
   const [direccion, setDireccion] = useState(
     editOrder?.direccion ?? defaultAddress(initialCustomer)?.direccion ?? ""
   );
@@ -194,6 +200,21 @@ export function CatalogExperience({
     }
     setHydrated(true);
   }, [sessionId, editOrder, customer]);
+
+  useEffect(() => {
+    if (!highlightedProductId) {
+      return;
+    }
+    const id = productAnchor(highlightedProductId);
+    const scrollTimer = window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
+    const clearTimer = window.setTimeout(() => setHighlightedProductId(null), 1800);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [highlightedProductId]);
 
   useEffect(() => {
     if (!hydrated) {
@@ -364,6 +385,11 @@ export function CatalogExperience({
     }
   }
 
+  function openProductRequest(prefill = "") {
+    setRequestPrefill(prefill);
+    setRequestOpen(true);
+  }
+
   function startModify(order: CustomerOrder) {
     setCatalogEditOrderId(order.id);
     setCart(orderToCart(order));
@@ -465,12 +491,15 @@ export function CatalogExperience({
                   event.preventDefault();
                   goToMyProfile();
                 }}
-                className="relative flex h-11 w-11 items-center justify-center rounded-full"
-                style={{ backgroundColor: view === "profile" ? `${brand.blue}22` : `${brand.blue}14` }}
+                className="relative flex h-11 w-11 items-center justify-center rounded-full border"
+                style={{
+                  backgroundColor: view === "profile" ? "#E8E8EA" : "#F4F4F5",
+                  borderColor: "rgba(0,0,0,0.06)",
+                }}
                 aria-label="Mi perfil"
                 aria-current={view === "profile" ? "page" : undefined}
               >
-                <ProfileIcon className="h-6 w-6" color={brand.blue} />
+                <ProfileIcon className="h-6 w-6" color={brand.ink} />
               </a>
               <a
                 href={`#${MY_ORDERS_HASH}`}
@@ -478,25 +507,28 @@ export function CatalogExperience({
                   event.preventDefault();
                   goToMyOrders();
                 }}
-                className="relative flex h-11 w-11 items-center justify-center rounded-full"
-                style={{ backgroundColor: view === "orders" ? `${brand.green}22` : `${brand.green}14` }}
+                className="relative flex h-11 w-11 items-center justify-center rounded-full border"
+                style={{
+                  backgroundColor: view === "orders" ? "#E8E8EA" : "#F4F4F5",
+                  borderColor: "rgba(0,0,0,0.06)",
+                }}
                 aria-label="Mis pedidos"
                 aria-current={view === "orders" ? "page" : undefined}
               >
-                <OrdersIcon className="h-6 w-6" color={brand.green} />
+                <OrdersIcon className="h-6 w-6" color={brand.ink} />
               </a>
               <button
                 type="button"
                 onClick={() => setCartOpen(true)}
                 className="relative flex h-11 w-11 items-center justify-center rounded-full"
-                style={{ backgroundColor: `${brand.orange}18` }}
+                style={{ backgroundColor: brand.orange }}
                 aria-label="Ver carrito"
               >
-                <CartIcon className="h-6 w-6" color={brand.orange} />
+                <CartIcon className="h-6 w-6" color="#FFFFFF" />
                 {itemCount > 0 ? (
                   <span
-                    className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
-                    style={{ backgroundColor: brand.orange }}
+                    className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold"
+                    style={{ backgroundColor: "#FFFFFF", color: brand.orange }}
                   >
                     {itemCount}
                   </span>
@@ -506,17 +538,16 @@ export function CatalogExperience({
           </div>
 
           {!hashReady ? null : view === "shop" ? (
-            <label className="relative mt-3 block">
-                <span className="sr-only">Buscar productos</span>
-                <SearchIcon />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Buscar producto, marca o categoría"
-                  className="w-full rounded-full border bg-white py-2.5 pl-11 pr-4 text-sm text-brand-ink outline-none placeholder:text-brand-muted"
-                  style={{ borderColor: query ? brand.green : `${brand.muted}40` }}
-                />
-              </label>
+            <CatalogSearch
+              query={query}
+              products={products}
+              onQueryChange={setQuery}
+              onSelectProduct={(product) => {
+                setQuery("");
+                setHighlightedProductId(product.id);
+              }}
+              onRequestProduct={(term) => openProductRequest(term)}
+            />
           ) : (
             <p className="mt-3 font-display text-xl font-bold text-brand-ink">
               {view === "profile" ? "Mi perfil" : "Mis pedidos"}
@@ -534,7 +565,7 @@ export function CatalogExperience({
           <p className="text-sm leading-relaxed text-brand-muted">
             Tus pedidos, del más reciente al más antiguo.
           </p>
-          <MyOrders sessionId={sessionId} onModify={startModify} />
+          <MyOrders sessionId={sessionId} onModify={startModify} onRequestProduct={() => openProductRequest()} />
         </div>
       ) : view === "profile" ? (
         <div id="mi-perfil" className="mx-auto max-w-lg px-4 pb-16 pt-2">
@@ -542,6 +573,7 @@ export function CatalogExperience({
             <MyProfile
               sessionId={sessionId}
               customer={customer}
+              onRequestProduct={() => openProductRequest()}
               onSaved={(updated) => {
                 setCustomer(updated);
                 const nextDefault = defaultAddress(updated);
@@ -596,9 +628,10 @@ export function CatalogExperience({
                 <a
                   key={categoria}
                   href={`#${categoryAnchor(categoria)}`}
-                  className="shrink-0 rounded-full border-2 bg-white px-3.5 py-1.5 text-sm font-bold"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border-2 bg-white px-3.5 py-1.5 text-sm font-bold"
                   style={{ borderColor: color, color }}
                 >
+                  <span aria-hidden="true">{categoryEmoji(categoria)}</span>
                   {categoria}
                 </a>
               );
@@ -607,9 +640,7 @@ export function CatalogExperience({
         ) : null}
 
         {visibleProducts.length === 0 ? (
-          <p className="mt-8 rounded-3xl border border-dashed px-5 py-10 text-center text-brand-muted" style={{ borderColor: `${brand.muted}40` }}>
-            No encontramos resultados para “{query}”.
-          </p>
+          <ProductRequestEmpty query={query} onRequest={() => openProductRequest(query)} />
         ) : (
           <div className="mt-6 space-y-8">
             {marketGroups.map(([categoria, items]) => (
@@ -618,6 +649,7 @@ export function CatalogExperience({
                 categoria={categoria}
                 items={items}
                 cart={cart}
+                highlightedProductId={highlightedProductId}
                 onQuantityChange={setQuantity}
               />
             ))}
@@ -636,6 +668,7 @@ export function CatalogExperience({
                     categoria={categoria}
                     items={items}
                     cart={cart}
+                    highlightedProductId={highlightedProductId}
                     onQuantityChange={setQuantity}
                     pharma
                   />
@@ -644,6 +677,17 @@ export function CatalogExperience({
             ) : null}
           </div>
         )}
+
+        <p className="mt-10 pb-4 text-center">
+          <button
+            type="button"
+            onClick={() => openProductRequest(query)}
+            className="text-sm font-semibold underline-offset-2 hover:underline"
+            style={{ color: brand.muted }}
+          >
+            ¿No encontraste lo que buscas? Solicitar un producto
+          </button>
+        </p>
       </div>
       )}
 
@@ -677,6 +721,14 @@ export function CatalogExperience({
           }}
         />
       ) : null}
+
+      {requestOpen ? (
+        <ProductRequestSheet
+          sessionId={sessionId}
+          initialProduct={requestPrefill}
+          onClose={() => setRequestOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -697,32 +749,18 @@ function OrdersIcon({ className, color }: { className?: string; color: string })
   );
 }
 
-function SearchIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2"
-      fill="none"
-      stroke={brand.muted}
-      strokeWidth="2.2"
-      aria-hidden="true"
-    >
-      <circle cx="11" cy="11" r="7" />
-      <path d="M20 20l-3.2-3.2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 function CategorySection({
   categoria,
   items,
   cart,
+  highlightedProductId,
   onQuantityChange,
   pharma = false,
 }: {
   categoria: string;
   items: Product[];
   cart: CartMap;
+  highlightedProductId: string | null;
   onQuantityChange: (productId: string, cantidad: number) => void;
   pharma?: boolean;
 }) {
@@ -738,6 +776,7 @@ function CategorySection({
             <ProductCard
               product={product}
               cantidad={cart[product.id] ?? 0}
+              highlighted={highlightedProductId === product.id}
               onQuantityChange={(cantidad) => onQuantityChange(product.id, cantidad)}
             />
           </li>
@@ -750,14 +789,25 @@ function CategorySection({
 function ProductCard({
   product,
   cantidad,
+  highlighted,
   onQuantityChange,
 }: {
   product: Product;
   cantidad: number;
+  highlighted: boolean;
   onQuantityChange: (cantidad: number) => void;
 }) {
   return (
-    <article className="overflow-hidden rounded-3xl border border-black/[0.06] bg-white shadow-[0_8px_24px_rgba(26,26,26,0.06)]">
+    <article
+      id={productAnchor(product.id)}
+      className="scroll-mt-36 overflow-hidden rounded-3xl border bg-white shadow-[0_8px_24px_rgba(26,26,26,0.06)] transition-[box-shadow,border-color] duration-300"
+      style={{
+        borderColor: highlighted ? brand.orange : "rgba(26,26,26,0.06)",
+        boxShadow: highlighted
+          ? `0 0 0 3px ${brand.orange}55, 0 8px 24px rgba(26,26,26,0.06)`
+          : "0 8px 24px rgba(26,26,26,0.06)",
+      }}
+    >
       <div className="flex gap-3 p-3">
         <ProductPhoto product={product} className="h-[7.25rem] w-[7.25rem]" />
         <div className="min-w-0 flex-1">
