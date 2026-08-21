@@ -382,6 +382,40 @@ export async function rejectSuggestedImage(suggestionId: string): Promise<{ prod
   return { productId: String(suggestion.product_id) };
 }
 
+export async function searchCatalogImageCandidates(query: string): Promise<Array<{ url: string; title: string }>> {
+  const q = query.trim().slice(0, 180);
+  if (q.length < 2) {
+    throw new Error("Escribe un término de búsqueda");
+  }
+  const results = await searchSerperProductImages(q, 5);
+  return results.map((item) => ({ url: item.url, title: item.title }));
+}
+
+export async function applyRemoteProductPhoto(productId: string, imageUrl: string): Promise<string> {
+  if (!productId || !/^https?:\/\//i.test(imageUrl.trim())) {
+    throw new Error("Falta el producto o la URL");
+  }
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.from("products").select("id").eq("id", productId).maybeSingle();
+  if (error || !data) {
+    throw new Error("No encontramos el producto");
+  }
+  const publicUrl = await storeRemoteImage(productId, imageUrl.trim());
+  const { error: updateError } = await supabase
+    .from("products")
+    .update({ foto_url: publicUrl, foto_confirmada: true })
+    .eq("id", productId);
+  if (updateError) {
+    throw updateError;
+  }
+  await supabase
+    .from("product_image_suggestions")
+    .update({ status: "rejected" })
+    .eq("product_id", productId)
+    .eq("status", "pending");
+  return publicUrl;
+}
+
 export async function uploadProductPhoto(productId: string, bytes: Uint8Array, mimeType: string): Promise<string> {
   const publicUrl = await storeBytes(productId, bytes, mimeType);
   const supabase = getSupabaseAdminClient();
