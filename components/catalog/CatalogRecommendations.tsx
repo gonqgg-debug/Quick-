@@ -13,6 +13,12 @@ type CatalogRecommendationsProps = {
   onRepeatLastOrder: () => void;
 };
 
+const RAIL_TRACK =
+  "-mx-4 mt-3 flex gap-3 overflow-x-auto overscroll-x-contain scroll-pl-4 scroll-pr-4 px-4 pb-1 snap-x snap-mandatory [scrollbar-width:none] [touch-action:pan-x] [&::-webkit-scrollbar]:hidden";
+
+const RAIL_CARD =
+  "w-[42%] shrink-0 snap-start overflow-hidden rounded-[22px] border border-black/[0.06] bg-white";
+
 export function CatalogRecommendations({
   recommendations,
   cart,
@@ -28,7 +34,7 @@ export function CatalogRecommendations({
   }
 
   return (
-    <div className="mt-5 space-y-6">
+    <div className="mt-5 space-y-7">
       {bestSellers.length > 0 ? (
         <ProductRail
           title="Lo más pedido en Quick!"
@@ -40,7 +46,12 @@ export function CatalogRecommendations({
       ) : null}
 
       {showRepeat && lastOrder ? (
-        <RepeatLastOrderCard lastOrder={lastOrder} onRepeat={onRepeatLastOrder} />
+        <RepeatLastOrderCard
+          lastOrder={lastOrder}
+          cart={cart}
+          onQuantityChange={onQuantityChange}
+          onRepeat={onRepeatLastOrder}
+        />
       ) : null}
 
       {showFavorites ? (
@@ -71,79 +82,77 @@ function ProductRail({
 }) {
   return (
     <section>
-      <div className="px-0">
-        <h2 className="font-display text-2xl font-bold text-brand-ink">{title}</h2>
-        <p className="mt-0.5 text-sm text-brand-muted">{subtitle}</p>
-      </div>
-      <div
-        className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        role="list"
-      >
-        {products.map((product) => (
-          <article
-            key={product.id}
-            role="listitem"
-            className="w-[9.75rem] shrink-0 overflow-hidden rounded-[22px] border border-black/[0.06] bg-white"
-          >
-            <RailPhoto product={product} />
-            <div className="px-2.5 pb-2.5 pt-2">
-              <h3 className="line-clamp-2 min-h-[2.5rem] text-[13px] font-bold leading-tight text-brand-ink">
-                {product.nombre}
-              </h3>
-              <p className="mt-1 font-display text-sm font-bold" style={{ color: brand.orange }}>
-                {formatPrice(product.precio)}
-              </p>
-              <div className="mt-2">
-                <MiniStepper
-                  value={cart[product.id] ?? 0}
-                  onChange={(cantidad) => onQuantityChange(product.id, cantidad)}
-                />
-              </div>
-            </div>
-          </article>
-        ))}
-      </div>
+      <h2 className="font-display text-2xl font-bold text-brand-ink">{title}</h2>
+      <p className="mt-0.5 text-sm text-brand-muted">{subtitle}</p>
+      <ProductCarouselTrack products={products} cart={cart} onQuantityChange={onQuantityChange} />
     </section>
+  );
+}
+
+function ProductCarouselTrack({
+  products,
+  cart,
+  onQuantityChange,
+}: {
+  products: Product[];
+  cart: Record<string, number>;
+  onQuantityChange: (productId: string, cantidad: number) => void;
+}) {
+  if (products.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={RAIL_TRACK} role="list">
+      {products.map((product) => (
+        <article key={product.id} role="listitem" className={RAIL_CARD}>
+          <RailPhoto product={product} />
+          <div className="px-2.5 pb-2.5 pt-2">
+            <h3 className="line-clamp-2 min-h-[2.5rem] text-[13px] font-bold leading-tight text-brand-ink">
+              {product.nombre}
+            </h3>
+            <p className="mt-1 font-display text-sm font-bold" style={{ color: brand.orange }}>
+              {formatPrice(product.precio)}
+            </p>
+            <div className="mt-2">
+              <MiniStepper
+                value={cart[product.id] ?? 0}
+                onChange={(cantidad) => onQuantityChange(product.id, cantidad)}
+              />
+            </div>
+          </div>
+        </article>
+      ))}
+    </div>
   );
 }
 
 function RepeatLastOrderCard({
   lastOrder,
+  cart,
+  onQuantityChange,
   onRepeat,
 }: {
   lastOrder: RepeatLastOrder;
+  cart: Record<string, number>;
+  onQuantityChange: (productId: string, cantidad: number) => void;
   onRepeat: () => void;
 }) {
-  const preview = lastOrder.items
-    .slice(0, 4)
-    .map((item) => `${item.cantidad}× ${item.nombre}`)
-    .join(" · ");
-  const extra = lastOrder.items.length > 4 ? ` y ${lastOrder.items.length - 4} más` : "";
-
   return (
     <section>
       <h2 className="font-display text-2xl font-bold text-brand-ink">Pedir de nuevo</h2>
-      <p className="mt-0.5 text-sm text-brand-muted">Tu pedido más reciente, en un toque</p>
-      <div
-        className="mt-3 overflow-hidden rounded-[24px] border bg-white p-4"
-        style={{ borderColor: `${brand.orange}40` }}
+      <p className="mt-0.5 text-sm text-brand-muted">
+        Tu pedido más reciente · {formatCustomerOrderDate(lastOrder.createdAt)}
+      </p>
+      <ProductCarouselTrack products={lastOrder.products} cart={cart} onQuantityChange={onQuantityChange} />
+      <button
+        type="button"
+        onClick={onRepeat}
+        className="mt-3 w-full rounded-full py-3 text-sm font-bold text-white"
+        style={{ backgroundColor: brand.orange, minHeight: 44 }}
       >
-        <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: brand.orange }}>
-          Último pedido · {formatCustomerOrderDate(lastOrder.createdAt)}
-        </p>
-        <p className="mt-1 text-sm font-semibold leading-snug text-brand-ink">
-          {preview}
-          {extra}
-        </p>
-        <button
-          type="button"
-          onClick={onRepeat}
-          className="mt-4 w-full rounded-full py-3 text-sm font-bold text-white"
-          style={{ backgroundColor: brand.orange, minHeight: 44 }}
-        >
-          Repetir tu último pedido
-        </button>
-      </div>
+        Repetir tu último pedido
+      </button>
     </section>
   );
 }

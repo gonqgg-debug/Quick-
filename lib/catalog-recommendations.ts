@@ -16,6 +16,7 @@ export type RepeatLastOrder = {
   orderId: string;
   createdAt: string;
   items: RepeatOrderItem[];
+  products: Product[];
 };
 
 export type CatalogRecommendations = {
@@ -118,7 +119,7 @@ export async function getRepeatLastOrder(customerId: string): Promise<RepeatLast
   const productIds = Array.from(new Set(kept.map((item) => String(item.product_id))));
   const { data: products } = await supabase
     .from("products")
-    .select("id, nombre, activo")
+    .select("id, nombre, marca, descripcion, precio, foto_url, categoria, activo")
     .in("id", productIds);
 
   const byId = new Map((products ?? []).map((row) => [String(row.id), row]));
@@ -142,10 +143,25 @@ export async function getRepeatLastOrder(customerId: string): Promise<RepeatLast
     return null;
   }
 
+  const seen = new Set<string>();
+  const lastOrderProducts: Product[] = [];
+  for (const item of mapped) {
+    if (!item.available || seen.has(item.productId)) {
+      continue;
+    }
+    const row = byId.get(item.productId);
+    if (!row) {
+      continue;
+    }
+    seen.add(item.productId);
+    lastOrderProducts.push(mapProduct(row));
+  }
+
   return {
     orderId: String(order.id),
     createdAt: String(order.created_at ?? ""),
     items: mapped,
+    products: lastOrderProducts,
   };
 }
 

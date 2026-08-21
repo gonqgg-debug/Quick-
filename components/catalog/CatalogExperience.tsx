@@ -587,7 +587,7 @@ export function CatalogExperience({
 
         {chipCategories.length > 0 ? (
           <nav
-            className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="-mx-4 mt-10 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             aria-label="Categorías"
           >
             {chipCategories.map(([categoria], index) => {
