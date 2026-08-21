@@ -1,7 +1,10 @@
 import { CatalogExperience } from "@/components/catalog/CatalogExperience";
 import { InvalidSession } from "@/components/catalog/InvalidSession";
 import { getActiveOrderSession, getActiveProducts, getOrderDraft } from "@/lib/catalog";
-import { getCatalogRecommendations } from "@/lib/catalog-recommendations";
+import {
+  getCatalogRecommendations,
+  type CatalogRecommendations,
+} from "@/lib/catalog-recommendations";
 import { getCustomerForChat } from "@/lib/customers";
 import type { OrderDraft, Product } from "@/lib/types";
 
@@ -18,7 +21,11 @@ export default async function OrderCatalogPage({ params }: OrderCatalogPageProps
   let products: Product[] = [];
   let editOrder: OrderDraft | null = null;
   let customer = null;
-  let recommendations = { bestSellers: [] as Product[], lastOrder: null, favorites: [] as Product[] };
+  let recommendations: CatalogRecommendations = {
+    bestSellers: [],
+    lastOrder: null,
+    favorites: [],
+  };
   let unavailable = false;
 
   try {
