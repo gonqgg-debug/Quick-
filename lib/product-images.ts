@@ -382,7 +382,7 @@ export async function rejectSuggestedImage(suggestionId: string): Promise<{ prod
   return { productId: String(suggestion.product_id) };
 }
 
-export async function uploadProductPhoto(productId: string, bytes: Uint8Array, mimeType: string): Promise<void> {
+export async function uploadProductPhoto(productId: string, bytes: Uint8Array, mimeType: string): Promise<string> {
   const publicUrl = await storeBytes(productId, bytes, mimeType);
   const supabase = getSupabaseAdminClient();
   const { error } = await supabase
@@ -397,6 +397,7 @@ export async function uploadProductPhoto(productId: string, bytes: Uint8Array, m
     .update({ status: "rejected" })
     .eq("product_id", productId)
     .eq("status", "pending");
+  return publicUrl;
 }
 
 async function storeRemoteImage(productId: string, imageUrl: string): Promise<string> {

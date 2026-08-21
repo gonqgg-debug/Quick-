@@ -28,8 +28,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await uploadProductPhoto(productId, new Uint8Array(await file.arrayBuffer()), mimeType);
-    return NextResponse.json({ ok: true });
+    const fotoUrl = await uploadProductPhoto(productId, new Uint8Array(await file.arrayBuffer()), mimeType);
+    return NextResponse.json({ ok: true, fotoUrl });
   } catch (error) {
     console.error("[admin] catalog images upload", error);
     return NextResponse.json({ error: "No pudimos subir la imagen" }, { status: 400 });

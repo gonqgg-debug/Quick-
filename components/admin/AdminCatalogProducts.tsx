@@ -51,6 +51,7 @@ export function AdminCatalogProducts() {
   const [savedId, setSavedId] = useState<string | null>(null);
   const dirtyRef = useRef(false);
   const savedTimer = useRef(0);
+  const editingProductRef = useRef<AdminCatalogProduct | null>(null);
 
   const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
@@ -67,8 +68,6 @@ export function AdminCatalogProducts() {
 
   useEffect(() => {
     setSelected([]);
-    dirtyRef.current = false;
-    setEditingId(null);
   }, [query, categoria, estado]);
 
   useEffect(() => {
@@ -292,7 +291,7 @@ export function AdminCatalogProducts() {
 
   function confirmDiscardIfNeeded(): boolean {
     if (editingId && dirtyRef.current) {
-      return window.confirm("Hay cambios sin guardar en esta fila. ¿Descartarlos?");
+      return window.confirm("Hay cambios sin guardar. ¿Descartarlos?");
     }
     return true;
   }
@@ -306,19 +305,29 @@ export function AdminCatalogProducts() {
     }
     dirtyRef.current = false;
     setEditingId(id);
+    editingProductRef.current = products.find((item) => item.id === id) ?? null;
   }
 
   function cancelEdit() {
     dirtyRef.current = false;
     setEditingId(null);
+    editingProductRef.current = null;
   }
 
   function finishSave(id: string) {
     dirtyRef.current = false;
     setEditingId(null);
+    editingProductRef.current = null;
     setSavedId(id);
     window.clearTimeout(savedTimer.current);
     savedTimer.current = window.setTimeout(() => setSavedId(null), 1400);
+  }
+
+  function applyFotoUrl(id: string, fotoUrl: string) {
+    setProducts((current) => current.map((item) => (item.id === id ? { ...item, fotoUrl } : item)));
+    if (editingProductRef.current?.id === id) {
+      editingProductRef.current = { ...editingProductRef.current, fotoUrl };
+    }
   }
 
   function changePage(next: number) {
@@ -327,11 +336,15 @@ export function AdminCatalogProducts() {
     }
     dirtyRef.current = false;
     setEditingId(null);
+    editingProductRef.current = null;
     setPage(next);
   }
 
   const assignCategory = batchCategory === "__new__" ? batchNewCategory.trim() : batchCategory;
   const canSelectMatching = allPageSelected && selected.length === pageIds.length && total > pageIds.length;
+  const editingProduct =
+    products.find((item) => item.id === editingId) ??
+    (editingId && editingProductRef.current?.id === editingId ? editingProductRef.current : null);
   if (selected.length > 0) {
     lastSelectedCount.current = selected.length;
   }
@@ -404,8 +417,7 @@ export function AdminCatalogProducts() {
         <div>
           <h1 className="font-display text-2xl font-bold">Productos</h1>
           <p className="mt-1 max-w-xl text-sm text-brand-muted">
-            Usa el lápiz para editar nombre, marca, categoría o precio. El catálogo público solo muestra productos
-            activos.
+            Usa el lápiz para abrir la ficha del producto. El catálogo público solo muestra productos activos.
           </p>
         </div>
         <button
@@ -443,6 +455,7 @@ export function AdminCatalogProducts() {
                   }
                   dirtyRef.current = false;
                   setEditingId(null);
+                  editingProductRef.current = null;
                   setCategoria(event.target.value);
                   setPage(1);
                 }}
@@ -477,6 +490,7 @@ export function AdminCatalogProducts() {
                   }
                   dirtyRef.current = false;
                   setEditingId(null);
+                  editingProductRef.current = null;
                   setEstado(filter.id);
                   setPage(1);
                 }}
@@ -533,7 +547,7 @@ export function AdminCatalogProducts() {
                     <th className="whitespace-nowrap px-3 py-3">Cód. Odoo</th>
                     <th className="whitespace-nowrap px-3 py-3">Barras</th>
                     <th className="px-3 py-3">Estado</th>
-                    <th className="w-28 px-3 py-3">
+                    <th className="w-12 px-3 py-3">
                       <span className="sr-only">Editar</span>
                     </th>
                   </tr>
@@ -545,18 +559,9 @@ export function AdminCatalogProducts() {
                       product={product}
                       zebra={index % 2 === 1}
                       selected={selected.includes(product.id)}
-                      editing={editingId === product.id}
                       savedFlash={savedId === product.id}
-                      categories={usableCategories}
                       onToggle={(checked) => toggleRow(product.id, checked)}
                       onStartEdit={() => startEdit(product.id)}
-                      onCancelEdit={cancelEdit}
-                      onDirtyChange={(dirty) => {
-                        if (editingId === product.id) {
-                          dirtyRef.current = dirty;
-                        }
-                      }}
-                      onSaved={() => finishSave(product.id)}
                       onPatch={patchProduct}
                       onError={setError}
                     />
@@ -704,6 +709,24 @@ export function AdminCatalogProducts() {
             document.body
           )
         : null}
+
+      {editingProduct && typeof document !== "undefined"
+        ? createPortal(
+            <ProductEditModal
+              key={editingProduct.id}
+              product={editingProduct}
+              categories={usableCategories}
+              onDirtyChange={(dirty) => {
+                dirtyRef.current = dirty;
+              }}
+              onCancel={cancelEdit}
+              onSaved={() => finishSave(editingProduct.id)}
+              onFotoSaved={(fotoUrl) => applyFotoUrl(editingProduct.id, fotoUrl)}
+              onPatch={patchProduct}
+            />,
+            document.body
+          )
+        : null}
     </div>
   );
 }
@@ -759,83 +782,23 @@ function ProductRow({
   product,
   zebra,
   selected,
-  editing,
   savedFlash,
-  categories,
   onToggle,
   onStartEdit,
-  onCancelEdit,
-  onDirtyChange,
-  onSaved,
   onPatch,
   onError,
 }: {
   product: AdminCatalogProduct;
   zebra: boolean;
   selected: boolean;
-  editing: boolean;
   savedFlash: boolean;
-  categories: string[];
   onToggle: (checked: boolean) => void;
   onStartEdit: () => void;
-  onCancelEdit: () => void;
-  onDirtyChange: (dirty: boolean) => void;
-  onSaved: () => void;
   onPatch: (id: string, payload: PatchPayload) => Promise<AdminCatalogProduct>;
   onError: (message: string | null) => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [draftNombre, setDraftNombre] = useState(product.nombre);
-  const [draftMarca, setDraftMarca] = useState(product.marca || "");
-  const [draftCategoria, setDraftCategoria] = useState(isUncategorized(product.categoria) ? "" : product.categoria);
-  const [categoryMode, setCategoryMode] = useState<"select" | "new">("select");
-  const [draftNewCategoria, setDraftNewCategoria] = useState("");
-  const [draftPrecio, setDraftPrecio] = useState(String(product.precio));
-  const nombreRef = useRef<HTMLInputElement | null>(null);
   const missingCategory = isUncategorized(product.categoria);
-
-  useEffect(() => {
-    if (!editing) {
-      return;
-    }
-    setDraftNombre(product.nombre);
-    setDraftMarca(product.marca || "");
-    setDraftCategoria(isUncategorized(product.categoria) ? "" : product.categoria);
-    setCategoryMode("select");
-    setDraftNewCategoria("");
-    setDraftPrecio(String(product.precio));
-    window.requestAnimationFrame(() => nombreRef.current?.focus());
-  }, [editing, product.id]);
-
-  const resolvedCategoria = categoryMode === "new" ? draftNewCategoria.trim() : draftCategoria.trim();
-  const originalCategoria = missingCategory ? "" : product.categoria;
-  const parsedPrecio = parsePriceDraft(draftPrecio);
-  const dirty =
-    editing &&
-    (draftNombre.trim() !== product.nombre.trim() ||
-      draftMarca.trim() !== (product.marca || "") ||
-      resolvedCategoria !== originalCategoria ||
-      (parsedPrecio == null ? draftPrecio.trim() !== String(product.precio) : parsedPrecio !== product.precio));
-
-  useEffect(() => {
-    if (editing) {
-      onDirtyChange(dirty);
-    }
-  }, [dirty, editing, onDirtyChange]);
-
-  useEffect(() => {
-    if (!editing) {
-      return;
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onCancelEdit();
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [editing, onCancelEdit]);
 
   async function toggleActivo() {
     setBusy(true);
@@ -849,66 +812,14 @@ function ProductRow({
     }
   }
 
-  async function saveRow() {
-    const nombre = draftNombre.trim();
-    if (!nombre) {
-      onError("El nombre no puede quedar vacío");
-      return;
-    }
-    if (!resolvedCategoria) {
-      onError("La categoría no puede quedar vacía");
-      return;
-    }
-    if (parsedPrecio == null) {
-      onError("Precio inválido");
-      return;
-    }
-    const payload: PatchPayload = {};
-    if (nombre !== product.nombre.trim()) {
-      payload.nombre = nombre;
-    }
-    if (draftMarca.trim() !== (product.marca || "")) {
-      payload.marca = draftMarca.trim() || null;
-    }
-    if (resolvedCategoria !== originalCategoria) {
-      payload.categoria = resolvedCategoria;
-    }
-    if (parsedPrecio !== product.precio) {
-      payload.precio = parsedPrecio;
-    }
-    if (Object.keys(payload).length === 0) {
-      onCancelEdit();
-      return;
-    }
-    setSaving(true);
-    try {
-      await onPatch(product.id, payload);
-      onError(null);
-      onSaved();
-    } catch (saveError) {
-      onError(saveError instanceof Error ? saveError.message : "No pudimos guardar");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const fieldClass = "h-8 w-full min-w-[7rem] rounded-lg border bg-white px-2 text-sm font-semibold outline-none";
-
   return (
     <tr
       className="product-row border-t"
       data-selected={selected ? "true" : "false"}
-      data-editing={editing ? "true" : "false"}
       style={{
         borderColor: "#F3F4F6",
-        backgroundColor: editing
-          ? "rgba(126, 179, 65, 0.06)"
-          : selected
-            ? "rgba(126, 179, 65, 0.08)"
-            : zebra
-              ? "#FAFBFA"
-              : "#FFFFFF",
-        boxShadow: selected || editing ? `inset 3px 0 0 ${brand.green}` : undefined,
+        backgroundColor: selected ? "rgba(126, 179, 65, 0.08)" : zebra ? "#FAFBFA" : "#FFFFFF",
+        boxShadow: selected ? `inset 3px 0 0 ${brand.green}` : undefined,
         opacity: product.activo ? 1 : 0.72,
       }}
     >
@@ -932,85 +843,10 @@ function ProductRow({
           )}
         </div>
       </td>
-      <td className="max-w-[240px] px-3 py-2.5 font-semibold leading-tight">
-        {editing ? (
-          <input
-            ref={nombreRef}
-            value={draftNombre}
-            onChange={(event) => setDraftNombre(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void saveRow();
-              }
-            }}
-            className={fieldClass}
-            style={{ borderColor: brand.green, color: brand.ink }}
-          />
-        ) : (
-          <span>{product.nombre}</span>
-        )}
-      </td>
+      <td className="max-w-[240px] px-3 py-2.5 font-semibold leading-tight">{product.nombre}</td>
+      <td className="whitespace-nowrap px-3 py-2.5 text-brand-muted">{product.marca || "—"}</td>
       <td className="whitespace-nowrap px-3 py-2.5">
-        {editing ? (
-          <input
-            value={draftMarca}
-            onChange={(event) => setDraftMarca(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void saveRow();
-              }
-            }}
-            className={fieldClass}
-            style={{ borderColor: brand.green, color: brand.ink }}
-          />
-        ) : (
-          <span className="text-brand-muted">{product.marca || "—"}</span>
-        )}
-      </td>
-      <td className="whitespace-nowrap px-3 py-2.5">
-        {editing ? (
-          categoryMode === "new" ? (
-            <input
-              value={draftNewCategoria}
-              placeholder="Nueva categoría"
-              onChange={(event) => setDraftNewCategoria(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void saveRow();
-                }
-              }}
-              className={fieldClass}
-              style={{ borderColor: brand.green, color: brand.ink }}
-            />
-          ) : (
-            <select
-              value={draftCategoria}
-              onChange={(event) => {
-                if (event.target.value === "__new__") {
-                  setCategoryMode("new");
-                  setDraftNewCategoria("");
-                  return;
-                }
-                setDraftCategoria(event.target.value);
-              }}
-              className={fieldClass}
-              style={{ borderColor: brand.green, color: brand.ink }}
-            >
-              <option value="" disabled>
-                Elegir…
-              </option>
-              {categories.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-              <option value="__new__">Nueva categoría…</option>
-            </select>
-          )
-        ) : missingCategory ? (
+        {missingCategory ? (
           <span
             className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold"
             style={{ backgroundColor: "#FEF3C7", color: "#92400E" }}
@@ -1021,25 +857,7 @@ function ProductRow({
           <span className="text-brand-muted">{product.categoria}</span>
         )}
       </td>
-      <td className="whitespace-nowrap px-3 py-2.5 text-right">
-        {editing ? (
-          <input
-            value={draftPrecio}
-            inputMode="decimal"
-            onChange={(event) => setDraftPrecio(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void saveRow();
-              }
-            }}
-            className={`${fieldClass} text-right font-bold tabular-nums`}
-            style={{ borderColor: brand.green, color: brand.ink, minWidth: "6.5rem" }}
-          />
-        ) : (
-          <span className="font-bold tabular-nums">{formatPrice(product.precio)}</span>
-        )}
-      </td>
+      <td className="whitespace-nowrap px-3 py-2.5 text-right font-bold tabular-nums">{formatPrice(product.precio)}</td>
       <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-brand-muted">
         {product.codigoOdoo ? (
           <span className="cursor-help underline decoration-dotted decoration-gray-300" title={product.codigoOdoo}>
@@ -1051,69 +869,425 @@ function ProductRow({
       </td>
       <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-brand-muted">{product.codigoBarras || "—"}</td>
       <td className="px-3 py-2.5">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={product.activo}
-          disabled={busy}
-          onClick={() => void toggleActivo()}
-          className="inline-flex items-center gap-2 disabled:opacity-40"
-        >
-          <span
-            className="relative inline-block h-5 w-9 rounded-full"
-            style={{ backgroundColor: product.activo ? brand.green : "#D1D5DB" }}
-          >
-            <span
-              className="absolute top-0.5 h-4 w-4 rounded-full bg-white"
-              style={{ left: product.activo ? 16 : 2 }}
-            />
-          </span>
-          <span className="text-xs font-bold" style={{ color: product.activo ? brand.green : brand.muted }}>
-            {product.activo ? "Activo" : "Inactivo"}
-          </span>
-        </button>
+        <ActivoSwitch activo={product.activo} disabled={busy} onToggle={() => void toggleActivo()} />
       </td>
       <td className="whitespace-nowrap px-3 py-2.5">
-        {editing ? (
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void saveRow()}
-              className="inline-flex items-center gap-1 rounded-full px-2.5 text-xs font-bold text-white disabled:opacity-40"
-              style={{ minHeight: 32, backgroundColor: brand.green }}
-            >
-              <CheckIcon />
-              Guardar
-            </button>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={onCancelEdit}
-              className="inline-flex items-center gap-1 rounded-full border px-2.5 text-xs font-bold disabled:opacity-40"
-              style={{ minHeight: 32, borderColor: "#E5E7EB", backgroundColor: "#FFFFFF", color: brand.ink }}
-            >
-              <CloseIcon />
-              Cancelar
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={onStartEdit}
-              className="row-edit-btn inline-flex h-8 w-8 items-center justify-center rounded-full"
-              style={{ color: brand.muted }}
-              aria-label={`Editar ${product.nombre}`}
-              title="Editar"
-            >
-              <PencilIcon />
-            </button>
-            {savedFlash ? <span className="text-sm font-bold" style={{ color: brand.green }}>✓</span> : null}
-          </div>
-        )}
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onStartEdit}
+            className="row-edit-btn inline-flex h-8 w-8 items-center justify-center rounded-full"
+            style={{ color: brand.muted }}
+            aria-label={`Editar ${product.nombre}`}
+            title="Editar"
+          >
+            <PencilIcon />
+          </button>
+          {savedFlash ? (
+            <span className="text-sm font-bold" style={{ color: brand.green }}>
+              ✓
+            </span>
+          ) : null}
+        </div>
       </td>
     </tr>
+  );
+}
+
+const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+const PHOTO_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
+
+function ProductEditModal({
+  product,
+  categories,
+  onDirtyChange,
+  onCancel,
+  onSaved,
+  onFotoSaved,
+  onPatch,
+}: {
+  product: AdminCatalogProduct;
+  categories: string[];
+  onDirtyChange: (dirty: boolean) => void;
+  onCancel: () => void;
+  onSaved: () => void;
+  onFotoSaved: (fotoUrl: string) => void;
+  onPatch: (id: string, payload: PatchPayload) => Promise<AdminCatalogProduct>;
+}) {
+  const [draftNombre, setDraftNombre] = useState(product.nombre);
+  const [draftMarca, setDraftMarca] = useState(product.marca || "");
+  const [draftCategoria, setDraftCategoria] = useState(isUncategorized(product.categoria) ? "" : product.categoria);
+  const [categoryMode, setCategoryMode] = useState<"select" | "new">("select");
+  const [draftNewCategoria, setDraftNewCategoria] = useState("");
+  const [draftPrecio, setDraftPrecio] = useState(String(product.precio));
+  const [draftActivo, setDraftActivo] = useState(product.activo);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const nombreRef = useRef<HTMLInputElement | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
+
+  const resolvedCategoria = categoryMode === "new" ? draftNewCategoria.trim() : draftCategoria.trim();
+  const originalCategoria = isUncategorized(product.categoria) ? "" : product.categoria;
+  const parsedPrecio = parsePriceDraft(draftPrecio);
+  const dirty =
+    Boolean(imageFile) ||
+    draftNombre.trim() !== product.nombre.trim() ||
+    draftMarca.trim() !== (product.marca || "") ||
+    resolvedCategoria !== originalCategoria ||
+    (parsedPrecio == null ? draftPrecio.trim() !== String(product.precio) : parsedPrecio !== product.precio) ||
+    draftActivo !== product.activo;
+
+  useEffect(() => {
+    onDirtyChange(dirty);
+  }, [dirty, onDirtyChange]);
+
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.requestAnimationFrame(() => nombreRef.current?.focus());
+    return () => {
+      document.body.style.overflow = previous;
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        requestClose();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  function requestClose() {
+    if (dirty && !window.confirm("Hay cambios sin guardar. ¿Descartarlos?")) {
+      return;
+    }
+    onDirtyChange(false);
+    onCancel();
+  }
+
+  function acceptFile(file: File | undefined) {
+    if (!file) {
+      return;
+    }
+    const mime = file.type === "image/jpg" ? "image/jpeg" : file.type;
+    if (!PHOTO_TYPES.has(mime)) {
+      setFormError("Usa JPG, PNG o WebP");
+      return;
+    }
+    if (file.size > PHOTO_MAX_BYTES) {
+      setFormError("La imagen pesa más de 5 MB");
+      return;
+    }
+    setFormError(null);
+    setImagePreview((current) => {
+      if (current) {
+        URL.revokeObjectURL(current);
+      }
+      const next = URL.createObjectURL(file);
+      previewUrlRef.current = next;
+      return next;
+    });
+    setImageFile(file);
+  }
+
+  async function save() {
+    const nombre = draftNombre.trim();
+    if (!nombre) {
+      setFormError("El nombre no puede quedar vacío");
+      return;
+    }
+    if (!resolvedCategoria) {
+      setFormError("La categoría no puede quedar vacía");
+      return;
+    }
+    if (parsedPrecio == null) {
+      setFormError("Precio inválido");
+      return;
+    }
+    setSaving(true);
+    setFormError(null);
+    try {
+      if (imageFile) {
+        const body = new FormData();
+        body.append("productId", product.id);
+        body.append("file", imageFile);
+        const response = await fetch("/api/admin/catalogo/imagenes/upload", {
+          method: "POST",
+          credentials: "include",
+          body,
+        });
+        const payload = (await response.json().catch(() => null)) as { fotoUrl?: string; error?: string } | null;
+        if (!response.ok || !payload?.fotoUrl) {
+          throw new Error(payload?.error || "No pudimos subir la imagen");
+        }
+        onFotoSaved(payload.fotoUrl);
+      }
+      const patch: PatchPayload = {};
+      if (nombre !== product.nombre.trim()) {
+        patch.nombre = nombre;
+      }
+      if (draftMarca.trim() !== (product.marca || "")) {
+        patch.marca = draftMarca.trim() || null;
+      }
+      if (resolvedCategoria !== originalCategoria) {
+        patch.categoria = resolvedCategoria;
+      }
+      if (parsedPrecio !== product.precio) {
+        patch.precio = parsedPrecio;
+      }
+      if (draftActivo !== product.activo) {
+        patch.activo = draftActivo;
+      }
+      if (Object.keys(patch).length > 0) {
+        await onPatch(product.id, patch);
+      }
+      onDirtyChange(false);
+      onSaved();
+    } catch (saveError) {
+      setFormError(saveError instanceof Error ? saveError.message : "No pudimos guardar");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const previewSrc = imagePreview || product.fotoUrl;
+  const fieldClass =
+    "mt-1 h-11 w-full rounded-xl border bg-white px-3 text-sm font-semibold outline-none focus:border-[#7EB341]";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/40"
+        aria-label="Cerrar"
+        onClick={requestClose}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="product-edit-title"
+        className="relative z-10 flex max-h-[calc(100vh-3rem)] w-full max-w-lg flex-col overflow-hidden rounded-[28px] bg-white"
+        style={{ boxShadow: "0 24px 64px rgba(26, 26, 26, 0.22)", color: brand.ink }}
+      >
+        <div className="overflow-y-auto px-6 py-6">
+          <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Editar producto</p>
+          <h2 id="product-edit-title" className="mt-1 font-display text-2xl font-bold leading-tight">
+            {product.nombre}
+          </h2>
+
+          <div className="mt-5 flex flex-col items-center">
+            <div
+              className="flex items-center justify-center overflow-hidden rounded-3xl"
+              style={{ width: 200, height: 200, backgroundColor: "#F3F4F6" }}
+            >
+              {previewSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={previewSrc} alt="" className="h-full w-full object-contain" />
+              ) : (
+                <span className="text-sm text-brand-muted">Sin imagen</span>
+              )}
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="sr-only"
+              onChange={(event) => {
+                acceptFile(event.target.files?.[0]);
+                event.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDragOver(false);
+                acceptFile(event.dataTransfer.files[0]);
+              }}
+              className="mt-3 rounded-full border px-4 text-sm font-bold"
+              style={{
+                minHeight: 40,
+                borderColor: dragOver ? brand.green : "#E5E7EB",
+                backgroundColor: dragOver ? "rgba(126, 179, 65, 0.08)" : "#FFFFFF",
+                color: brand.ink,
+              }}
+            >
+              Cambiar imagen
+            </button>
+            <p className="mt-1.5 text-xs text-brand-muted">JPG, PNG o WebP · máx. 5 MB · o arrastra aquí</p>
+          </div>
+
+          <div className="mt-6 space-y-4">
+            <label className="block text-xs font-bold text-brand-muted">
+              Nombre
+              <input
+                ref={nombreRef}
+                value={draftNombre}
+                onChange={(event) => setDraftNombre(event.target.value)}
+                className={fieldClass}
+                style={{ borderColor: "#E5E7EB", color: brand.ink }}
+              />
+            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block text-xs font-bold text-brand-muted">
+                Marca
+                <input
+                  value={draftMarca}
+                  onChange={(event) => setDraftMarca(event.target.value)}
+                  className={fieldClass}
+                  style={{ borderColor: "#E5E7EB", color: brand.ink }}
+                />
+              </label>
+              <label className="block text-xs font-bold text-brand-muted">
+                Categoría
+                {categoryMode === "new" ? (
+                  <input
+                    value={draftNewCategoria}
+                    placeholder="Nueva categoría"
+                    onChange={(event) => setDraftNewCategoria(event.target.value)}
+                    className={fieldClass}
+                    style={{ borderColor: "#E5E7EB", color: brand.ink }}
+                  />
+                ) : (
+                  <span className="relative mt-1 block">
+                    <select
+                      value={draftCategoria}
+                      onChange={(event) => {
+                        if (event.target.value === "__new__") {
+                          setCategoryMode("new");
+                          setDraftNewCategoria("");
+                          return;
+                        }
+                        setDraftCategoria(event.target.value);
+                      }}
+                      className="h-11 w-full appearance-none rounded-xl border bg-white px-3 pr-9 text-sm font-semibold outline-none focus:border-[#7EB341]"
+                      style={{ borderColor: "#E5E7EB", color: brand.ink }}
+                    >
+                      <option value="" disabled>
+                        Elegir…
+                      </option>
+                      {categories.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                      <option value="__new__">Crear nueva…</option>
+                    </select>
+                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-brand-muted">
+                      <ChevronIcon />
+                    </span>
+                  </span>
+                )}
+              </label>
+            </div>
+            <label className="block text-xs font-bold text-brand-muted">
+              Precio
+              <span className="relative mt-1 block">
+                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-bold" style={{ color: brand.orange }}>
+                  RD$
+                </span>
+                <input
+                  value={draftPrecio}
+                  inputMode="decimal"
+                  onChange={(event) => setDraftPrecio(event.target.value)}
+                  className="h-11 w-full rounded-xl border bg-white pl-12 pr-3 text-sm font-bold tabular-nums outline-none focus:border-[#7EB341]"
+                  style={{ borderColor: "#E5E7EB", color: brand.ink }}
+                />
+              </span>
+            </label>
+            <div className="grid gap-3 rounded-2xl px-4 py-3 sm:grid-cols-2" style={{ backgroundColor: "#F8FAF7" }}>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-brand-muted">Código Odoo</p>
+                <p className="mt-1 break-all font-mono text-xs text-brand-muted">{product.codigoOdoo || "—"}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-brand-muted">Código de barras</p>
+                <p className="mt-1 font-mono text-xs text-brand-muted">{product.codigoBarras || "—"}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-2xl border px-4 py-3" style={{ borderColor: "#E5E7EB" }}>
+              <p className="text-sm font-bold">Visible en el catálogo</p>
+              <ActivoSwitch activo={draftActivo} onToggle={() => setDraftActivo((current) => !current)} />
+            </div>
+          </div>
+
+          {formError ? (
+            <p className="mt-4 rounded-2xl px-3 py-2 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
+              {formError}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t px-6 py-4" style={{ borderColor: "#F3F4F6" }}>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={requestClose}
+            className="rounded-full border px-4 text-sm font-bold disabled:opacity-40"
+            style={{ minHeight: 44, borderColor: "#E5E7EB", backgroundColor: "#FFFFFF", color: brand.ink }}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void save()}
+            className="rounded-full px-5 text-sm font-bold text-white disabled:opacity-40"
+            style={{ minHeight: 44, backgroundColor: brand.green }}
+          >
+            {saving ? "Guardando..." : "Guardar cambios"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActivoSwitch({
+  activo,
+  disabled = false,
+  onToggle,
+}: {
+  activo: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={activo}
+      disabled={disabled}
+      onClick={onToggle}
+      className="inline-flex items-center gap-2 disabled:opacity-40"
+    >
+      <span
+        className="relative inline-block h-5 w-9 rounded-full"
+        style={{ backgroundColor: activo ? brand.green : "#D1D5DB" }}
+      >
+        <span className="absolute top-0.5 h-4 w-4 rounded-full bg-white" style={{ left: activo ? 16 : 2 }} />
+      </span>
+      <span className="text-xs font-bold" style={{ color: activo ? brand.green : brand.muted }}>
+        {activo ? "Activo" : "Inactivo"}
+      </span>
+    </button>
   );
 }
 
@@ -1134,22 +1308,6 @@ function PencilIcon() {
         strokeWidth="1.5"
         strokeLinejoin="round"
       />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-      <path d="M2.2 6.2 4.6 8.6 9.8 3.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-      <path d="M3 3l6 6M9 3 3 9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
   );
 }
