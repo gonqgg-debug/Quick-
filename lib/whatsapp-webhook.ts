@@ -1,3 +1,4 @@
+import { appBaseUrl } from "@/lib/app-url";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import {
   mediaAckMessage,
@@ -44,17 +45,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
-}
-
-function catalogBaseUrl(): string {
-  const explicit = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
-  if (explicit) {
-    return explicit.replace(/\/$/, "");
-  }
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL.replace(/\/$/, "")}`;
-  }
-  return "http://localhost:3000";
 }
 
 function orderStatusLabel(estado: string): string {
@@ -293,7 +283,7 @@ async function handleNewOrder(phoneNumber: string, chatId: string): Promise<void
     throw new Error("No pudimos crear la sesión de pedido");
   }
 
-  const link = `${catalogBaseUrl()}/order/${session.id}`;
+  const link = `${appBaseUrl()}/order/${session.id}`;
   await sendTextMessage(
     phoneNumber,
     `Perfecto. Arma tu pedido aquí (el enlace vence en 2 horas):\n${link}`

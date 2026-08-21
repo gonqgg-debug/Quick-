@@ -39,10 +39,6 @@ function getMessagesEndpoint(): string {
   return `${GRAPH_API_BASE}/${GRAPH_API_VERSION}/${getWhatsAppPhoneNumberId()}/messages`;
 }
 
-function catalogBaseUrl(): string {
-  return appBaseUrl();
-}
-
 export function normalizePhoneNumber(phoneNumber: string): string {
   return phoneNumber.replace(/[^\d]/g, "");
 }
@@ -523,7 +519,7 @@ export async function requestHumanHelp(phoneNumber: string, chatId: string): Pro
 
   const staffPhone = getStaffPhoneOrNull();
   if (staffPhone) {
-    const panelLink = `${catalogBaseUrl()}/staff/chats/${chatId}`;
+    const panelLink = `${appBaseUrl()}/staff/chats/${chatId}`;
     await sendTextMessage(
       staffPhone,
       `🙋 El cliente ${phoneNumber} pidió hablar con una persona. Revisa el panel: ${panelLink}`
@@ -566,7 +562,7 @@ export async function handleModifyOrder(phoneNumber: string, chatId: string): Pr
     throw new Error("No pudimos crear la sesión de edición");
   }
 
-  const link = `${catalogBaseUrl()}/order/${session.id}`;
+  const link = `${appBaseUrl()}/order/${session.id}`;
   const numero = shortOrderId(activeOrder.id);
   await sendTextMessage(
     phoneNumber,

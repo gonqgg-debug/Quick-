@@ -1,12 +1,12 @@
+const DEFAULT_LOCAL_URL = "http://localhost:3000";
+
+/** Canonical public site URL. Set NEXT_PUBLIC_APP_URL in Vercel to https://quickminimarket.com */
 export function appBaseUrl(): string {
-  const explicit = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
+  const explicit = process.env.NEXT_PUBLIC_APP_URL?.trim();
   if (explicit) {
     return explicit.replace(/\/$/, "");
   }
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL.replace(/\/$/, "")}`;
-  }
-  return "http://localhost:3000";
+  return DEFAULT_LOCAL_URL;
 }
 
 export function publicOrderUrl(sessionId: string): string {

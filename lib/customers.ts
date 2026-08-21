@@ -4,7 +4,7 @@ import { normalizePhoneNumber } from "@/lib/whatsapp";
 export const ADDRESS_LABELS = ["Casa", "Trabajo", "Otro"] as const;
 export type AddressLabel = (typeof ADDRESS_LABELS)[number];
 
-export const KNOWN_RESIDENCIALES = ["Jardines III", "Crisfer", "Cañas del Este"] as const;
+export const KNOWN_RESIDENCIALES = ["Jardines III", "Crisfer", "Canas del Este"] as const;
 export const RESIDENCIAL_OPTIONS = [...KNOWN_RESIDENCIALES, "Otro"] as const;
 export type KnownResidencial = (typeof KNOWN_RESIDENCIALES)[number];
 export type ResidencialOption = (typeof RESIDENCIAL_OPTIONS)[number];
