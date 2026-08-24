@@ -13,10 +13,15 @@ import {
 import { formatDayKey, todayDayKey } from "@/lib/local-day";
 import { formatPrice } from "@/lib/money";
 import { brand } from "@/lib/theme";
+import { AdminInput, AdminSelect, AdminTextarea, adminLabelClass } from "@/components/admin/AdminField";
+import {
+  DataTable,
+  DataTableCell,
+  DataTableHead,
+  DataTableRow,
+  DataTableTh,
+} from "@/components/admin/DataTable";
 
-const fieldClass =
-  "mt-1.5 h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium outline-none focus:border-[#7EB341]";
-const labelClass = "block text-[13px] font-medium text-brand-muted";
 const MUTED = "#6B7280";
 const RED = "#DC2626";
 
@@ -75,14 +80,13 @@ export function AdminCajaTurnos() {
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <label className={labelClass}>
+        <label className={adminLabelClass}>
           Fecha
-          <input
+          <AdminInput
             type="date"
             value={fecha}
             onChange={(event) => setFecha(event.target.value)}
-            className={fieldClass}
-            style={{ borderColor: "#E5E7EB", color: brand.ink, minWidth: 180 }}
+            className="min-w-[180px]"
           />
         </label>
         <div className="flex flex-wrap gap-2">
@@ -114,61 +118,57 @@ export function AdminCajaTurnos() {
       ) : null}
 
       {loading ? (
-        <div className="mt-6 h-48 animate-pulse rounded-[24px] bg-gray-100" />
+        <div className="mt-6 h-48 animate-pulse rounded-lg bg-gray-100" />
       ) : turnos.length === 0 ? (
-        <div className="mt-6 rounded-[28px] px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
+        <div className="mt-6 rounded-lg px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
           <p className="font-display text-xl font-bold">No hay turnos</p>
           <p className="mt-2 text-sm text-brand-muted">Registra el cierre para verlo aquí.</p>
         </div>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-[24px] border" style={{ borderColor: "#E5E7EB" }}>
-          <table className="w-full min-w-[1100px] text-left text-sm">
-            <thead>
-              <tr className="text-xs font-bold uppercase tracking-wide text-brand-muted" style={{ backgroundColor: "#F8FAF7" }}>
-                <th className="px-4 py-3">Fecha</th>
-                <th className="px-4 py-3">Turno</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Sist. tarjeta</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Sist. efectivo</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Rep. tarjeta</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Rep. efectivo</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Rep. USD</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Var. total</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Var. tarjeta</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Var. efectivo</th>
-                <th className="px-4 py-3">Verificado</th>
-                <th className="px-4 py-3">Notas</th>
-              </tr>
-            </thead>
-            <tbody>
-              {turnos.map((turno, index) => (
-                <tr key={turno.id} style={{ backgroundColor: index % 2 === 1 ? "#FAFBFA" : "#FFFFFF" }}>
-                  <td className="whitespace-nowrap px-4 py-3 font-semibold">{formatDayKey(turno.fecha)}</td>
-                  <td className="px-4 py-3 font-semibold">{turno.turno}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatPrice(turno.sistemaTarjeta)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatPrice(turno.sistemaEfectivo)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatPrice(turno.reportadoTarjeta)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatPrice(turno.reportadoEfectivo)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatUsd(turno.reportadoUsd)}</td>
-                  <VarianceCell value={turno.varTotal} />
-                  <VarianceCell value={turno.varTarjeta} />
-                  <VarianceCell value={turno.varEfectivo} />
-                  <td className="px-4 py-3">
-                    <span
-                      className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                      style={{
-                        backgroundColor: turno.verificado ? `${brand.green}22` : "#F3F4F6",
-                        color: turno.verificado ? brand.green : MUTED,
-                      }}
-                    >
-                      {turno.verificado ? "Verificado" : "Pendiente"}
-                    </span>
-                  </td>
-                  <td className="max-w-[180px] truncate px-4 py-3 text-brand-muted">{turno.notas ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable className="mt-6" tableClassName="min-w-[1100px]">
+          <DataTableHead>
+            <DataTableTh>Fecha</DataTableTh>
+            <DataTableTh>Turno</DataTableTh>
+            <DataTableTh numeric>Sist. tarjeta</DataTableTh>
+            <DataTableTh numeric>Sist. efectivo</DataTableTh>
+            <DataTableTh numeric>Rep. tarjeta</DataTableTh>
+            <DataTableTh numeric>Rep. efectivo</DataTableTh>
+            <DataTableTh numeric>Rep. USD</DataTableTh>
+            <DataTableTh numeric>Var. total</DataTableTh>
+            <DataTableTh numeric>Var. tarjeta</DataTableTh>
+            <DataTableTh numeric>Var. efectivo</DataTableTh>
+            <DataTableTh>Verificado</DataTableTh>
+            <DataTableTh>Notas</DataTableTh>
+          </DataTableHead>
+          <tbody>
+            {turnos.map((turno) => (
+              <DataTableRow key={turno.id}>
+                <DataTableCell className="whitespace-nowrap font-semibold">{formatDayKey(turno.fecha)}</DataTableCell>
+                <DataTableCell className="font-semibold">{turno.turno}</DataTableCell>
+                <DataTableCell numeric>{formatPrice(turno.sistemaTarjeta)}</DataTableCell>
+                <DataTableCell numeric>{formatPrice(turno.sistemaEfectivo)}</DataTableCell>
+                <DataTableCell numeric>{formatPrice(turno.reportadoTarjeta)}</DataTableCell>
+                <DataTableCell numeric>{formatPrice(turno.reportadoEfectivo)}</DataTableCell>
+                <DataTableCell numeric>{formatUsd(turno.reportadoUsd)}</DataTableCell>
+                <VarianceCell value={turno.varTotal} />
+                <VarianceCell value={turno.varTarjeta} />
+                <VarianceCell value={turno.varEfectivo} />
+                <DataTableCell>
+                  <span
+                    className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                    style={{
+                      backgroundColor: turno.verificado ? `${brand.green}22` : "#F3F4F6",
+                      color: turno.verificado ? brand.green : MUTED,
+                    }}
+                  >
+                    {turno.verificado ? "Verificado" : "Pendiente"}
+                  </span>
+                </DataTableCell>
+                <DataTableCell className="max-w-[180px] truncate text-brand-muted">{turno.notas ?? "—"}</DataTableCell>
+              </DataTableRow>
+            ))}
+          </tbody>
+        </DataTable>
       )}
 
       {registerOpen ? (
@@ -187,12 +187,9 @@ export function AdminCajaTurnos() {
 function VarianceCell({ value }: { value: number }) {
   const zero = isNearZero(value);
   return (
-    <td
-      className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums"
-      style={{ color: zero ? MUTED : RED }}
-    >
+    <DataTableCell numeric className="font-semibold" style={{ color: zero ? MUTED : RED }}>
       {zero ? formatPrice(0) : formatSignedPrice(value)}
-    </td>
+    </DataTableCell>
   );
 }
 
@@ -268,28 +265,16 @@ function RegistrarTurnoModal({
         <p className="mt-1 text-sm text-brand-muted">Fecha y turno alcanzan para guardar. Los montos pueden ir en 0.</p>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <label className={labelClass}>
+          <label className={adminLabelClass}>
             Fecha
-            <input
-              type="date"
-              required
-              value={fecha}
-              onChange={(event) => setFecha(event.target.value)}
-              className={fieldClass}
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
-            />
+            <AdminInput type="date" required value={fecha} onChange={(event) => setFecha(event.target.value)} />
           </label>
-          <label className={labelClass}>
+          <label className={adminLabelClass}>
             Turno
-            <select
-              value={turno}
-              onChange={(event) => setTurno(event.target.value as CajaTurnoPeriodo)}
-              className={fieldClass}
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
-            >
+            <AdminSelect value={turno} onChange={(event) => setTurno(event.target.value as CajaTurnoPeriodo)}>
               <option value="AM">AM</option>
               <option value="PM">PM</option>
-            </select>
+            </AdminSelect>
           </label>
         </div>
 
@@ -301,7 +286,7 @@ function RegistrarTurnoModal({
           <MoneyField label="Reportado USD" prefix="US$" value={reportadoUsd} onChange={setReportadoUsd} />
         </div>
 
-        <label className={`${labelClass} mt-4 flex items-center gap-2`}>
+        <label className={`${adminLabelClass} mt-4 flex items-center gap-2`}>
           <input
             type="checkbox"
             checked={verificado}
@@ -311,15 +296,9 @@ function RegistrarTurnoModal({
           <span className="text-sm font-semibold text-brand-ink">Verificado</span>
         </label>
 
-        <label className={`${labelClass} mt-4`}>
+        <label className={`${adminLabelClass} mt-4`}>
           Notas
-          <textarea
-            value={notas}
-            onChange={(event) => setNotas(event.target.value)}
-            rows={2}
-            className="mt-1.5 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:border-[#7EB341]"
-            style={{ borderColor: "#E5E7EB", color: brand.ink }}
-          />
+          <AdminTextarea value={notas} onChange={(event) => setNotas(event.target.value)} rows={2} />
         </label>
 
         {formError ? (
@@ -363,7 +342,7 @@ function MoneyField({
   prefix?: string;
 }) {
   return (
-    <label className={labelClass}>
+    <label className={adminLabelClass}>
       {label}
       <span className="relative mt-1.5 block">
         <span
@@ -372,12 +351,12 @@ function MoneyField({
         >
           {prefix}
         </span>
-        <input
+        <AdminInput
+          bare
           value={value}
           inputMode="decimal"
           onChange={(event) => onChange(event.target.value)}
-          className="h-11 w-full rounded-xl border bg-white pl-12 pr-3 text-sm font-semibold tabular-nums outline-none focus:border-[#7EB341]"
-          style={{ borderColor: "#E5E7EB", color: brand.ink }}
+          className="!pl-12 font-semibold tabular-nums"
         />
       </span>
     </label>

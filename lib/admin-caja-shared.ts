@@ -34,6 +34,7 @@ export type CajaLedgerItem = {
 
 export const CAJA_TABS = [
   { href: "/admin/caja/balances", label: "Balances" },
+  { href: "/admin/caja/recuento", label: "Recuento" },
   { href: "/admin/caja/turnos", label: "Turnos" },
   { href: "/admin/caja/ledger", label: "Ledger" },
 ] as const;

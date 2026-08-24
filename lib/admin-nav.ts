@@ -65,6 +65,7 @@ export const ADMIN_CAJA: AdminNavItem = {
   status: "live",
   children: [
     { href: "/admin/caja/balances", label: "Balances", icon: "cash" },
+    { href: "/admin/caja/recuento", label: "Recuento", icon: "cash" },
     { href: "/admin/caja/turnos", label: "Turnos", icon: "history" },
     { href: "/admin/caja/ledger", label: "Ledger", icon: "purchases" },
   ],

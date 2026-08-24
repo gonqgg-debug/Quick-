@@ -15,10 +15,14 @@ import {
 import { formatDayKey, todayDayKey } from "@/lib/local-day";
 import { formatPrice } from "@/lib/money";
 import { brand } from "@/lib/theme";
-
-const fieldClass =
-  "mt-1.5 h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium outline-none focus:border-[#7EB341]";
-const labelClass = "block text-[13px] font-medium text-brand-muted";
+import { AdminInput, AdminSelect, adminLabelClass } from "@/components/admin/AdminField";
+import {
+  DataTable,
+  DataTableCell,
+  DataTableHead,
+  DataTableRow,
+  DataTableTh,
+} from "@/components/admin/DataTable";
 
 type View = "pendientes" | "historial";
 
@@ -205,16 +209,14 @@ export function AdminCompras() {
 
       {view === "historial" ? (
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <label className={labelClass}>
+          <label className={adminLabelClass}>
             Proveedor
-            <select
+            <AdminSelect
               value={proveedorId}
               onChange={(event) => {
                 setProveedorId(event.target.value);
                 setPage(1);
               }}
-              className={fieldClass}
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
             >
               <option value="">Todos</option>
               {proveedores.map((proveedor) => (
@@ -222,32 +224,28 @@ export function AdminCompras() {
                   {proveedor.nombre}
                 </option>
               ))}
-            </select>
+            </AdminSelect>
           </label>
-          <label className={labelClass}>
+          <label className={adminLabelClass}>
             Desde
-            <input
+            <AdminInput
               type="date"
               value={from}
               onChange={(event) => {
                 setFrom(event.target.value);
                 setPage(1);
               }}
-              className={fieldClass}
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
             />
           </label>
-          <label className={labelClass}>
+          <label className={adminLabelClass}>
             Hasta
-            <input
+            <AdminInput
               type="date"
               value={to}
               onChange={(event) => {
                 setTo(event.target.value);
                 setPage(1);
               }}
-              className={fieldClass}
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
             />
           </label>
         </div>
@@ -260,9 +258,9 @@ export function AdminCompras() {
       ) : null}
 
       {loading ? (
-        <div className="mt-6 h-48 animate-pulse rounded-[24px] bg-gray-100" />
+        <div className="mt-6 h-48 animate-pulse rounded-lg bg-gray-100" />
       ) : compras.length === 0 ? (
-        <div className="mt-6 rounded-[28px] px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
+        <div className="mt-6 rounded-lg px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
           <p className="font-display text-xl font-bold">
             {view === "pendientes" ? "No hay compras pendientes" : "No hay compras con esos filtros"}
           </p>
@@ -302,7 +300,7 @@ export function AdminCompras() {
 
 function SummaryCard({ label, amount, danger = false }: { label: string; amount: number; danger?: boolean }) {
   return (
-    <section className="rounded-[24px] border bg-white px-4 py-4" style={{ borderColor: "#E5E7EB" }}>
+    <section className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-4 shadow-sm">
       <p className="text-[11px] font-bold uppercase tracking-wide text-brand-muted">{label}</p>
       <p
         className="mt-1 font-display text-xl font-bold tabular-nums"
@@ -325,53 +323,48 @@ function PendientesTable({
 }) {
   const today = todayDayKey();
   return (
-    <div className="mt-6 overflow-x-auto rounded-[24px] border" style={{ borderColor: "#E5E7EB" }}>
-      <table className="w-full min-w-[780px] text-left text-sm">
-        <thead>
-          <tr className="text-xs font-bold uppercase tracking-wide text-brand-muted" style={{ backgroundColor: "#F8FAF7" }}>
-            <th className="px-4 py-3">Proveedor</th>
-            <th className="whitespace-nowrap px-4 py-3 text-right">Monto</th>
-            <th className="whitespace-nowrap px-4 py-3">Fecha</th>
-            <th className="whitespace-nowrap px-4 py-3">Vence</th>
-            <th className="whitespace-nowrap px-4 py-3">Días restantes</th>
-            <th className="px-4 py-3">
-              <span className="sr-only">Pagar</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {compras.map((compra, index) => {
-            const days = daysRemaining(compra.dueDate, today);
-            const overdue = days < 0;
-            return (
-              <tr key={compra.id} style={{ backgroundColor: index % 2 === 1 ? "#FAFBFA" : "#FFFFFF" }}>
-                <td className="px-4 py-3 font-semibold">{compra.proveedorNombre}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-right font-bold tabular-nums">{formatPrice(compra.monto)}</td>
-                <td className="whitespace-nowrap px-4 py-3">{formatDayKey(compra.fecha)}</td>
-                <td className="whitespace-nowrap px-4 py-3">{formatDayKey(compra.dueDate)}</td>
-                <td
-                  className="whitespace-nowrap px-4 py-3 font-semibold"
-                  style={{ color: overdue ? brand.error : brand.ink }}
+    <DataTable className="mt-6" tableClassName="min-w-[780px]">
+      <DataTableHead>
+        <DataTableTh>Proveedor</DataTableTh>
+        <DataTableTh numeric>Monto</DataTableTh>
+        <DataTableTh className="whitespace-nowrap">Fecha</DataTableTh>
+        <DataTableTh className="whitespace-nowrap">Vence</DataTableTh>
+        <DataTableTh className="whitespace-nowrap">Días restantes</DataTableTh>
+        <DataTableTh>
+          <span className="sr-only">Pagar</span>
+        </DataTableTh>
+      </DataTableHead>
+      <tbody>
+        {compras.map((compra) => {
+          const days = daysRemaining(compra.dueDate, today);
+          const overdue = days < 0;
+          return (
+            <DataTableRow key={compra.id}>
+              <DataTableCell className="font-semibold">{compra.proveedorNombre}</DataTableCell>
+              <DataTableCell numeric className="font-bold">
+                {formatPrice(compra.monto)}
+              </DataTableCell>
+              <DataTableCell className="whitespace-nowrap">{formatDayKey(compra.fecha)}</DataTableCell>
+              <DataTableCell className="whitespace-nowrap">{formatDayKey(compra.dueDate)}</DataTableCell>
+              <DataTableCell className="whitespace-nowrap font-semibold" style={{ color: overdue ? brand.error : brand.ink }}>
+                {formatDaysRemaining(days)}
+              </DataTableCell>
+              <DataTableCell className="whitespace-nowrap text-right">
+                <button
+                  type="button"
+                  disabled={busyId === compra.id}
+                  onClick={() => onMarkPaid(compra.id)}
+                  className="rounded-full px-3 text-sm font-bold disabled:opacity-40"
+                  style={{ minHeight: 36, backgroundColor: "#F3F4F6", color: brand.ink }}
                 >
-                  {formatDaysRemaining(days)}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-right">
-                  <button
-                    type="button"
-                    disabled={busyId === compra.id}
-                    onClick={() => onMarkPaid(compra.id)}
-                    className="rounded-full px-3 text-sm font-bold disabled:opacity-40"
-                    style={{ minHeight: 36, backgroundColor: "#F3F4F6", color: brand.ink }}
-                  >
-                    {busyId === compra.id ? "..." : "Marcar como pagada"}
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                  {busyId === compra.id ? "..." : "Marcar como pagada"}
+                </button>
+              </DataTableCell>
+            </DataTableRow>
+          );
+        })}
+      </tbody>
+    </DataTable>
   );
 }
 
@@ -391,40 +384,38 @@ function HistorialTable({
   const toRow = Math.min(total, page * COMPRAS_PAGE_SIZE);
   return (
     <div className="mt-6">
-      <div className="overflow-x-auto rounded-[24px] border" style={{ borderColor: "#E5E7EB" }}>
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead>
-            <tr className="text-xs font-bold uppercase tracking-wide text-brand-muted" style={{ backgroundColor: "#F8FAF7" }}>
-              <th className="px-4 py-3">Proveedor</th>
-              <th className="whitespace-nowrap px-4 py-3 text-right">Monto</th>
-              <th className="whitespace-nowrap px-4 py-3">Fecha</th>
-              <th className="whitespace-nowrap px-4 py-3">Vence</th>
-              <th className="whitespace-nowrap px-4 py-3">Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {compras.map((compra, index) => (
-              <tr key={compra.id} style={{ backgroundColor: index % 2 === 1 ? "#FAFBFA" : "#FFFFFF" }}>
-                <td className="px-4 py-3 font-semibold">{compra.proveedorNombre}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-right font-bold tabular-nums">{formatPrice(compra.monto)}</td>
-                <td className="whitespace-nowrap px-4 py-3">{formatDayKey(compra.fecha)}</td>
-                <td className="whitespace-nowrap px-4 py-3">{formatDayKey(compra.dueDate)}</td>
-                <td className="whitespace-nowrap px-4 py-3">
-                  {compra.pagado ? (
-                    <span className="font-semibold" style={{ color: brand.green }}>
-                      Pagada{compra.pagadoEn ? ` · ${formatDayKey(compra.pagadoEn)}` : ""}
-                    </span>
-                  ) : (
-                    <span className="font-semibold" style={{ color: brand.orange }}>
-                      Pendiente
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable tableClassName="min-w-[720px]">
+        <DataTableHead>
+          <DataTableTh>Proveedor</DataTableTh>
+          <DataTableTh numeric>Monto</DataTableTh>
+          <DataTableTh className="whitespace-nowrap">Fecha</DataTableTh>
+          <DataTableTh className="whitespace-nowrap">Vence</DataTableTh>
+          <DataTableTh className="whitespace-nowrap">Estado</DataTableTh>
+        </DataTableHead>
+        <tbody>
+          {compras.map((compra) => (
+            <DataTableRow key={compra.id}>
+              <DataTableCell className="font-semibold">{compra.proveedorNombre}</DataTableCell>
+              <DataTableCell numeric className="font-bold">
+                {formatPrice(compra.monto)}
+              </DataTableCell>
+              <DataTableCell className="whitespace-nowrap">{formatDayKey(compra.fecha)}</DataTableCell>
+              <DataTableCell className="whitespace-nowrap">{formatDayKey(compra.dueDate)}</DataTableCell>
+              <DataTableCell className="whitespace-nowrap">
+                {compra.pagado ? (
+                  <span className="font-semibold" style={{ color: brand.green }}>
+                    Pagada{compra.pagadoEn ? ` · ${formatDayKey(compra.pagadoEn)}` : ""}
+                  </span>
+                ) : (
+                  <span className="font-semibold" style={{ color: brand.orange }}>
+                    Pendiente
+                  </span>
+                )}
+              </DataTableCell>
+            </DataTableRow>
+          ))}
+        </tbody>
+      </DataTable>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-brand-muted">
           {fromRow}–{toRow} de {total.toLocaleString("es-DO")}
@@ -559,7 +550,7 @@ function RegistrarCompraModal({
         </h2>
 
         <div className="mt-5">
-          <p className={labelClass}>Proveedor</p>
+          <p className={adminLabelClass}>Proveedor</p>
           <ProveedorCombobox
             proveedores={proveedores}
             query={query}
@@ -571,7 +562,7 @@ function RegistrarCompraModal({
           />
         </div>
 
-        <label className={`${labelClass} mt-4`}>
+        <label className={`${adminLabelClass} mt-4`}>
           Monto
           <span className="relative mt-1.5 block">
             <span
@@ -580,39 +571,25 @@ function RegistrarCompraModal({
             >
               RD$
             </span>
-            <input
+            <AdminInput
+              bare
               required
               value={monto}
               inputMode="decimal"
               onChange={(event) => setMonto(event.target.value)}
-              className="h-11 w-full rounded-xl border bg-white pl-12 pr-3 text-sm font-semibold tabular-nums outline-none focus:border-[#7EB341]"
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
+              className="!pl-12 font-semibold tabular-nums"
             />
           </span>
         </label>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className={labelClass}>
+          <label className={adminLabelClass}>
             Fecha
-            <input
-              type="date"
-              required
-              value={fecha}
-              onChange={(event) => setFecha(event.target.value)}
-              className={fieldClass}
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
-            />
+            <AdminInput type="date" required value={fecha} onChange={(event) => setFecha(event.target.value)} />
           </label>
-          <label className={labelClass}>
+          <label className={adminLabelClass}>
             Vence
-            <input
-              type="date"
-              required
-              value={dueDate}
-              onChange={(event) => setDueDate(event.target.value)}
-              className={fieldClass}
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
-            />
+            <AdminInput type="date" required value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
           </label>
         </div>
         {selected?.tieneCredito ? (
@@ -697,21 +674,20 @@ function ProveedorCombobox({
 
   return (
     <div ref={wrapRef} className="relative mt-1.5">
-      <input
-        ref={inputRef}
-        value={query}
-        autoComplete="off"
-        placeholder="Buscar o escribir uno nuevo"
-        onFocus={() => setOpen(true)}
-        onChange={(event) => {
-          const value = event.target.value;
-          const match = proveedores.find((item) => item.nombre.toLowerCase() === value.trim().toLowerCase());
-          onChange({ query: value, proveedorId: match?.id ?? null });
-          setOpen(true);
-        }}
-        className={fieldClass.replace("mt-1.5 ", "")}
-        style={{ borderColor: "#E5E7EB", color: brand.ink }}
-      />
+        <AdminInput
+          ref={inputRef}
+          value={query}
+          autoComplete="off"
+          placeholder="Buscar o escribir uno nuevo"
+          onFocus={() => setOpen(true)}
+          onChange={(event) => {
+            const value = event.target.value;
+            const match = proveedores.find((item) => item.nombre.toLowerCase() === value.trim().toLowerCase());
+            onChange({ query: value, proveedorId: match?.id ?? null });
+            setOpen(true);
+          }}
+          bare
+        />
       {open && (matches.length > 0 || canCreate) ? (
         <ul
           className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-2xl border bg-white py-1"

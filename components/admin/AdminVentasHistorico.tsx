@@ -24,6 +24,14 @@ import {
 import { formatDayKey } from "@/lib/local-day";
 import { formatPrice } from "@/lib/money";
 import { brand } from "@/lib/theme";
+import { AdminSelect, adminLabelClass } from "@/components/admin/AdminField";
+import {
+  DataTable,
+  DataTableCell,
+  DataTableHead,
+  DataTableRow,
+  DataTableTh,
+} from "@/components/admin/DataTable";
 
 type View = "resumen" | "detalle";
 
@@ -201,17 +209,17 @@ export function AdminVentasHistorico() {
       {view === "resumen" ? (
         loading ? (
           <div className="mt-6 space-y-4">
-            <div className="h-80 animate-pulse rounded-[24px] bg-gray-100" />
-            <div className="h-64 animate-pulse rounded-[24px] bg-gray-100" />
+            <div className="h-80 animate-pulse rounded-lg bg-gray-100" />
+            <div className="h-64 animate-pulse rounded-lg bg-gray-100" />
           </div>
         ) : !resumen || resumen.meses.length === 0 ? (
-          <div className="mt-6 rounded-[24px] px-5 py-10 text-center" style={{ backgroundColor: "#F8FAF7" }}>
+          <div className="mt-6 rounded-lg px-5 py-10 text-center" style={{ backgroundColor: "#F8FAF7" }}>
             <p className="font-display text-xl font-bold">Todavía no hay meses con meta</p>
             <p className="mt-2 text-sm text-brand-muted">Cuando cargues una meta mensual, acá vas a ver el histórico.</p>
           </div>
         ) : (
           <div className="mt-6 space-y-4">
-            <section className="rounded-[24px] border bg-white p-5" style={{ borderColor: "#E5E7EB" }}>
+            <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-sm">
               <h2 className="font-display text-lg font-bold">Ventas reales vs meta</h2>
               <p className="mt-1 text-sm text-brand-muted">Últimos {Math.min(12, resumen.meses.length)} meses</p>
               <div className="mt-4 h-80 w-full">
@@ -241,83 +249,68 @@ export function AdminVentasHistorico() {
               </div>
             </section>
 
-            <section className="overflow-x-auto rounded-[24px] border bg-white" style={{ borderColor: "#E5E7EB" }}>
-              <table className="w-full min-w-[820px] text-left text-sm">
-                <thead>
-                  <tr className="text-xs font-bold uppercase tracking-wide text-brand-muted" style={{ backgroundColor: "#F8FAF7" }}>
-                    <th className="px-4 py-3">Mes</th>
-                    <th className="whitespace-nowrap px-4 py-3 text-right">Ventas reales</th>
-                    <th className="whitespace-nowrap px-4 py-3 text-right">Meta</th>
-                    <th className="whitespace-nowrap px-4 py-3 text-right">Diferencia</th>
-                    <th className="whitespace-nowrap px-4 py-3 text-right">% de meta</th>
-                    <th className="whitespace-nowrap px-4 py-3 text-right">Compras reales</th>
-                    <th className="whitespace-nowrap px-4 py-3 text-right">Ppto máx compras</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {resumen.meses.map((item, index) => (
-                    <tr
-                      key={item.mes}
-                      className="cursor-pointer"
-                      style={{ backgroundColor: index % 2 === 1 ? "#FAFBFA" : "#FFFFFF" }}
-                      onClick={() => openDetalle(item.mes)}
+            <DataTable tableClassName="min-w-[820px]">
+              <DataTableHead>
+                <DataTableTh>Mes</DataTableTh>
+                <DataTableTh numeric>Ventas reales</DataTableTh>
+                <DataTableTh numeric>Meta</DataTableTh>
+                <DataTableTh numeric>Diferencia</DataTableTh>
+                <DataTableTh numeric>% de meta</DataTableTh>
+                <DataTableTh numeric>Compras reales</DataTableTh>
+                <DataTableTh numeric>Ppto máx compras</DataTableTh>
+              </DataTableHead>
+              <tbody>
+                {resumen.meses.map((item) => (
+                  <DataTableRow key={item.mes} onClick={() => openDetalle(item.mes)}>
+                    <DataTableCell className="font-semibold">
+                      {item.label}
+                      {resumen.mesActivo === item.mes ? (
+                        <span
+                          className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white"
+                          style={{ backgroundColor: brand.green }}
+                        >
+                          Activo
+                        </span>
+                      ) : null}
+                    </DataTableCell>
+                    <DataTableCell numeric>{formatPrice(item.ventasReales)}</DataTableCell>
+                    <DataTableCell numeric>{formatPrice(item.meta)}</DataTableCell>
+                    <DataTableCell
+                      numeric
+                      className="font-semibold"
+                      style={{ color: item.diferencia >= 0 ? brand.green : brand.error }}
                     >
-                      <td className="px-4 py-3 font-semibold">
-                        {item.label}
-                        {resumen.mesActivo === item.mes ? (
-                          <span
-                            className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white"
-                            style={{ backgroundColor: brand.green }}
-                          >
-                            Activo
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatPrice(item.ventasReales)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatPrice(item.meta)}</td>
-                      <td
-                        className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums"
-                        style={{ color: item.diferencia >= 0 ? brand.green : brand.error }}
-                      >
-                        {formatSignedPrice(item.diferencia)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right">
-                        <NivelBadge nivel={item.nivel} value={formatPercent(item.porcentajeMeta)} />
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatPrice(item.comprasReales)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
-                        {formatPrice(item.presupuestoMaxCompras)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
+                      {formatSignedPrice(item.diferencia)}
+                    </DataTableCell>
+                    <DataTableCell numeric>
+                      <NivelBadge nivel={item.nivel} value={formatPercent(item.porcentajeMeta)} />
+                    </DataTableCell>
+                    <DataTableCell numeric>{formatPrice(item.comprasReales)}</DataTableCell>
+                    <DataTableCell numeric>{formatPrice(item.presupuestoMaxCompras)}</DataTableCell>
+                  </DataTableRow>
+                ))}
+              </tbody>
+            </DataTable>
           </div>
         )
       ) : (
         <div className="mt-6 space-y-4">
-          <label className="block max-w-xs text-[13px] font-semibold text-brand-ink">
+          <label className={`${adminLabelClass} max-w-xs`}>
             Mes
-            <select
-              value={mes}
-              onChange={(event) => setMes(event.target.value)}
-              className="mt-1.5 h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium outline-none focus:border-[#7EB341]"
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
-            >
+            <AdminSelect value={mes} onChange={(event) => setMes(event.target.value)}>
               {monthOptions.length === 0 ? <option value="">Sin meses</option> : null}
               {monthOptions.map((item) => (
                 <option key={item.mes} value={monthInputValue(item.mes)}>
                   {item.label}
                 </option>
               ))}
-            </select>
+            </AdminSelect>
           </label>
 
           {detalleLoading || loading ? (
-            <div className="h-64 animate-pulse rounded-[24px] bg-gray-100" />
+            <div className="h-64 animate-pulse rounded-lg bg-gray-100" />
           ) : !detalle || detalle.dias.length === 0 ? (
-            <div className="rounded-[24px] px-5 py-10 text-center" style={{ backgroundColor: "#F8FAF7" }}>
+            <div className="rounded-lg px-5 py-10 text-center" style={{ backgroundColor: "#F8FAF7" }}>
               <p className="font-display text-xl font-bold">No hay días para mostrar</p>
               <p className="mt-2 text-sm text-brand-muted">
                 {detalle?.esMesActivo
@@ -326,57 +319,67 @@ export function AdminVentasHistorico() {
               </p>
             </div>
           ) : (
-            <section className="overflow-x-auto rounded-[24px] border bg-white" style={{ borderColor: "#E5E7EB" }}>
-              <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-3" style={{ backgroundColor: "#F8FAF7" }}>
-                <h2 className="font-display text-lg font-bold">{detalle.label}</h2>
-                {detalle.esMesActivo && detalle.hasta ? (
-                  <p className="text-sm text-brand-muted">Hasta {formatDayKey(detalle.hasta)} — los días que faltan no se muestran.</p>
-                ) : null}
-              </div>
-              <table className="w-full min-w-[780px] text-left text-sm">
-                <thead>
-                  <tr className="text-xs font-bold uppercase tracking-wide text-brand-muted" style={{ backgroundColor: "#F8FAF7" }}>
-                    <th className="px-4 py-3">Fecha</th>
-                    <th className="px-4 py-3">Día</th>
-                    <th className="whitespace-nowrap px-4 py-3 text-right">Venta real</th>
-                    <th className="whitespace-nowrap px-4 py-3 text-right">Meta del día</th>
-                    <th className="whitespace-nowrap px-4 py-3 text-right">Diferencia</th>
-                    <th className="whitespace-nowrap px-4 py-3 text-right">Dif. acumulada</th>
-                    <th className="whitespace-nowrap px-4 py-3 text-right">Ventas acumuladas</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {detalle.dias.map((dia) => (
-                    <tr
-                      key={dia.fecha}
-                      style={{
-                        backgroundColor: dia.superado ? "#F4F9EC" : "#FEF2F2",
-                      }}
+            <DataTable
+              tableClassName="min-w-[780px]"
+              toolbar={
+                <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[#F1F5F9] bg-[#F9FAFB] px-4 py-3">
+                  <h2 className="font-display text-lg font-bold">{detalle.label}</h2>
+                  {detalle.esMesActivo && detalle.hasta ? (
+                    <p className="text-sm text-brand-muted">
+                      Hasta {formatDayKey(detalle.hasta)} — los días que faltan no se muestran.
+                    </p>
+                  ) : null}
+                </div>
+              }
+            >
+              <DataTableHead>
+                <DataTableTh>Fecha</DataTableTh>
+                <DataTableTh>Día</DataTableTh>
+                <DataTableTh numeric>Venta real</DataTableTh>
+                <DataTableTh numeric>Meta del día</DataTableTh>
+                <DataTableTh numeric>Diferencia</DataTableTh>
+                <DataTableTh numeric>Dif. acumulada</DataTableTh>
+                <DataTableTh numeric>Ventas acumuladas</DataTableTh>
+              </DataTableHead>
+              <tbody>
+                {detalle.dias.map((dia) => (
+                  <DataTableRow
+                    key={dia.fecha}
+                    className={
+                      dia.superado
+                        ? "!bg-[#F4F9EC] hover:!bg-[#EAF3DC]"
+                        : "!bg-[#FEF2F2] hover:!bg-[#FCE8E8]"
+                    }
+                  >
+                    <DataTableCell className="whitespace-nowrap py-2.5 font-semibold">{formatDayKey(dia.fecha)}</DataTableCell>
+                    <DataTableCell className="py-2.5">{dia.dia}</DataTableCell>
+                    <DataTableCell numeric className="py-2.5">
+                      {formatPrice(dia.ventaReal)}
+                    </DataTableCell>
+                    <DataTableCell numeric className="py-2.5">
+                      {formatPrice(dia.metaDelDia)}
+                    </DataTableCell>
+                    <DataTableCell
+                      numeric
+                      className="py-2.5 font-semibold"
+                      style={{ color: dia.diferencia >= 0 ? brand.green : brand.error }}
                     >
-                      <td className="whitespace-nowrap px-4 py-2.5 font-semibold">{formatDayKey(dia.fecha)}</td>
-                      <td className="px-4 py-2.5">{dia.dia}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{formatPrice(dia.ventaReal)}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{formatPrice(dia.metaDelDia)}</td>
-                      <td
-                        className="whitespace-nowrap px-4 py-2.5 text-right font-semibold tabular-nums"
-                        style={{ color: dia.diferencia >= 0 ? brand.green : brand.error }}
-                      >
-                        {formatSignedPrice(dia.diferencia)}
-                      </td>
-                      <td
-                        className="whitespace-nowrap px-4 py-2.5 text-right font-semibold tabular-nums"
-                        style={{ color: dia.diferenciaAcumulada >= 0 ? brand.green : brand.error }}
-                      >
-                        {formatSignedPrice(dia.diferenciaAcumulada)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-right font-bold tabular-nums">
-                        {formatPrice(dia.ventasAcumuladas)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
+                      {formatSignedPrice(dia.diferencia)}
+                    </DataTableCell>
+                    <DataTableCell
+                      numeric
+                      className="py-2.5 font-semibold"
+                      style={{ color: dia.diferenciaAcumulada >= 0 ? brand.green : brand.error }}
+                    >
+                      {formatSignedPrice(dia.diferenciaAcumulada)}
+                    </DataTableCell>
+                    <DataTableCell numeric className="py-2.5 font-bold">
+                      {formatPrice(dia.ventasAcumuladas)}
+                    </DataTableCell>
+                  </DataTableRow>
+                ))}
+              </tbody>
+            </DataTable>
           )}
         </div>
       )}

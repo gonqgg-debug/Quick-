@@ -11,10 +11,14 @@ import {
 } from "@/lib/admin-caja-shared";
 import { formatDayKey, todayDayKey } from "@/lib/local-day";
 import { brand } from "@/lib/theme";
-
-const fieldClass =
-  "mt-1.5 h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium outline-none focus:border-[#7EB341]";
-const labelClass = "block text-[13px] font-medium text-brand-muted";
+import { AdminInput, AdminSelect, adminLabelClass } from "@/components/admin/AdminField";
+import {
+  DataTable,
+  DataTableCell,
+  DataTableHead,
+  DataTableRow,
+  DataTableTh,
+} from "@/components/admin/DataTable";
 
 export function AdminCajaLedger() {
   const router = useRouter();
@@ -84,31 +88,21 @@ export function AdminCajaLedger() {
 
       <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
         <div className="grid w-full gap-3 sm:max-w-md sm:grid-cols-2">
-          <label className={labelClass}>
+          <label className={adminLabelClass}>
             Caja
-            <select
-              value={caja}
-              onChange={(event) => setCaja(event.target.value)}
-              className={fieldClass}
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
-            >
+            <AdminSelect value={caja} onChange={(event) => setCaja(event.target.value)}>
               <option value="">Todas</option>
               <option value="Chica">Chica</option>
               <option value="Fuerte">Fuerte</option>
-            </select>
+            </AdminSelect>
           </label>
-          <label className={labelClass}>
+          <label className={adminLabelClass}>
             Moneda
-            <select
-              value={moneda}
-              onChange={(event) => setMoneda(event.target.value)}
-              className={fieldClass}
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
-            >
+            <AdminSelect value={moneda} onChange={(event) => setMoneda(event.target.value)}>
               <option value="">Todas</option>
               <option value="DOP">DOP</option>
               <option value="USD">USD</option>
-            </select>
+            </AdminSelect>
           </label>
         </div>
         <button
@@ -128,50 +122,46 @@ export function AdminCajaLedger() {
       ) : null}
 
       {loading ? (
-        <div className="mt-6 h-48 animate-pulse rounded-[24px] bg-gray-100" />
+        <div className="mt-6 h-48 animate-pulse rounded-lg bg-gray-100" />
       ) : movimientos.length === 0 ? (
-        <div className="mt-6 rounded-[28px] px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
+        <div className="mt-6 rounded-lg px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
           <p className="font-display text-xl font-bold">No hay movimientos</p>
           <p className="mt-2 text-sm text-brand-muted">Registra una entrada o una salida para verla aquí.</p>
         </div>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-[24px] border" style={{ borderColor: "#E5E7EB" }}>
-          <table className="w-full min-w-[760px] text-left text-sm">
-            <thead>
-              <tr className="text-xs font-bold uppercase tracking-wide text-brand-muted" style={{ backgroundColor: "#F8FAF7" }}>
-                <th className="px-4 py-3">Fecha</th>
-                <th className="px-4 py-3">Caja</th>
-                <th className="px-4 py-3">Moneda</th>
-                <th className="px-4 py-3">Tipo</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Monto</th>
-                <th className="px-4 py-3">Concepto</th>
-                <th className="px-4 py-3">Referencia</th>
-              </tr>
-            </thead>
-            <tbody>
-              {movimientos.map((item, index) => (
-                <tr key={item.id} style={{ backgroundColor: index % 2 === 1 ? "#FAFBFA" : "#FFFFFF" }}>
-                  <td className="whitespace-nowrap px-4 py-3 font-semibold">{formatDayKey(item.fecha)}</td>
-                  <td className="px-4 py-3">{item.caja}</td>
-                  <td className="px-4 py-3">{item.moneda}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className="font-semibold"
-                      style={{ color: item.tipo === "Entrada" ? "#059669" : brand.error }}
-                    >
-                      {item.tipo}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right font-bold tabular-nums">
-                    {formatCajaMoney(item.monto, item.moneda)}
-                  </td>
-                  <td className="px-4 py-3">{item.concepto ?? "—"}</td>
-                  <td className="px-4 py-3 text-brand-muted">{item.referencia ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable className="mt-6" tableClassName="min-w-[760px]">
+          <DataTableHead>
+            <DataTableTh>Fecha</DataTableTh>
+            <DataTableTh>Caja</DataTableTh>
+            <DataTableTh>Moneda</DataTableTh>
+            <DataTableTh>Tipo</DataTableTh>
+            <DataTableTh numeric>Monto</DataTableTh>
+            <DataTableTh>Concepto</DataTableTh>
+            <DataTableTh>Referencia</DataTableTh>
+          </DataTableHead>
+          <tbody>
+            {movimientos.map((item) => (
+              <DataTableRow key={item.id}>
+                <DataTableCell className="whitespace-nowrap font-semibold">{formatDayKey(item.fecha)}</DataTableCell>
+                <DataTableCell>{item.caja}</DataTableCell>
+                <DataTableCell>{item.moneda}</DataTableCell>
+                <DataTableCell>
+                  <span
+                    className="font-semibold"
+                    style={{ color: item.tipo === "Entrada" ? "#059669" : brand.error }}
+                  >
+                    {item.tipo}
+                  </span>
+                </DataTableCell>
+                <DataTableCell numeric className="font-bold">
+                  {formatCajaMoney(item.monto, item.moneda)}
+                </DataTableCell>
+                <DataTableCell>{item.concepto ?? "—"}</DataTableCell>
+                <DataTableCell className="text-brand-muted">{item.referencia ?? "—"}</DataTableCell>
+              </DataTableRow>
+            ))}
+          </tbody>
+        </DataTable>
       )}
 
       {registerOpen ? (
@@ -246,7 +236,7 @@ function RegistrarMovimientoModal({
         </h2>
         <p className="mt-1 text-sm text-brand-muted">Solo el monto es obligatorio. El resto ya viene prellenado.</p>
 
-        <label className={`${labelClass} mt-5`}>
+        <label className={`${adminLabelClass} mt-5`}>
           Monto
           <span className="relative mt-1.5 block">
             <span
@@ -255,33 +245,28 @@ function RegistrarMovimientoModal({
             >
               {moneda === "USD" ? "US$" : "RD$"}
             </span>
-            <input
+            <AdminInput
+              bare
               required
               value={monto}
               inputMode="decimal"
               onChange={(event) => setMonto(event.target.value)}
-              className="h-11 w-full rounded-xl border bg-white pl-12 pr-3 text-sm font-semibold tabular-nums outline-none focus:border-[#7EB341]"
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
+              className="!pl-12 font-semibold tabular-nums"
             />
           </span>
         </label>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className={labelClass}>
+          <label className={adminLabelClass}>
             Tipo
-            <select
-              value={tipo}
-              onChange={(event) => setTipo(event.target.value as CajaLedgerTipo)}
-              className={fieldClass}
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
-            >
+            <AdminSelect value={tipo} onChange={(event) => setTipo(event.target.value as CajaLedgerTipo)}>
               <option value="Entrada">Entrada</option>
               <option value="Salida">Salida</option>
-            </select>
+            </AdminSelect>
           </label>
-          <label className={labelClass}>
+          <label className={adminLabelClass}>
             Caja
-            <select
+            <AdminSelect
               value={caja}
               onChange={(event) => {
                 const next = event.target.value as Caja;
@@ -290,54 +275,31 @@ function RegistrarMovimientoModal({
                   setMoneda("DOP");
                 }
               }}
-              className={fieldClass}
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
             >
               <option value="Chica">Chica</option>
               <option value="Fuerte">Fuerte</option>
-            </select>
+            </AdminSelect>
           </label>
-          <label className={labelClass}>
+          <label className={adminLabelClass}>
             Moneda
-            <select
-              value={moneda}
-              onChange={(event) => setMoneda(event.target.value as CajaMoneda)}
-              className={fieldClass}
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
-            >
+            <AdminSelect value={moneda} onChange={(event) => setMoneda(event.target.value as CajaMoneda)}>
               <option value="DOP">DOP</option>
               {caja === "Fuerte" ? <option value="USD">USD</option> : null}
-            </select>
+            </AdminSelect>
           </label>
-          <label className={labelClass}>
+          <label className={adminLabelClass}>
             Fecha
-            <input
-              type="date"
-              value={fecha}
-              onChange={(event) => setFecha(event.target.value)}
-              className={fieldClass}
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
-            />
+            <AdminInput type="date" value={fecha} onChange={(event) => setFecha(event.target.value)} />
           </label>
         </div>
 
-        <label className={`${labelClass} mt-4`}>
+        <label className={`${adminLabelClass} mt-4`}>
           Concepto
-          <input
-            value={concepto}
-            onChange={(event) => setConcepto(event.target.value)}
-            className={fieldClass}
-            style={{ borderColor: "#E5E7EB", color: brand.ink }}
-          />
+          <AdminInput value={concepto} onChange={(event) => setConcepto(event.target.value)} />
         </label>
-        <label className={`${labelClass} mt-4`}>
+        <label className={`${adminLabelClass} mt-4`}>
           Referencia
-          <input
-            value={referencia}
-            onChange={(event) => setReferencia(event.target.value)}
-            className={fieldClass}
-            style={{ borderColor: "#E5E7EB", color: brand.ink }}
-          />
+          <AdminInput value={referencia} onChange={(event) => setReferencia(event.target.value)} />
         </label>
 
         {formError ? (

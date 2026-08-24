@@ -4,10 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Proveedor } from "@/lib/admin-compras-shared";
 import { brand } from "@/lib/theme";
-
-const fieldClass =
-  "mt-1.5 h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium outline-none focus:border-[#7EB341]";
-const labelClass = "block text-[13px] font-medium text-brand-muted";
+import { AdminInput, AdminTextarea, adminLabelClass } from "@/components/admin/AdminField";
+import {
+  DataTable,
+  DataTableCell,
+  DataTableHead,
+  DataTableRow,
+  DataTableTh,
+} from "@/components/admin/DataTable";
 
 type Draft = {
   nombre: string;
@@ -97,52 +101,46 @@ export function AdminProveedores() {
       ) : null}
 
       {loading ? (
-        <div className="mt-6 h-48 animate-pulse rounded-[24px] bg-gray-100" />
+        <div className="mt-6 h-48 animate-pulse rounded-lg bg-gray-100" />
       ) : proveedores.length === 0 ? (
-        <div className="mt-6 rounded-[28px] px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
+        <div className="mt-6 rounded-lg px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
           <p className="font-display text-xl font-bold">Todavía no hay proveedores</p>
           <p className="mt-2 text-sm text-brand-muted">Agrega el primero para poder registrar compras.</p>
         </div>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-[24px] border" style={{ borderColor: "#E5E7EB" }}>
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead>
-              <tr className="text-xs font-bold uppercase tracking-wide text-brand-muted" style={{ backgroundColor: "#F8FAF7" }}>
-                <th className="px-4 py-3">Nombre</th>
-                <th className="whitespace-nowrap px-4 py-3">Crédito</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Días</th>
-                <th className="px-4 py-3">Notas</th>
-                <th className="w-24 px-4 py-3">
-                  <span className="sr-only">Editar</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {proveedores.map((proveedor, index) => (
-                <tr key={proveedor.id} style={{ backgroundColor: index % 2 === 1 ? "#FAFBFA" : "#FFFFFF" }}>
-                  <td className="px-4 py-3 font-semibold">{proveedor.nombre}</td>
-                  <td className="whitespace-nowrap px-4 py-3">{proveedor.tieneCredito ? "Sí" : "No"}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
-                    {proveedor.tieneCredito ? proveedor.diasCredito : "—"}
-                  </td>
-                  <td className="max-w-[280px] truncate px-4 py-3 text-brand-muted" title={proveedor.notas ?? undefined}>
-                    {proveedor.notas || "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => setEditing(proveedor)}
-                      className="text-sm font-bold"
-                      style={{ color: brand.green }}
-                    >
-                      Editar
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable className="mt-6" tableClassName="min-w-[640px]">
+          <DataTableHead>
+            <DataTableTh>Nombre</DataTableTh>
+            <DataTableTh className="whitespace-nowrap">Crédito</DataTableTh>
+            <DataTableTh numeric>Días</DataTableTh>
+            <DataTableTh>Notas</DataTableTh>
+            <DataTableTh className="w-24">
+              <span className="sr-only">Editar</span>
+            </DataTableTh>
+          </DataTableHead>
+          <tbody>
+            {proveedores.map((proveedor) => (
+              <DataTableRow key={proveedor.id}>
+                <DataTableCell className="font-semibold">{proveedor.nombre}</DataTableCell>
+                <DataTableCell className="whitespace-nowrap">{proveedor.tieneCredito ? "Sí" : "No"}</DataTableCell>
+                <DataTableCell numeric>{proveedor.tieneCredito ? proveedor.diasCredito : "—"}</DataTableCell>
+                <DataTableCell className="max-w-[280px] truncate text-brand-muted" title={proveedor.notas ?? undefined}>
+                  {proveedor.notas || "—"}
+                </DataTableCell>
+                <DataTableCell>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(proveedor)}
+                    className="text-sm font-bold"
+                    style={{ color: brand.green }}
+                  >
+                    Editar
+                  </button>
+                </DataTableCell>
+              </DataTableRow>
+            ))}
+          </tbody>
+        </DataTable>
       )}
 
       {editing ? (
@@ -245,15 +243,13 @@ function ProveedorModal({
           {isNew ? "Agregar proveedor" : "Editar proveedor"}
         </h2>
 
-        <label className={`${labelClass} mt-5`}>
+        <label className={`${adminLabelClass} mt-5`}>
           Nombre
-          <input
+          <AdminInput
             ref={nombreRef}
             required
             value={draft.nombre}
             onChange={(event) => setDraft((current) => ({ ...current, nombre: event.target.value }))}
-            className={fieldClass}
-            style={{ borderColor: "#E5E7EB", color: brand.ink }}
           />
         </label>
 
@@ -267,9 +263,9 @@ function ProveedorModal({
           Tiene crédito
         </label>
 
-        <label className={`${labelClass} mt-4`}>
+        <label className={`${adminLabelClass} mt-4`}>
           Días de crédito
-          <input
+          <AdminInput
             type="number"
             min={0}
             max={3650}
@@ -278,19 +274,15 @@ function ProveedorModal({
             value={draft.tieneCredito ? draft.diasCredito : ""}
             onChange={(event) => setDraft((current) => ({ ...current, diasCredito: event.target.value }))}
             placeholder={draft.tieneCredito ? "0" : "—"}
-            className={fieldClass}
-            style={{ borderColor: "#E5E7EB", color: brand.ink, opacity: draft.tieneCredito ? 1 : 0.55 }}
           />
         </label>
 
-        <label className={`${labelClass} mt-4`}>
+        <label className={`${adminLabelClass} mt-4`}>
           Notas
-          <textarea
+          <AdminTextarea
             value={draft.notas}
             onChange={(event) => setDraft((current) => ({ ...current, notas: event.target.value }))}
             rows={3}
-            className="mt-1.5 w-full rounded-xl border bg-white px-3 py-2.5 text-sm font-medium outline-none focus:border-[#7EB341]"
-            style={{ borderColor: "#E5E7EB", color: brand.ink }}
           />
         </label>
 

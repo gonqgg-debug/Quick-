@@ -10,10 +10,14 @@ import {
 import { formatDayKey, todayDayKey } from "@/lib/local-day";
 import { formatPrice, toMoney } from "@/lib/money";
 import { brand } from "@/lib/theme";
-
-const fieldClass =
-  "mt-1.5 h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium outline-none focus:border-[#7EB341]";
-const labelClass = "block text-[13px] font-medium text-brand-muted";
+import { AdminInput, adminControlClass, adminLabelClass, cx } from "@/components/admin/AdminField";
+import {
+  DataTable,
+  DataTableCell,
+  DataTableHead,
+  DataTableRow,
+  DataTableTh,
+} from "@/components/admin/DataTable";
 
 function montoDraft(value: number): string {
   if (!Number.isFinite(value) || value <= 0) {
@@ -148,7 +152,7 @@ export function AdminVentas() {
         <h1 className="font-display mt-1 text-2xl font-bold">Ventas diarias</h1>
       </div>
 
-      <section className="mt-5 rounded-[24px] border bg-white p-5" style={{ borderColor: "#E5E7EB" }}>
+      <section className="mt-5 rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-sm">
         <h2 className="font-display text-lg font-bold">Registrar venta del día</h2>
         <p className="mt-1 text-sm text-brand-muted">
           {captured
@@ -162,19 +166,17 @@ export function AdminVentas() {
             void saveForm();
           }}
         >
-          <label className={labelClass}>
+          <label className={adminLabelClass}>
             Fecha
-            <input
+            <AdminInput
               type="date"
               required
               value={fecha}
               max={today}
               onChange={(event) => changeFecha(event.target.value)}
-              className={fieldClass}
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
             />
           </label>
-          <label className={labelClass}>
+          <label className={adminLabelClass}>
             Monto
             <span className="relative mt-1.5 block">
               <span
@@ -183,7 +185,8 @@ export function AdminVentas() {
               >
                 RD$
               </span>
-              <input
+              <AdminInput
+                bare
                 required
                 value={monto}
                 inputMode="decimal"
@@ -191,8 +194,7 @@ export function AdminVentas() {
                   setMonto(event.target.value);
                   setSaved(false);
                 }}
-                className="h-11 w-full rounded-xl border bg-white pl-12 pr-3 text-sm font-semibold tabular-nums outline-none focus:border-[#7EB341]"
-                style={{ borderColor: "#E5E7EB", color: brand.ink }}
+                className="!pl-12 font-semibold tabular-nums"
               />
             </span>
           </label>
@@ -222,42 +224,38 @@ export function AdminVentas() {
         <h2 className="font-display text-lg font-bold">Últimos {VENTAS_DEFAULT_LIMIT} días capturados</h2>
         <p className="mt-1 text-sm text-brand-muted">Haz clic en el monto para corregirlo. Enter o clic afuera guarda.</p>
         {loading ? (
-          <div className="mt-4 h-48 animate-pulse rounded-[24px] bg-gray-100" />
+          <div className="mt-4 h-48 animate-pulse rounded-lg bg-gray-100" />
         ) : ventas.length === 0 ? (
-          <div className="mt-4 rounded-[28px] px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
+          <div className="mt-4 rounded-lg px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
             <p className="font-display text-xl font-bold">Aún no hay ventas capturadas</p>
             <p className="mt-2 text-sm text-brand-muted">Registra la venta del día para verla aquí.</p>
           </div>
         ) : (
-          <div className="mt-4 overflow-x-auto rounded-[24px] border" style={{ borderColor: "#E5E7EB" }}>
-            <table className="w-full min-w-[520px] text-left text-sm">
-              <thead>
-                <tr className="text-xs font-bold uppercase tracking-wide text-brand-muted" style={{ backgroundColor: "#F8FAF7" }}>
-                  <th className="px-4 py-3">Fecha</th>
-                  <th className="px-4 py-3">Día</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-right">Monto</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ventas.map((venta, index) => (
-                  <tr key={venta.id} style={{ backgroundColor: index % 2 === 1 ? "#FAFBFA" : "#FFFFFF" }}>
-                    <td className="whitespace-nowrap px-4 py-3 font-semibold">
-                      {formatDayKey(venta.fecha)}
-                      {venta.fecha === today ? (
-                        <span className="ml-2 text-xs font-bold uppercase tracking-wide" style={{ color: brand.green }}>
-                          Hoy
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-brand-muted">{formatDiaSemana(venta.diaSemana)}</td>
-                    <td className="whitespace-nowrap px-4 py-2 text-right">
-                      <InlineMonto venta={venta} onSave={saveInline} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable className="mt-4" tableClassName="min-w-[520px]">
+            <DataTableHead>
+              <DataTableTh>Fecha</DataTableTh>
+              <DataTableTh>Día</DataTableTh>
+              <DataTableTh numeric>Monto</DataTableTh>
+            </DataTableHead>
+            <tbody>
+              {ventas.map((venta) => (
+                <DataTableRow key={venta.id}>
+                  <DataTableCell className="whitespace-nowrap font-semibold">
+                    {formatDayKey(venta.fecha)}
+                    {venta.fecha === today ? (
+                      <span className="ml-2 text-xs font-bold uppercase tracking-wide" style={{ color: brand.green }}>
+                        Hoy
+                      </span>
+                    ) : null}
+                  </DataTableCell>
+                  <DataTableCell className="whitespace-nowrap text-brand-muted">{formatDiaSemana(venta.diaSemana)}</DataTableCell>
+                  <DataTableCell numeric className="py-2">
+                    <InlineMonto venta={venta} onSave={saveInline} />
+                  </DataTableCell>
+                </DataTableRow>
+              ))}
+            </tbody>
+          </DataTable>
         )}
       </section>
     </div>
@@ -364,8 +362,12 @@ function InlineMonto({
             setEditing(false);
           }
         }}
-        className="h-9 w-32 rounded-lg border bg-white px-2 text-right text-sm font-bold tabular-nums outline-none focus:border-[#7EB341]"
-        style={{ borderColor: rowError ? brand.error : "#E5E7EB", color: brand.ink }}
+        className={cx(
+          adminControlClass,
+          "h-9 w-32 px-2 text-right font-bold tabular-nums",
+          rowError && "border-brand-error focus:border-brand-error focus:ring-brand-error/40"
+        )}
+        style={{ color: brand.ink }}
       />
       {rowError ? (
         <span className="mt-1 text-[11px] font-semibold" style={{ color: brand.error }}>
