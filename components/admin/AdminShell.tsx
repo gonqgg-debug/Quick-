@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Logo } from "@/components/brand/Logo";
 import { createAdminBrowserClient } from "@/lib/admin-browser";
-import { ADMIN_DELIVERY_NAV, ADMIN_HOME, ADMIN_NAV, ADMIN_SOON_NAV } from "@/lib/admin-nav";
+import { ADMIN_COMPRAS_NAV, ADMIN_DELIVERY_NAV, ADMIN_HOME, ADMIN_NAV, ADMIN_SOON_NAV } from "@/lib/admin-nav";
 import { PRODUCT_REQUESTS_CHANGED_EVENT } from "@/lib/product-requests-shared";
 import { brand } from "@/lib/theme";
 
@@ -84,6 +84,7 @@ export function AdminShell({ email, children }: AdminShellProps) {
           </Link>
           <p className="mt-4 px-2 text-[11px] font-bold uppercase tracking-wide text-brand-muted">Admin</p>
           <NavLinks pathname={pathname} pendingRequests={pendingRequests} />
+          <ComprasNav pathname={pathname} />
           <SoonNav />
           <div className="mt-auto border-t px-2 pt-4" style={{ borderColor: "#E5E7EB" }}>
             <p className="truncate text-xs text-brand-muted">{email}</p>
@@ -215,6 +216,32 @@ function NavLinks({ pathname, pendingRequests }: { pathname: string; pendingRequ
               </div>
             ) : null}
           </div>
+        );
+      })}
+    </nav>
+  );
+}
+
+function ComprasNav({ pathname }: { pathname: string }) {
+  return (
+    <nav className="mt-4 flex flex-col gap-0.5" aria-label="Compras">
+      <div className="px-2">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-brand-muted">Compras</p>
+      </div>
+      {ADMIN_COMPRAS_NAV.map((item) => {
+        const active = isActivePath(pathname, item.href);
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className="block rounded-xl px-3 py-2.5 text-sm font-semibold"
+            style={{
+              backgroundColor: active ? `${brand.green}18` : "transparent",
+              color: active ? brand.green : brand.ink,
+            }}
+          >
+            {item.label}
+          </Link>
         );
       })}
     </nav>

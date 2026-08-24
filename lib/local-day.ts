@@ -16,6 +16,10 @@ export function localDayKey(iso: string, timeZone = STAFF_TIMEZONE): string {
   return dayKey(new Date(iso), timeZone);
 }
 
+export function todayDayKey(now = Date.now(), timeZone = STAFF_TIMEZONE): string {
+  return dayKey(new Date(now), timeZone);
+}
+
 export function isToday(iso: string, now = Date.now()): boolean {
   return localDayKey(iso) === dayKey(new Date(now));
 }
@@ -24,6 +28,40 @@ const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 export function isDayKey(value: string): boolean {
   return DAY_KEY.test(value);
+}
+
+export function addDaysToDayKey(value: string, days: number): string {
+  const match = DAY_KEY.exec(value);
+  if (!match) {
+    return value;
+  }
+  const utc = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + days);
+  return new Date(utc).toISOString().slice(0, 10);
+}
+
+export function diffDayKeys(from: string, to: string): number {
+  const start = DAY_KEY.exec(from);
+  const end = DAY_KEY.exec(to);
+  if (!start || !end) {
+    return 0;
+  }
+  const fromUtc = Date.UTC(Number(start[1]), Number(start[2]) - 1, Number(start[3]));
+  const toUtc = Date.UTC(Number(end[1]), Number(end[2]) - 1, Number(end[3]));
+  return Math.round((toUtc - fromUtc) / 86_400_000);
+}
+
+export function formatDayKey(value: string): string {
+  const match = DAY_KEY.exec(value);
+  if (!match) {
+    return value;
+  }
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return new Intl.DateTimeFormat("es-DO", {
+    timeZone: "UTC",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
 }
 
 function partsInTimeZone(date: Date, timeZone: string) {

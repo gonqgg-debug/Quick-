@@ -32,8 +32,13 @@ export const ADMIN_DELIVERY_NAV: AdminNavItem[] = [
   },
 ];
 
+export const ADMIN_COMPRAS_NAV: AdminNavItem[] = [
+  { href: "/admin/compras", label: "Compras", status: "live" },
+  { href: "/admin/proveedores", label: "Proveedores", status: "live" },
+];
+
 /** Live admin links, home first. Used by the mobile nav. */
-export const ADMIN_NAV: AdminNavItem[] = [ADMIN_HOME, ...ADMIN_DELIVERY_NAV];
+export const ADMIN_NAV: AdminNavItem[] = [ADMIN_HOME, ...ADMIN_DELIVERY_NAV, ...ADMIN_COMPRAS_NAV];
 
 /** Future sections — visible in the menu, not routed yet. */
-export const ADMIN_SOON_NAV = ["Caja", "Compras", "P&L", "Metas"] as const;
+export const ADMIN_SOON_NAV = ["Caja", "P&L", "Metas"] as const;
