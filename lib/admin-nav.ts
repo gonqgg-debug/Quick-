@@ -29,7 +29,7 @@ export type AdminNavItem = {
   children?: AdminNavChild[];
 };
 
-export type AdminNavSectionId = "admin" | "delivery" | "compras" | "ventas" | "soon";
+export type AdminNavSectionId = "pedidos" | "catalogo" | "finanzas";
 
 export type AdminNavSection = {
   id: AdminNavSectionId;
@@ -58,52 +58,35 @@ export const ADMIN_VENTAS_HISTORICO: AdminNavItem = {
   status: "live",
 };
 
-export const ADMIN_DELIVERY_NAV: AdminNavItem[] = [
+export const ADMIN_PEDIDOS_NAV: AdminNavItem[] = [
   { href: "/admin/historial", label: "Historial de Delivery", icon: "history", status: "live" },
-  {
-    href: "/admin/catalogo",
-    label: "Catálogo",
-    icon: "catalog",
-    status: "live",
-    children: [
-      { href: "/admin/catalogo/productos", label: "Productos", icon: "products" },
-      { href: "/admin/catalogo/importar", label: "Importar", icon: "import" },
-      { href: "/admin/catalogo/imagenes", label: "Imágenes", icon: "images" },
-      { href: "/admin/catalogo/solicitudes", label: "Solicitudes", icon: "requests" },
-    ],
-  },
 ];
 
-export const ADMIN_COMPRAS_NAV: AdminNavItem[] = [
-  { href: "/admin/compras", label: "Compras", icon: "purchases", status: "live" },
-  { href: "/admin/proveedores", label: "Proveedores", icon: "suppliers", status: "live" },
+export const ADMIN_CATALOGO_NAV: AdminNavItem[] = [
+  { href: "/admin/catalogo/productos", label: "Productos", icon: "products", status: "live" },
+  { href: "/admin/catalogo/importar", label: "Importar", icon: "import", status: "live" },
+  { href: "/admin/catalogo/imagenes", label: "Imágenes", icon: "images", status: "live" },
+  { href: "/admin/catalogo/solicitudes", label: "Solicitudes", icon: "requests", status: "live" },
 ];
 
-export const ADMIN_VENTAS_NAV: AdminNavItem[] = [
+export const ADMIN_FINANZAS_NAV: AdminNavItem[] = [
   { href: "/admin/ventas", label: "Ventas", icon: "sales", status: "live" },
   ADMIN_VENTAS_HISTORICO,
+  { href: "/admin/compras", label: "Compras", icon: "purchases", status: "live" },
+  { href: "/admin/proveedores", label: "Proveedores", icon: "suppliers", status: "live" },
+  ADMIN_PARAMETROS,
 ];
 
 /** Live admin links, home first. Used by the mobile nav. */
 export const ADMIN_NAV: AdminNavItem[] = [
   ADMIN_HOME,
-  ADMIN_PARAMETROS,
-  ...ADMIN_DELIVERY_NAV,
-  ...ADMIN_COMPRAS_NAV,
-  ...ADMIN_VENTAS_NAV,
-];
-
-/** Future sections — visible in the menu, not routed yet. */
-export const ADMIN_SOON_NAV: AdminNavItem[] = [
-  { href: "#caja", label: "Caja", icon: "cash", status: "slot" },
-  { href: "#pnl", label: "P&L", icon: "pnl", status: "slot" },
-  { href: "#metas", label: "Metas", icon: "goals", status: "slot" },
+  ...ADMIN_PEDIDOS_NAV,
+  ...ADMIN_CATALOGO_NAV,
+  ...ADMIN_FINANZAS_NAV,
 ];
 
 export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
-  { id: "admin", label: "Admin", items: [ADMIN_HOME, ADMIN_PARAMETROS] },
-  { id: "delivery", label: "Delivery", items: ADMIN_DELIVERY_NAV },
-  { id: "compras", label: "Compras", items: ADMIN_COMPRAS_NAV },
-  { id: "ventas", label: "Ventas", items: ADMIN_VENTAS_NAV },
-  { id: "soon", label: "Próximamente", items: ADMIN_SOON_NAV },
+  { id: "pedidos", label: "Pedidos", items: ADMIN_PEDIDOS_NAV },
+  { id: "catalogo", label: "Catálogo", items: ADMIN_CATALOGO_NAV },
+  { id: "finanzas", label: "Finanzas", items: ADMIN_FINANZAS_NAV },
 ];

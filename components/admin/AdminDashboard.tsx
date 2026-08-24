@@ -201,7 +201,7 @@ function DisponibleCard({
   const arrow = disponible >= 0 ? "↑" : "↓";
   return (
     <section
-      className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-4 shadow-sm"
+      className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-4 shadow-sm lg:col-span-2"
       style={{ borderLeftWidth: 4, borderLeftColor: tone.accent }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -215,8 +215,8 @@ function DisponibleCard({
           {tone.label}
         </span>
       </div>
-      <p className="mt-1.5 text-xl font-semibold tabular-nums sm:text-2xl" style={{ color: INK }}>
-        <span className="mr-1 text-base font-medium" style={{ color: disponible >= 0 ? GREEN : RED }}>
+      <p className="mt-2 text-4xl font-semibold tabular-nums sm:text-5xl" style={{ color: INK }}>
+        <span className="mr-1 text-2xl font-medium sm:text-3xl" style={{ color: disponible >= 0 ? GREEN : RED }}>
           {arrow}
         </span>
         {formatSignedPrice(disponible)}
