@@ -2,7 +2,7 @@ import { parsePrice } from "@/lib/catalog-import";
 import { calendarDayKey, isDayKey, todayDayKey } from "@/lib/local-day";
 import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
-import { getVarianzas } from "@/lib/caja";
+import { getCajaParametros, getVarianzas } from "@/lib/caja";
 import {
   defaultTurnoPeriodo,
   isCaja,
@@ -19,7 +19,7 @@ import {
 const LIST_MAX = 500;
 const TEXT_MAX = 500;
 const TURNO_SELECT =
-  "id, fecha, turno, sistema_tarjeta, sistema_efectivo, reportado_tarjeta, reportado_efectivo, reportado_usd, tasa_usd_dop, verificado, notas";
+  "id, fecha, turno, sistema_tarjeta, sistema_efectivo, reportado_tarjeta, reportado_efectivo, reportado_usd, verificado, notas";
 const LEDGER_SELECT = "id, fecha, caja, moneda, tipo, monto, concepto, referencia";
 
 type TurnoRow = Record<string, unknown>;
@@ -58,7 +58,7 @@ function mapTurno(row: TurnoRow): CajaTurnoListItem | null {
   const amounts = {
     reportadoEfectivo: toMoney(row.reportado_efectivo),
     reportadoUsd: toMoney(row.reportado_usd),
-    tasaUsdDop: toMoney(row.tasa_usd_dop),
+    tasaUsdDop: toMoney(row.tasa_usd_dop ?? row.tasaUsdDop),
     reportadoTarjeta: toMoney(row.reportado_tarjeta),
     sistemaTarjeta: toMoney(row.sistema_tarjeta),
     sistemaEfectivo: toMoney(row.sistema_efectivo),
@@ -111,7 +111,10 @@ export async function listCajaTurnos(fecha?: string | null): Promise<CajaTurnoLi
   if (error) {
     throw error;
   }
-  return (data ?? []).map((row) => mapTurno(row as TurnoRow)).filter((row): row is CajaTurnoListItem => Boolean(row));
+  const parametros = await getCajaParametros();
+  return (data ?? [])
+    .map((row) => mapTurno({ ...(row as TurnoRow), tasaUsdDop: parametros.tasaUsdDop }))
+    .filter((row): row is CajaTurnoListItem => Boolean(row));
 }
 
 export async function createCajaTurno(body: {
@@ -122,7 +125,6 @@ export async function createCajaTurno(body: {
   reportadoTarjeta?: unknown;
   reportadoEfectivo?: unknown;
   reportadoUsd?: unknown;
-  tasaUsdDop?: unknown;
   verificado?: unknown;
   notas?: unknown;
 }): Promise<CajaTurnoListItem> {
@@ -140,7 +142,6 @@ export async function createCajaTurno(body: {
     reportado_tarjeta: parseAmount(body.reportadoTarjeta, 0),
     reportado_efectivo: parseAmount(body.reportadoEfectivo, 0),
     reportado_usd: parseAmount(body.reportadoUsd, 0),
-    tasa_usd_dop: parseAmount(body.tasaUsdDop, 0),
     verificado: Boolean(body.verificado),
     notas: trimText(body.notas, TEXT_MAX) || null,
   };
@@ -150,7 +151,7 @@ export async function createCajaTurno(body: {
   if (error) {
     throw error;
   }
-  const mapped = mapTurno(data as TurnoRow);
+  const mapped = mapTurno({ ...(data as TurnoRow), tasaUsdDop: (await getCajaParametros()).tasaUsdDop });
   if (!mapped) {
     throw new Error("No pudimos guardar el turno");
   }

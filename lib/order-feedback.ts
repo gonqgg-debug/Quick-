@@ -45,7 +45,7 @@ export async function sendDueFeedbackSurveys(limit = 20): Promise<{ sent: number
 
   const { data: orders, error } = await supabase
     .from("orders")
-    .select("id, chat_id, es_prueba, chats ( phone_number, esperando_humano )")
+    .select("id, chat_id, es_prueba, chats!orders_chat_id_fkey ( phone_number, esperando_humano )")
     .eq("estado", "completada")
     .eq("es_prueba", false)
     .is("feedback_solicitado_en", null)

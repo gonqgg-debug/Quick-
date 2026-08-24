@@ -210,7 +210,6 @@ function RegistrarTurnoModal({
   const [reportadoTarjeta, setReportadoTarjeta] = useState("");
   const [reportadoEfectivo, setReportadoEfectivo] = useState("");
   const [reportadoUsd, setReportadoUsd] = useState("");
-  const [tasaUsdDop, setTasaUsdDop] = useState("");
   const [verificado, setVerificado] = useState(false);
   const [notas, setNotas] = useState("");
   const [saving, setSaving] = useState(false);
@@ -232,7 +231,6 @@ function RegistrarTurnoModal({
           reportadoTarjeta,
           reportadoEfectivo,
           reportadoUsd,
-          tasaUsdDop,
           verificado,
           notas,
         }),
@@ -301,7 +299,6 @@ function RegistrarTurnoModal({
           <MoneyField label="Reportado tarjeta" value={reportadoTarjeta} onChange={setReportadoTarjeta} />
           <MoneyField label="Reportado efectivo" value={reportadoEfectivo} onChange={setReportadoEfectivo} />
           <MoneyField label="Reportado USD" prefix="US$" value={reportadoUsd} onChange={setReportadoUsd} />
-          <MoneyField label="Tasa USD (opcional)" value={tasaUsdDop} onChange={setTasaUsdDop} />
         </div>
 
         <label className={`${labelClass} mt-4 flex items-center gap-2`}>

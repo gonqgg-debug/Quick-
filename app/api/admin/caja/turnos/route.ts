@@ -16,8 +16,14 @@ export async function GET(request: NextRequest) {
     const turnos = await listCajaTurnos(isDayKey(fechaRaw) ? fechaRaw : null);
     return NextResponse.json({ turnos });
   } catch (error) {
+    const message =
+      error && typeof error === "object" && "message" in error && typeof error.message === "string" && error.message
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : "No pudimos cargar los turnos";
     console.error("[admin] caja turnos list", error);
-    return NextResponse.json({ error: "No pudimos cargar los turnos" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

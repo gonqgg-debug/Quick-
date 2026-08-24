@@ -33,7 +33,7 @@ const ORDER_SELECT = `
   estado,
   direccion,
   total_estimado,
-  chats (
+  chats!orders_chat_id_fkey (
     phone_number,
     nombre
   ),

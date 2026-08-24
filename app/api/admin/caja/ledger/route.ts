@@ -20,8 +20,14 @@ export async function GET(request: NextRequest) {
     });
     return NextResponse.json({ movimientos });
   } catch (error) {
+    const message =
+      error && typeof error === "object" && "message" in error && typeof error.message === "string" && error.message
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : "No pudimos cargar el ledger";
     console.error("[admin] caja ledger list", error);
-    return NextResponse.json({ error: "No pudimos cargar el ledger" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

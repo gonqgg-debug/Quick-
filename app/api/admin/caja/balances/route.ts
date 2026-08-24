@@ -21,8 +21,13 @@ export async function GET() {
       asignacion,
     });
   } catch (error) {
+    const message =
+      error && typeof error === "object" && "message" in error && typeof error.message === "string" && error.message
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : "No pudimos cargar los balances";
     console.error("[admin] caja balances", error);
-    const message = error instanceof Error ? error.message : "No pudimos cargar los balances";
     return NextResponse.json({ error: message || "No pudimos cargar los balances" }, { status: 500 });
   }
 }

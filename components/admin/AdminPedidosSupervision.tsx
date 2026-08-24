@@ -89,6 +89,22 @@ export function AdminPedidosSupervision() {
     return <div className="h-64 animate-pulse rounded-lg bg-gray-100" />;
   }
 
+  if (error && !data) {
+    return (
+      <div className="mx-auto max-w-6xl">
+        <p className="text-xs font-medium uppercase tracking-wide" style={{ color: MUTED }}>
+          Pedidos
+        </p>
+        <h1 className="mt-1 text-2xl font-semibold" style={{ color: INK }}>
+          Supervisión
+        </h1>
+        <p className="mt-4 rounded-lg px-4 py-3 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
+          {error}
+        </p>
+      </div>
+    );
+  }
+
   const view = data ?? emptyData();
 
   return (

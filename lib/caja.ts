@@ -9,6 +9,7 @@ export type CajaParametros = {
   saldoInicialCajaFuerteUsd: number;
   saldoInicialCajaChicaDop: number;
   objetivoCajaChicaDop: number;
+  tasaUsdDop: number;
 };
 
 export type CajaTurno = {
@@ -45,9 +46,9 @@ export type CajaAsignacionSugerida = {
 
 const QUERY_LIMIT = 2000;
 const PARAMETROS_FIELDS =
-  "saldo_inicial_caja_fuerte_dop, saldo_inicial_caja_fuerte_usd, saldo_inicial_caja_chica_dop, objetivo_caja_chica_dop";
+  "saldo_inicial_caja_fuerte_dop, saldo_inicial_caja_fuerte_usd, saldo_inicial_caja_chica_dop, objetivo_caja_chica_dop, tasa_usd_dop";
 const TURNO_FIELDS =
-  "reportado_efectivo, reportado_usd, tasa_usd_dop, reportado_tarjeta, sistema_tarjeta, sistema_efectivo, verificado";
+  "reportado_efectivo, reportado_usd, reportado_tarjeta, sistema_tarjeta, sistema_efectivo, verificado";
 
 type LedgerRow = { monto?: unknown; tipo?: unknown; caja?: unknown; moneda?: unknown };
 
@@ -77,6 +78,7 @@ function mapParametros(data: Record<string, unknown> | null): CajaParametros {
     saldoInicialCajaFuerteUsd: toMoney(data.saldo_inicial_caja_fuerte_usd),
     saldoInicialCajaChicaDop: toMoney(data.saldo_inicial_caja_chica_dop),
     objetivoCajaChicaDop: toMoney(data.objetivo_caja_chica_dop),
+    tasaUsdDop: toMoney(data.tasa_usd_dop),
   };
 }
 
@@ -112,12 +114,15 @@ async function listAll<T>(
   }
 }
 
-async function listTurnosVerificados(): Promise<CajaTurno[]> {
+async function listTurnosVerificados(): Promise<Record<string, unknown>[]> {
   const supabase = getSupabaseAdminClient();
-  const rows = await listAll<Record<string, unknown>>(async (from, to) =>
+  return listAll<Record<string, unknown>>(async (from, to) =>
     supabase.from("caja_turnos").select(TURNO_FIELDS).eq("verificado", true).range(from, to)
   );
-  return rows.map((row) => mapCajaTurno(row));
+}
+
+function turnosConTasa(rows: Record<string, unknown>[], tasaUsdDop: number): CajaTurno[] {
+  return rows.map((row) => mapCajaTurno({ ...row, tasaUsdDop }));
 }
 
 async function listLedger(caja: Caja, moneda: CajaMoneda): Promise<LedgerRow[]> {
@@ -190,23 +195,24 @@ export async function getBalance(caja: Caja, moneda: CajaMoneda): Promise<number
   if (caja === "Chica" && moneda === "USD") {
     return 0;
   }
-  const [parametros, turnos, ledger] = await Promise.all([
+  const [parametros, turnoRows, ledger] = await Promise.all([
     getCajaParametros(),
-    caja === "Fuerte" ? listTurnosVerificados() : Promise.resolve([] as CajaTurno[]),
+    caja === "Fuerte" ? listTurnosVerificados() : Promise.resolve([] as Record<string, unknown>[]),
     listLedger(caja, moneda),
   ]);
-  return balanceFrom(parametros, turnos, ledger, caja, moneda);
+  return balanceFrom(parametros, turnosConTasa(turnoRows, parametros.tasaUsdDop), ledger, caja, moneda);
 }
 
 export async function getTodosLosBalances(): Promise<CajaBalances> {
   const supabase = getSupabaseAdminClient();
-  const [parametros, turnos, ledger] = await Promise.all([
+  const [parametros, turnoRows, ledger] = await Promise.all([
     getCajaParametros(),
     listTurnosVerificados(),
     listAll<LedgerRow>(async (from, to) =>
       supabase.from("caja_ledger").select("monto, tipo, caja, moneda").range(from, to)
     ),
   ]);
+  const turnos = turnosConTasa(turnoRows, parametros.tasaUsdDop);
   const ledgerOf = (caja: Caja, moneda: CajaMoneda) =>
     ledger.filter((row) => row.caja === caja && row.moneda === moneda);
   return {

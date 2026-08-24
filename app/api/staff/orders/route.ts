@@ -33,7 +33,7 @@ export async function GET() {
       notas,
       chat_id,
       es_prueba,
-      chats (
+      chats!orders_chat_id_fkey (
         id,
         phone_number,
         nombre,

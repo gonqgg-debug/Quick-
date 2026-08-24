@@ -34,7 +34,7 @@ const SELECT = `
   metodo_pago,
   total_estimado,
   es_prueba,
-  chats (
+  chats!orders_chat_id_fkey (
     phone_number,
     nombre
   ),

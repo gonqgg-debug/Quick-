@@ -609,7 +609,7 @@ export async function cancelOrder(orderId: string): Promise<void> {
     .update({ estado: "cancelada" })
     .eq("id", orderId)
     .in("estado", [...ACTIVE_ORDER_STATES])
-    .select("id, chats ( phone_number )")
+    .select("id, chats!orders_chat_id_fkey ( phone_number )")
     .maybeSingle();
 
   if (error) {
@@ -721,7 +721,7 @@ export async function confirmOrderToCustomer(
       direccion,
       metodo_pago,
       total_estimado,
-      chats ( phone_number ),
+      chats!orders_chat_id_fkey ( phone_number ),
       order_items (
         cantidad,
         precio_unitario,
@@ -796,7 +796,7 @@ export async function notifyCustomerOfOrderStatus(
   const supabase = getSupabaseAdminClient();
   const { data: order, error } = await supabase
     .from("orders")
-    .select("id, chat_id, es_prueba, chats ( phone_number )")
+    .select("id, chat_id, es_prueba, chats!orders_chat_id_fkey ( phone_number )")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -863,7 +863,7 @@ export async function notifyMissingItem(orderId: string, productId: string): Pro
 
   const { data: order, error: orderError } = await supabase
     .from("orders")
-    .select("id, chat_id, chats ( phone_number )")
+    .select("id, chat_id, chats!orders_chat_id_fkey ( phone_number )")
     .eq("id", orderId)
     .maybeSingle();
 

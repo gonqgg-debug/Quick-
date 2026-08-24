@@ -14,8 +14,13 @@ export async function GET() {
     const data = await loadPedidosSupervision();
     return NextResponse.json(data);
   } catch (error) {
+    const message =
+      error && typeof error === "object" && "message" in error && typeof error.message === "string" && error.message
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : "No pudimos cargar la supervisión";
     console.error("[admin] pedidos supervision", error);
-    const message = error instanceof Error ? error.message : "No pudimos cargar la supervisión";
     return NextResponse.json({ error: message || "No pudimos cargar la supervisión" }, { status: 500 });
   }
 }
