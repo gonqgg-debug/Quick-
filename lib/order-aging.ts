@@ -55,6 +55,20 @@ export function formatElapsedClock(createdAt: string, now = Date.now()): string 
   return `${mm}:${ss}`;
 }
 
+/** Human label for wall displays, e.g. "8 min" or "1 h 12 min". */
+export function formatElapsedMinutesLabel(createdAt: string, now = Date.now()): string {
+  const minutes = elapsedMinutes(createdAt, now);
+  if (minutes < 1) {
+    return "< 1 min";
+  }
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest > 0 ? `${hours} h ${rest} min` : `${hours} h`;
+}
+
 export function orderAgingLevel(minutes: number): OrderAgingLevel {
   if (minutes >= ORDER_AGING.urgentAfterMinutes) {
     return "urgent";

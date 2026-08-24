@@ -58,7 +58,20 @@ export const ADMIN_VENTAS_HISTORICO: AdminNavItem = {
   status: "live",
 };
 
+export const ADMIN_CAJA: AdminNavItem = {
+  href: "/admin/caja",
+  label: "Caja",
+  icon: "cash",
+  status: "live",
+  children: [
+    { href: "/admin/caja/balances", label: "Balances", icon: "cash" },
+    { href: "/admin/caja/turnos", label: "Turnos", icon: "history" },
+    { href: "/admin/caja/ledger", label: "Ledger", icon: "purchases" },
+  ],
+};
+
 export const ADMIN_PEDIDOS_NAV: AdminNavItem[] = [
+  { href: "/admin/pedidos/supervision", label: "Supervisión", icon: "goals", status: "live" },
   { href: "/admin/historial", label: "Historial de Delivery", icon: "history", status: "live" },
 ];
 
@@ -70,6 +83,7 @@ export const ADMIN_CATALOGO_NAV: AdminNavItem[] = [
 ];
 
 export const ADMIN_FINANZAS_NAV: AdminNavItem[] = [
+  ADMIN_CAJA,
   { href: "/admin/ventas", label: "Ventas", icon: "sales", status: "live" },
   ADMIN_VENTAS_HISTORICO,
   { href: "/admin/compras", label: "Compras", icon: "purchases", status: "live" },

@@ -9,6 +9,7 @@ import {
   ADMIN_HOME,
   ADMIN_NAV,
   ADMIN_NAV_SECTIONS,
+  type AdminNavChild,
   type AdminNavIcon,
   type AdminNavItem,
   type AdminNavSectionId,
@@ -21,7 +22,7 @@ type AdminShellProps = {
   children: React.ReactNode;
 };
 
-type OpenState = Record<AdminNavSectionId, boolean>;
+type OpenState = Record<AdminNavSectionId | "caja", boolean>;
 
 const NAV_STORAGE_KEY = "quick-admin-nav-open";
 
@@ -33,7 +34,7 @@ function isActivePath(pathname: string, href: string): boolean {
 }
 
 function sectionForPath(pathname: string): AdminNavSectionId | null {
-  if (pathname.startsWith("/admin/historial")) {
+  if (pathname.startsWith("/admin/historial") || pathname.startsWith("/admin/pedidos")) {
     return "pedidos";
   }
   if (pathname.startsWith("/admin/catalogo")) {
@@ -43,7 +44,8 @@ function sectionForPath(pathname: string): AdminNavSectionId | null {
     pathname.startsWith("/admin/ventas") ||
     pathname.startsWith("/admin/compras") ||
     pathname.startsWith("/admin/proveedores") ||
-    pathname.startsWith("/admin/parametros")
+    pathname.startsWith("/admin/parametros") ||
+    pathname.startsWith("/admin/caja")
   ) {
     return "finanzas";
   }
@@ -55,6 +57,7 @@ function defaultOpen(): OpenState {
     pedidos: true,
     catalogo: true,
     finanzas: true,
+    caja: true,
   };
 }
 
@@ -127,6 +130,9 @@ export function AdminShell({ email, children }: AdminShellProps) {
       if (section) {
         next[section] = true;
       }
+      if (pathname.startsWith("/admin/caja")) {
+        next.caja = true;
+      }
       return next;
     });
     // Restore collapsed sections once; later navigations only expand the active group.
@@ -136,10 +142,17 @@ export function AdminShell({ email, children }: AdminShellProps) {
   useEffect(() => {
     setOpen((prev) => {
       const section = sectionForPath(pathname);
-      if (!section || prev[section]) {
+      const needsCaja = pathname.startsWith("/admin/caja") && !prev.caja;
+      if ((!section || prev[section]) && !needsCaja) {
         return prev;
       }
-      const next = { ...prev, [section]: true };
+      const next = { ...prev };
+      if (section) {
+        next[section] = true;
+      }
+      if (pathname.startsWith("/admin/caja")) {
+        next.caja = true;
+      }
       persistOpen(next);
       return next;
     });
@@ -215,7 +228,7 @@ export function AdminShell({ email, children }: AdminShellProps) {
                 return (
                   <Link
                     key={item.href}
-                    href={item.href}
+                    href={item.children?.[0]?.href ?? item.href}
                     className="inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold"
                     style={{
                       backgroundColor: active ? brand.green : "#F3F4F6",
@@ -228,6 +241,26 @@ export function AdminShell({ email, children }: AdminShellProps) {
                 );
               })}
             </nav>
+            {ADMIN_NAV.filter((item) => item.children?.length && isActivePath(pathname, item.href)).map((item) => (
+              <nav key={`${item.href}-children`} className="mt-2 flex flex-wrap gap-1" aria-label={item.label}>
+                {item.children?.map((child) => {
+                  const active = pathname === child.href || pathname.startsWith(`${child.href}/`);
+                  return (
+                    <Link
+                      key={child.href}
+                      href={child.href}
+                      className="inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold"
+                      style={{
+                        backgroundColor: active ? brand.green : "#F3F4F6",
+                        color: active ? "#FFFFFF" : brand.ink,
+                      }}
+                    >
+                      {child.label}
+                    </Link>
+                  );
+                })}
+              </nav>
+            ))}
           </header>
           <main className="px-4 py-6 md:px-6">{children}</main>
         </div>
@@ -281,6 +314,8 @@ function DesktopNav({
                       item={item}
                       pathname={pathname}
                       pendingRequests={pendingRequests}
+                      nestedOpen={item.href === "/admin/caja" ? open.caja : false}
+                      onToggleNested={item.href === "/admin/caja" ? () => onToggle("caja") : undefined}
                     />
                   ),
                 )}
@@ -297,26 +332,85 @@ function LiveItem({
   item,
   pathname,
   pendingRequests,
+  nestedOpen = false,
+  onToggleNested,
 }: {
   item: AdminNavItem;
   pathname: string;
   pendingRequests: number;
+  nestedOpen?: boolean;
+  onToggleNested?: () => void;
 }) {
   const active = isActivePath(pathname, item.href);
+  const hasChildren = Boolean(item.children?.length);
+  const childrenOpen = hasChildren ? nestedOpen : false;
+
+  return (
+    <div>
+      <div className="flex items-center gap-0.5">
+        <Link
+          href={item.children?.[0]?.href ?? item.href}
+          className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition-colors ${
+            active && !hasChildren ? "" : "hover:bg-black/[0.04]"
+          }`}
+          style={{
+            backgroundColor: active && !hasChildren ? `${brand.green}1F` : "transparent",
+            color: active ? brand.green : brand.ink,
+          }}
+        >
+          <NavGlyph name={item.icon} />
+          <span className="truncate">{item.label}</span>
+          {item.href === "/admin/catalogo/solicitudes" ? <PendingBadge count={pendingRequests} /> : null}
+        </Link>
+        {hasChildren ? (
+          <button
+            type="button"
+            onClick={onToggleNested}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-brand-muted transition-colors hover:bg-black/[0.04] hover:text-brand-ink"
+            aria-expanded={childrenOpen}
+            aria-label={childrenOpen ? `Cerrar ${item.label}` : `Abrir ${item.label}`}
+          >
+            <Chevron open={childrenOpen} />
+          </button>
+        ) : null}
+      </div>
+      {hasChildren ? (
+        <Collapse open={childrenOpen}>
+          <div className="mb-1 ml-4 mt-0.5 flex flex-col gap-0.5 border-l pl-2" style={{ borderColor: "#D9DDD6" }}>
+            {item.children?.map((child) => (
+              <ChildLink key={child.href} child={child} pathname={pathname} pendingRequests={pendingRequests} />
+            ))}
+          </div>
+        </Collapse>
+      ) : null}
+    </div>
+  );
+}
+
+function ChildLink({
+  child,
+  pathname,
+  pendingRequests,
+}: {
+  child: AdminNavChild;
+  pathname: string;
+  pendingRequests: number;
+}) {
+  const childActive = pathname === child.href || pathname.startsWith(`${child.href}/`);
   return (
     <Link
-      href={item.href}
-      className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition-colors ${
-        active ? "" : "hover:bg-black/[0.04]"
+      href={child.href}
+      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-semibold transition-colors ${
+        childActive ? "" : "hover:bg-black/[0.04]"
       }`}
       style={{
-        backgroundColor: active ? `${brand.green}1F` : "transparent",
-        color: active ? brand.green : brand.ink,
+        backgroundColor: childActive ? `${brand.green}1F` : "transparent",
+        color: childActive ? brand.green : brand.muted,
       }}
     >
-      <NavGlyph name={item.icon} />
-      <span className="truncate">{item.label}</span>
-      {item.href === "/admin/catalogo/solicitudes" ? <PendingBadge count={pendingRequests} /> : null}
+      <NavGlyph name={child.icon} className="h-3.5 w-3.5 shrink-0" />
+      <span>{child.label}</span>
+      {child.href === "/admin/catalogo/solicitudes" ? <PendingBadge count={pendingRequests} /> : null}
     </Link>
   );
 }
