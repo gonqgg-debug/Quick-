@@ -104,16 +104,17 @@ export function AdminVentas() {
       throw new Error("No autorizado");
     }
     const body = (await response.json().catch(() => null)) as { venta?: VentaDiaria; error?: string } | null;
-    if (!response.ok || !body?.venta) {
+    const venta = body?.venta;
+    if (!response.ok || !venta) {
       throw new Error(body?.error || "No pudimos guardar la venta");
     }
     setVentas((current) => {
-      const next = current.filter((venta) => venta.fecha !== body.venta?.fecha);
-      next.push(body.venta);
+      const next = current.filter((item) => item.fecha !== venta.fecha);
+      next.push(venta);
       next.sort((left, right) => right.fecha.localeCompare(left.fecha));
       return next.slice(0, VENTAS_DEFAULT_LIMIT);
     });
-    return body.venta;
+    return venta;
   }
 
   async function saveForm() {
