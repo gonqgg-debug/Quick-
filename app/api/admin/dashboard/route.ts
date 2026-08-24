@@ -15,6 +15,12 @@ export async function GET() {
     return NextResponse.json(dashboard);
   } catch (error) {
     console.error("[admin] dashboard", error);
-    return NextResponse.json({ error: "No pudimos cargar el dashboard" }, { status: 500 });
+    const message =
+      error instanceof Error
+        ? error.message
+        : error && typeof error === "object" && "message" in error && typeof error.message === "string"
+          ? error.message
+          : "No pudimos cargar el dashboard";
+    return NextResponse.json({ error: message || "No pudimos cargar el dashboard" }, { status: 500 });
   }
 }

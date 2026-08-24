@@ -314,14 +314,13 @@ export async function getMetaMensual(mesActivo: MesActivo): Promise<number> {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("metas_mensuales")
-    .select("meta_mensual")
-    .eq("anio", mesActivo.year)
-    .eq("mes", mesActivo.month)
+    .select("meta")
+    .eq("mes", monthStartKey(mesActivo.year, mesActivo.month))
     .maybeSingle();
   if (error) {
     throw error;
   }
-  return toMoney((data as { meta_mensual?: unknown } | null)?.meta_mensual);
+  return toMoney((data as { meta?: unknown } | null)?.meta);
 }
 
 export async function getUmbralesSemaforo(): Promise<{ umbralCuidado: number; umbralStop: number }> {

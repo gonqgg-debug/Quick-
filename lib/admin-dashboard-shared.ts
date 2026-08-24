@@ -86,11 +86,21 @@ export function semaforoDisponible(
   if (!(presupuesto > 0)) {
     return "ok";
   }
-  const ratio = disponible / presupuesto;
-  if (ratio < umbralStop) {
+  if (umbralStop > umbralCuidado) {
+    const usado = (presupuesto - disponible) / presupuesto;
+    if (usado >= umbralStop) {
+      return "stop";
+    }
+    if (usado >= umbralCuidado) {
+      return "cuidado";
+    }
+    return "ok";
+  }
+  const restante = disponible / presupuesto;
+  if (restante < umbralStop) {
     return "stop";
   }
-  if (ratio <= umbralCuidado) {
+  if (restante <= umbralCuidado) {
     return "cuidado";
   }
   return "ok";
