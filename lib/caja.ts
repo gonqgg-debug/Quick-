@@ -94,7 +94,7 @@ function saldoInicial(parametros: CajaParametros, caja: Caja, moneda: CajaMoneda
 }
 
 async function listAll<T>(
-  fetchPage: (from: number, to: number) => Promise<{ data: T[] | null; error: { message?: string } | null }>
+  fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message?: string } | null }>
 ): Promise<T[]> {
   const rows: T[] = [];
   let from = 0;
@@ -114,7 +114,7 @@ async function listAll<T>(
 
 async function listTurnosVerificados(): Promise<CajaTurno[]> {
   const supabase = getSupabaseAdminClient();
-  const rows = await listAll<Record<string, unknown>>((from, to) =>
+  const rows = await listAll<Record<string, unknown>>(async (from, to) =>
     supabase.from("caja_turnos").select(TURNO_FIELDS).eq("verificado", true).range(from, to)
   );
   return rows.map((row) => mapCajaTurno(row));
@@ -122,7 +122,7 @@ async function listTurnosVerificados(): Promise<CajaTurno[]> {
 
 async function listLedger(caja: Caja, moneda: CajaMoneda): Promise<LedgerRow[]> {
   const supabase = getSupabaseAdminClient();
-  return listAll<LedgerRow>((from, to) =>
+  return listAll<LedgerRow>(async (from, to) =>
     supabase.from("caja_ledger").select("monto, tipo").eq("caja", caja).eq("moneda", moneda).range(from, to)
   );
 }
@@ -203,7 +203,7 @@ export async function getTodosLosBalances(): Promise<CajaBalances> {
   const [parametros, turnos, ledger] = await Promise.all([
     getCajaParametros(),
     listTurnosVerificados(),
-    listAll<LedgerRow>((from, to) =>
+    listAll<LedgerRow>(async (from, to) =>
       supabase.from("caja_ledger").select("monto, tipo, caja, moneda").range(from, to)
     ),
   ]);
