@@ -79,7 +79,7 @@ function mapProveedor(row: ProveedorRow): Proveedor | null {
   };
 }
 
-function proveedorNombre(embed: ProveedorEmbed, fallbackId: string): string {
+function proveedorNombre(embed: ProveedorEmbed | undefined, fallbackId: string): string {
   const row = Array.isArray(embed) ? embed[0] : embed;
   const nombre = String(row?.nombre ?? "").trim();
   return nombre || fallbackId;
