@@ -88,7 +88,7 @@ export function LandingHeader() {
             ))}
           </nav>
           <Link
-            href="/staff"
+            href="/empleados"
             className="inline-flex min-h-10 items-center justify-center rounded-full px-4 py-1.5 text-sm font-bold text-white"
             style={{ backgroundColor: brand.orange }}
           >
@@ -132,7 +132,7 @@ export function LandingHeader() {
             ))}
             <li>
               <Link
-                href="/staff"
+                href="/empleados"
                 className="mt-2 inline-flex min-h-11 items-center justify-center rounded-full px-5 text-base font-bold text-white"
                 style={{ backgroundColor: brand.orange }}
                 onClick={() => setOpen(false)}

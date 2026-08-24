@@ -7,7 +7,6 @@ import { Logo } from "@/components/brand/Logo";
 import { createAdminBrowserClient } from "@/lib/admin-browser";
 import {
   ADMIN_HOME,
-  ADMIN_NAV,
   ADMIN_NAV_SECTIONS,
   type AdminNavChild,
   type AdminNavIcon,
@@ -97,6 +96,7 @@ export function AdminShell({ email, children }: AdminShellProps) {
   const router = useRouter();
   const [pendingRequests, setPendingRequests] = useState(0);
   const [open, setOpen] = useState<OpenState>(() => defaultOpen());
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,12 +158,50 @@ export function AdminShell({ email, children }: AdminShellProps) {
     });
   }, [pathname]);
 
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 768px)");
+    function onViewportChange() {
+      if (media.matches) {
+        setMenuOpen(false);
+      }
+    }
+    onViewportChange();
+    media.addEventListener("change", onViewportChange);
+    return () => media.removeEventListener("change", onViewportChange);
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
   function toggleOpen(key: keyof OpenState) {
     setOpen((prev) => {
       const next = { ...prev, [key]: !prev[key] };
       persistOpen(next);
       return next;
     });
+  }
+
+  function closeMenu() {
+    setMenuOpen(false);
   }
 
   async function handleLogout() {
@@ -173,119 +211,201 @@ export function AdminShell({ email, children }: AdminShellProps) {
     router.refresh();
   }
 
-  const initial = email.trim().charAt(0).toUpperCase() || "A";
+  const sidebarProps = {
+    pathname,
+    pendingRequests,
+    open,
+    onToggle: toggleOpen,
+    email,
+    onLogout: () => void handleLogout(),
+  };
 
   return (
-    <div className="min-h-screen bg-white" style={{ color: brand.ink }}>
+    <div className="min-h-screen overflow-x-hidden bg-white" style={{ color: brand.ink }}>
       <div className="flex min-h-screen">
-        <aside
+        <AdminSidebar
           className="sticky top-0 hidden h-screen w-[252px] shrink-0 flex-col border-r px-3 py-4 md:flex"
           style={{ borderColor: "#EEF1EE", backgroundColor: "#F7F8F6" }}
-        >
-          <Link href="/admin" className="rounded-xl px-2 py-1" aria-label="Administración Quick!">
-            <Logo className="h-9 w-auto max-w-[160px]" />
-          </Link>
-          <DesktopNav
-            pathname={pathname}
-            pendingRequests={pendingRequests}
-            open={open}
-            onToggle={toggleOpen}
-          />
-          <div className="mt-auto border-t px-1 pt-3" style={{ borderColor: "#E5E7EB" }}>
-            <div className="flex items-center gap-2.5 px-2 py-1">
-              <span
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                style={{ backgroundColor: brand.green }}
-              >
-                {initial}
-              </span>
-              <p className="min-w-0 truncate text-xs text-brand-muted">{email}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void handleLogout()}
-              className="mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-semibold text-brand-ink transition-colors hover:bg-black/[0.05]"
-            >
-              <NavGlyph name="logout" />
-              Salir
-            </button>
-          </div>
-        </aside>
+          {...sidebarProps}
+        />
         <div className="min-w-0 flex-1">
-          <header className="border-b px-4 py-3 md:hidden" style={{ borderColor: "#F3F4F6", backgroundColor: "#FAFBFA" }}>
+          <header
+            className="sticky top-0 z-30 border-b bg-white px-4 py-2.5 md:hidden"
+            style={{ borderColor: "#EEF1EE" }}
+          >
             <div className="flex items-center justify-between gap-3">
               <Link href="/admin" aria-label="Administración Quick!">
-                <Logo className="h-8 w-auto max-w-[140px]" />
+                <Logo className="h-7 w-auto max-w-[120px]" />
               </Link>
-              <button type="button" onClick={() => void handleLogout()} className="text-sm font-bold">
-                Salir
+              <button
+                type="button"
+                onClick={() => setMenuOpen(true)}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-brand-ink transition-colors hover:bg-black/[0.05]"
+                aria-label="Abrir menú"
+                aria-expanded={menuOpen}
+                aria-controls="admin-mobile-nav"
+              >
+                <MenuGlyph />
               </button>
             </div>
-            <p className="mt-2 truncate text-xs text-brand-muted">{email}</p>
-            <nav className="mt-3 flex flex-wrap gap-1" aria-label="Administración">
-              {ADMIN_NAV.map((item) => {
-                const active = isActivePath(pathname, item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.children?.[0]?.href ?? item.href}
-                    className="inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold"
-                    style={{
-                      backgroundColor: active ? brand.green : "#F3F4F6",
-                      color: active ? "#FFFFFF" : brand.ink,
-                    }}
-                  >
-                    {item.label}
-                    {item.href === "/admin/catalogo/solicitudes" ? <PendingBadge count={pendingRequests} /> : null}
-                  </Link>
-                );
-              })}
-            </nav>
-            {ADMIN_NAV.filter((item) => item.children?.length && isActivePath(pathname, item.href)).map((item) => (
-              <nav key={`${item.href}-children`} className="mt-2 flex flex-wrap gap-1" aria-label={item.label}>
-                {item.children?.map((child) => {
-                  const active = pathname === child.href || pathname.startsWith(`${child.href}/`);
-                  return (
-                    <Link
-                      key={child.href}
-                      href={child.href}
-                      className="inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold"
-                      style={{
-                        backgroundColor: active ? brand.green : "#F3F4F6",
-                        color: active ? "#FFFFFF" : brand.ink,
-                      }}
-                    >
-                      {child.label}
-                    </Link>
-                  );
-                })}
-              </nav>
-            ))}
           </header>
           <main className="px-4 py-6 md:px-6">{children}</main>
         </div>
+      </div>
+
+      <div
+        className={`fixed inset-0 z-40 md:hidden ${menuOpen ? "pointer-events-auto" : "pointer-events-none"}`}
+        aria-hidden={!menuOpen}
+      >
+        <button
+          type="button"
+          tabIndex={menuOpen ? 0 : -1}
+          aria-label="Cerrar menú"
+          onClick={closeMenu}
+          className={`absolute inset-0 bg-black/40 transition-opacity duration-200 ${
+            menuOpen ? "opacity-100" : "opacity-0"
+          }`}
+        />
+        <AdminSidebar
+          {...sidebarProps}
+          id="admin-mobile-nav"
+          role="dialog"
+          ariaModal
+          ariaLabel="Menú de administración"
+          className={`absolute inset-y-0 left-0 z-10 flex w-[85%] max-w-[320px] flex-col border-r px-3 py-4 shadow-xl transition-transform duration-200 ease-out ${
+            menuOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+          style={{ borderColor: "#EEF1EE", backgroundColor: "#F7F8F6" }}
+          headerAction={
+            <button
+              type="button"
+              onClick={closeMenu}
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-brand-ink transition-colors hover:bg-black/[0.05]"
+              aria-label="Cerrar menú"
+              tabIndex={menuOpen ? 0 : -1}
+            >
+              <CloseGlyph />
+            </button>
+          }
+          onNavigate={closeMenu}
+          inert={!menuOpen}
+        />
       </div>
     </div>
   );
 }
 
-function DesktopNav({
+function AdminSidebar({
+  id,
+  role,
+  ariaModal,
+  ariaLabel,
+  className,
+  style,
   pathname,
   pendingRequests,
   open,
   onToggle,
+  email,
+  onLogout,
+  onNavigate,
+  headerAction,
+  inert,
 }: {
+  id?: string;
+  role?: string;
+  ariaModal?: boolean;
+  ariaLabel?: string;
+  className: string;
+  style?: React.CSSProperties;
   pathname: string;
   pendingRequests: number;
   open: OpenState;
   onToggle: (key: keyof OpenState) => void;
+  email: string;
+  onLogout: () => void;
+  onNavigate?: () => void;
+  headerAction?: React.ReactNode;
+  inert?: boolean;
+}) {
+  const initial = email.trim().charAt(0).toUpperCase() || "A";
+  return (
+    <aside
+      id={id}
+      role={role}
+      aria-modal={ariaModal || undefined}
+      aria-label={ariaLabel}
+      className={className}
+      style={style}
+      {...(inert ? { inert: "" } : {})}
+    >
+      <div className="flex items-center justify-between gap-2 px-2">
+        <Link
+          href="/admin"
+          className="rounded-xl py-1"
+          aria-label="Administración Quick!"
+          onClick={onNavigate}
+        >
+          <Logo className="h-9 w-auto max-w-[160px]" />
+        </Link>
+        {headerAction}
+      </div>
+      <AdminNav
+        idPrefix={id}
+        pathname={pathname}
+        pendingRequests={pendingRequests}
+        open={open}
+        onToggle={onToggle}
+        onNavigate={onNavigate}
+      />
+      <div className="mt-auto border-t px-1 pt-3" style={{ borderColor: "#E5E7EB" }}>
+        <div className="flex items-center gap-2.5 px-2 py-1">
+          <span
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+            style={{ backgroundColor: brand.green }}
+          >
+            {initial}
+          </span>
+          <p className="min-w-0 truncate text-xs text-brand-muted">{email}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            onNavigate?.();
+            onLogout();
+          }}
+          className="mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-semibold text-brand-ink transition-colors hover:bg-black/[0.05]"
+        >
+          <NavGlyph name="logout" />
+          Salir
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function AdminNav({
+  idPrefix,
+  pathname,
+  pendingRequests,
+  open,
+  onToggle,
+  onNavigate,
+}: {
+  idPrefix?: string;
+  pathname: string;
+  pendingRequests: number;
+  open: OpenState;
+  onToggle: (key: keyof OpenState) => void;
+  onNavigate?: () => void;
 }) {
   return (
-    <nav className="mt-5 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pb-4" aria-label="Administración">
-      <LiveItem item={ADMIN_HOME} pathname={pathname} pendingRequests={pendingRequests} />
+    <nav className="mt-5 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain pb-4" aria-label="Administración">
+      <LiveItem item={ADMIN_HOME} pathname={pathname} pendingRequests={pendingRequests} onNavigate={onNavigate} />
       {ADMIN_NAV_SECTIONS.map((section) => {
         const expanded = open[section.id];
         const hasActive = section.items.some((item) => isActivePath(pathname, item.href));
+        const sectionDomId = idPrefix ? `${idPrefix}-section-${section.id}` : `nav-section-${section.id}`;
         return (
           <div key={section.id}>
             <button
@@ -293,7 +413,7 @@ function DesktopNav({
               onClick={() => onToggle(section.id)}
               className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-brand-muted transition-colors hover:bg-black/[0.04] hover:text-brand-ink"
               aria-expanded={expanded}
-              aria-controls={`nav-section-${section.id}`}
+              aria-controls={sectionDomId}
             >
               <span className="flex items-center gap-2">
                 {section.label}
@@ -304,7 +424,7 @@ function DesktopNav({
               <Chevron open={expanded} />
             </button>
             <Collapse open={expanded}>
-              <div id={`nav-section-${section.id}`} className="mt-0.5 flex flex-col gap-0.5">
+              <div id={sectionDomId} className="mt-0.5 flex flex-col gap-0.5">
                 {section.items.map((item) =>
                   item.status === "slot" ? (
                     <SoonItem key={item.label} item={item} />
@@ -316,6 +436,7 @@ function DesktopNav({
                       pendingRequests={pendingRequests}
                       nestedOpen={item.href === "/admin/caja" ? open.caja : false}
                       onToggleNested={item.href === "/admin/caja" ? () => onToggle("caja") : undefined}
+                      onNavigate={onNavigate}
                     />
                   ),
                 )}
@@ -334,12 +455,14 @@ function LiveItem({
   pendingRequests,
   nestedOpen = false,
   onToggleNested,
+  onNavigate,
 }: {
   item: AdminNavItem;
   pathname: string;
   pendingRequests: number;
   nestedOpen?: boolean;
   onToggleNested?: () => void;
+  onNavigate?: () => void;
 }) {
   const active = isActivePath(pathname, item.href);
   const hasChildren = Boolean(item.children?.length);
@@ -350,6 +473,7 @@ function LiveItem({
       <div className="flex items-center gap-0.5">
         <Link
           href={item.children?.[0]?.href ?? item.href}
+          onClick={onNavigate}
           className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition-colors ${
             active && !hasChildren ? "" : "hover:bg-black/[0.04]"
           }`}
@@ -378,7 +502,13 @@ function LiveItem({
         <Collapse open={childrenOpen}>
           <div className="mb-1 ml-4 mt-0.5 flex flex-col gap-0.5 border-l pl-2" style={{ borderColor: "#D9DDD6" }}>
             {item.children?.map((child) => (
-              <ChildLink key={child.href} child={child} pathname={pathname} pendingRequests={pendingRequests} />
+              <ChildLink
+                key={child.href}
+                child={child}
+                pathname={pathname}
+                pendingRequests={pendingRequests}
+                onNavigate={onNavigate}
+              />
             ))}
           </div>
         </Collapse>
@@ -391,15 +521,18 @@ function ChildLink({
   child,
   pathname,
   pendingRequests,
+  onNavigate,
 }: {
   child: AdminNavChild;
   pathname: string;
   pendingRequests: number;
+  onNavigate?: () => void;
 }) {
   const childActive = pathname === child.href || pathname.startsWith(`${child.href}/`);
   return (
     <Link
       href={child.href}
+      onClick={onNavigate}
       className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-semibold transition-colors ${
         childActive ? "" : "hover:bg-black/[0.04]"
       }`}
@@ -449,6 +582,38 @@ function Chevron({ open }: { open: boolean }) {
       aria-hidden="true"
     >
       <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+function MenuGlyph() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-6 w-6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
+}
+
+function CloseGlyph() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M6 6l12 12M18 6 6 18" />
     </svg>
   );
 }

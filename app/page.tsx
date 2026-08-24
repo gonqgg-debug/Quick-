@@ -149,7 +149,7 @@ function WhatsAppButton({ className = "", small = false }: { className?: string;
 function StaffButton() {
   return (
     <Link
-      href="/staff"
+      href="/empleados"
       className="inline-flex min-h-10 items-center justify-center rounded-full px-5 py-2 text-sm font-bold text-white"
       style={{ backgroundColor: brand.orange }}
     >

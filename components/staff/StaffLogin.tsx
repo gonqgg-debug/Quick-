@@ -44,6 +44,11 @@ export function StaffLogin({ onSuccess }: StaffLoginProps) {
         <Logo className="h-14" />
         <h1 className="font-display mt-6 text-2xl font-bold">Panel del personal</h1>
         <p className="mt-2 text-sm text-brand-muted">Escribe la contraseña para continuar.</p>
+        <p className="mt-1 text-sm text-brand-muted">
+          <a href="/empleados" className="font-semibold underline-offset-2 hover:underline" style={{ color: brand.green }}>
+            ¿Buscas Administración?
+          </a>
+        </p>
         <form onSubmit={handleLogin} className="mt-6 space-y-3">
           <input
             type="password"

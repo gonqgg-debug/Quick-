@@ -92,7 +92,7 @@ export const ADMIN_FINANZAS_NAV: AdminNavItem[] = [
   ADMIN_PARAMETROS,
 ];
 
-/** Live admin links, home first. Used by the mobile nav. */
+/** Live admin links, home first. Flat list of every routed item. */
 export const ADMIN_NAV: AdminNavItem[] = [
   ADMIN_HOME,
   ...ADMIN_PEDIDOS_NAV,
