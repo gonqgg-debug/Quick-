@@ -27,8 +27,8 @@ type OpenState = Record<AdminNavSectionId | "catalogo", boolean>;
 const NAV_STORAGE_KEY = "quick-admin-nav-open";
 
 function isActivePath(pathname: string, href: string): boolean {
-  if (href === "/admin") {
-    return pathname === "/admin";
+  if (href === "/admin" || href === "/admin/ventas") {
+    return pathname === href;
   }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -36,6 +36,9 @@ function isActivePath(pathname: string, href: string): boolean {
 function sectionForPath(pathname: string): AdminNavSectionId {
   if (pathname.startsWith("/admin/compras") || pathname.startsWith("/admin/proveedores")) {
     return "compras";
+  }
+  if (pathname.startsWith("/admin/ventas")) {
+    return "ventas";
   }
   if (pathname.startsWith("/admin/historial") || pathname.startsWith("/admin/catalogo")) {
     return "delivery";
@@ -48,6 +51,7 @@ function defaultOpen(pathname: string): OpenState {
     admin: true,
     delivery: true,
     compras: true,
+    ventas: true,
     soon: false,
     catalogo: pathname.startsWith("/admin/catalogo"),
   };
@@ -76,7 +80,7 @@ function PendingBadge({ count }: { count: number }) {
   }
   return (
     <span
-      className="ml-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+      className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
       style={{ backgroundColor: brand.orange }}
     >
       {count > 9 ? "9+" : count}
@@ -541,6 +545,16 @@ function NavGlyph({
           <path d="M16 3.13a3.2 3.2 0 0 1 0 6.26" />
         </svg>
       );
+    case "sales":
+      return (
+        <svg {...common}>
+          <path d="M4 19V5" />
+          <path d="M4 19h16" />
+          <path d="M8 16v-4" />
+          <path d="M12 16V8" />
+          <path d="M16 16v-7" />
+        </svg>
+      );
     case "cash":
       return (
         <svg {...common}>
@@ -563,6 +577,15 @@ function NavGlyph({
           <circle cx="12" cy="12" r="8" />
           <circle cx="12" cy="12" r="4" />
           <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case "settings":
+      return (
+        <svg {...common}>
+          <path d="M4 7h16" />
+          <path d="M4 17h16" />
+          <circle cx="9" cy="7" r="2.2" />
+          <circle cx="15" cy="17" r="2.2" />
         </svg>
       );
     case "logout":

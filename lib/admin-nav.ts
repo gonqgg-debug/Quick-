@@ -8,9 +8,11 @@ export type AdminNavIcon =
   | "requests"
   | "purchases"
   | "suppliers"
+  | "sales"
   | "cash"
   | "pnl"
-  | "goals";
+  | "goals"
+  | "settings";
 
 export type AdminNavChild = {
   href: string;
@@ -27,7 +29,7 @@ export type AdminNavItem = {
   children?: AdminNavChild[];
 };
 
-export type AdminNavSectionId = "admin" | "delivery" | "compras" | "soon";
+export type AdminNavSectionId = "admin" | "delivery" | "compras" | "ventas" | "soon";
 
 export type AdminNavSection = {
   id: AdminNavSectionId;
@@ -39,6 +41,20 @@ export const ADMIN_HOME: AdminNavItem = {
   href: "/admin",
   label: "Inicio",
   icon: "home",
+  status: "live",
+};
+
+export const ADMIN_PARAMETROS: AdminNavItem = {
+  href: "/admin/parametros",
+  label: "Parámetros",
+  icon: "settings",
+  status: "live",
+};
+
+export const ADMIN_VENTAS_HISTORICO: AdminNavItem = {
+  href: "/admin/ventas/historico",
+  label: "Histórico",
+  icon: "pnl",
   status: "live",
 };
 
@@ -63,8 +79,19 @@ export const ADMIN_COMPRAS_NAV: AdminNavItem[] = [
   { href: "/admin/proveedores", label: "Proveedores", icon: "suppliers", status: "live" },
 ];
 
+export const ADMIN_VENTAS_NAV: AdminNavItem[] = [
+  { href: "/admin/ventas", label: "Ventas", icon: "sales", status: "live" },
+  ADMIN_VENTAS_HISTORICO,
+];
+
 /** Live admin links, home first. Used by the mobile nav. */
-export const ADMIN_NAV: AdminNavItem[] = [ADMIN_HOME, ...ADMIN_DELIVERY_NAV, ...ADMIN_COMPRAS_NAV];
+export const ADMIN_NAV: AdminNavItem[] = [
+  ADMIN_HOME,
+  ADMIN_PARAMETROS,
+  ...ADMIN_DELIVERY_NAV,
+  ...ADMIN_COMPRAS_NAV,
+  ...ADMIN_VENTAS_NAV,
+];
 
 /** Future sections — visible in the menu, not routed yet. */
 export const ADMIN_SOON_NAV: AdminNavItem[] = [
@@ -74,8 +101,9 @@ export const ADMIN_SOON_NAV: AdminNavItem[] = [
 ];
 
 export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
-  { id: "admin", label: "Admin", items: [ADMIN_HOME] },
+  { id: "admin", label: "Admin", items: [ADMIN_HOME, ADMIN_PARAMETROS] },
   { id: "delivery", label: "Delivery", items: ADMIN_DELIVERY_NAV },
   { id: "compras", label: "Compras", items: ADMIN_COMPRAS_NAV },
+  { id: "ventas", label: "Ventas", items: ADMIN_VENTAS_NAV },
   { id: "soon", label: "Próximamente", items: ADMIN_SOON_NAV },
 ];

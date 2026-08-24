@@ -33,7 +33,7 @@ type Parametros = {
 
 type ProveedorEmbed = { id?: unknown; nombre?: unknown } | { id?: unknown; nombre?: unknown }[] | null;
 
-type VentaDiaria = {
+export type VentaDiaria = {
   fecha: string;
   ventaReal: number;
 };
@@ -273,13 +273,35 @@ async function listFacturasPendientes(filter: { dueBefore?: string; dueFrom?: st
   return (data ?? []).map((row) => mapFactura(row)).filter((row): row is FacturaPendiente => Boolean(row));
 }
 
+export type MesPromedioRef = {
+  year: number;
+  month: number;
+};
+
+export type PromediosDesglose = {
+  m1: MesPromedioRef;
+  m2: MesPromedioRef;
+  m3: MesPromedioRef;
+  avgM1: PromediosPonderados;
+  avgM2: PromediosPonderados;
+  avgM3: PromediosPonderados;
+  ponderados: PromediosPonderados;
+  pesoReciente: number;
+  pesoIntermedio: number;
+  pesoAntiguo: number;
+};
+
+export function sumaPromediosPonderados(promedios: PromediosPonderados): number {
+  return sumaPromedios(promedios);
+}
+
 export async function getMesActivo(): Promise<MesActivo> {
   const parametros = await getParametros();
   const { year, month } = parseYearMonth(parametros.mesActivo);
   return { year, month, diasEnMes: diasEnMes(year, month) };
 }
 
-export async function getPromediosPonderadosPorDiaSemana(mesActivo: MesActivo): Promise<PromediosPonderados> {
+export async function getPromediosPonderadosDesglose(mesActivo: MesActivo): Promise<PromediosDesglose> {
   const m1 = addMonths(mesActivo.year, mesActivo.month, -1);
   const m2 = addMonths(mesActivo.year, mesActivo.month, -2);
   const m3 = addMonths(mesActivo.year, mesActivo.month, -3);
@@ -307,7 +329,23 @@ export async function getPromediosPonderadosPorDiaSemana(mesActivo: MesActivo): 
     ponderados[dia] =
       parametros.pesoReciente * avgM1[dia] + parametros.pesoIntermedio * avgM2[dia] + parametros.pesoAntiguo * avgM3[dia];
   }
-  return ponderados;
+  return {
+    m1,
+    m2,
+    m3,
+    avgM1,
+    avgM2,
+    avgM3,
+    ponderados,
+    pesoReciente: parametros.pesoReciente,
+    pesoIntermedio: parametros.pesoIntermedio,
+    pesoAntiguo: parametros.pesoAntiguo,
+  };
+}
+
+export async function getPromediosPonderadosPorDiaSemana(mesActivo: MesActivo): Promise<PromediosPonderados> {
+  const desglose = await getPromediosPonderadosDesglose(mesActivo);
+  return desglose.ponderados;
 }
 
 export async function getMetaMensual(mesActivo: MesActivo): Promise<number> {
@@ -345,6 +383,10 @@ export async function getMetaDelDia(diaSemanaISO: DiaSemanaISO, mesActivo: MesAc
 
 export async function getVentasAcumuladasMes(mesActivo: MesActivo): Promise<number> {
   return sumVentasDiarias(monthStartKey(mesActivo.year, mesActivo.month), monthEndKey(mesActivo.year, mesActivo.month));
+}
+
+export async function getVentasDiariasMes(mesActivo: MesActivo): Promise<VentaDiaria[]> {
+  return listVentasDiarias(monthStartKey(mesActivo.year, mesActivo.month), monthEndKey(mesActivo.year, mesActivo.month));
 }
 
 export async function getDiasTranscurridos(mesActivo: MesActivo): Promise<number> {
