@@ -11,6 +11,8 @@ import { getSupabaseAdminClient } from "@/lib/supabase";
 import type { OrderEstado } from "@/lib/types";
 import { confirmOrderToCustomer, sendOrderToStaff } from "@/lib/whatsapp";
 
+export const dynamic = "force-dynamic";
+
 type OrderBody = {
   sessionId?: unknown;
   items?: unknown;
