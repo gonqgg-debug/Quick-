@@ -1,6 +1,54 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import type { User } from "@supabase/supabase-js";
 import { ADMIN_ROLE } from "@/lib/admin-role";
+
+/** Stay well under Vercel's 25s Edge middleware limit. */
+const GET_USER_TIMEOUT_MS = 2500;
+const GET_SESSION_TIMEOUT_MS = 500;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("AUTH_TIMEOUT")), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
+async function readLocalSessionUser(
+  supabase: ReturnType<typeof createServerClient>
+): Promise<User | null> {
+  try {
+    const { data } = await withTimeout(supabase.auth.getSession(), GET_SESSION_TIMEOUT_MS);
+    return data.session?.user ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveUser(
+  supabase: ReturnType<typeof createServerClient>,
+  allowNetwork: boolean
+): Promise<User | null> {
+  if (!allowNetwork) {
+    return readLocalSessionUser(supabase);
+  }
+
+  try {
+    const { data } = await withTimeout(supabase.auth.getUser(), GET_USER_TIMEOUT_MS);
+    return data.user ?? null;
+  } catch {
+    return readLocalSessionUser(supabase);
+  }
+}
 
 export async function updateAdminSession(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -8,12 +56,8 @@ export async function updateAdminSession(request: NextRequest) {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const pathname = request.nextUrl.pathname;
   const isLogin = pathname === "/admin/login";
-  const isApi = pathname.startsWith("/api/admin");
 
   if (!url || !anonKey) {
-    if (isApi) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
     if (!isLogin) {
       const redirect = request.nextUrl.clone();
       redirect.pathname = "/admin/login";
@@ -40,17 +84,8 @@ export async function updateAdminSession(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await resolveUser(supabase, !isLogin);
   const isAdmin = Boolean(user && user.app_metadata?.role === ADMIN_ROLE);
-
-  if (isApi) {
-    if (!isAdmin) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-    return response;
-  }
 
   if (!isLogin && !isAdmin) {
     const redirect = request.nextUrl.clone();
