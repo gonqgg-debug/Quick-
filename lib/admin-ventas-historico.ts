@@ -14,6 +14,7 @@ import {
   getMetaDelDia,
   getVentasAcumuladasMes,
   getVentasDiariasMes,
+  isoWeekdayIndex,
   type DiaSemanaISO,
   type MesActivo,
 } from "@/lib/finanzas";
@@ -37,15 +38,6 @@ function toMesActivo(mes: string): MesActivo {
   const year = Number(start.slice(0, 4));
   const month = Number(start.slice(5, 7));
   return { year, month, diasEnMes: daysInMonth(year, month) };
-}
-
-function isoWeekdayIndex(dayKey: string): DiaSemanaISO {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayKey);
-  if (!match) {
-    return 0;
-  }
-  const jsDay = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))).getUTCDay();
-  return ((jsDay + 6) % 7) as DiaSemanaISO;
 }
 
 function lastVisibleDay(mesActivo: MesActivo): string | null {
@@ -131,7 +123,8 @@ export async function loadVentasHistoricoDetalle(mesParam: string): Promise<Vent
     let diferenciaAcumulada = 0;
     while (fecha <= hasta) {
       const ventaReal = porFecha.get(fecha) ?? 0;
-      const metaDelDia = metasPorDia[isoWeekdayIndex(fecha)] ?? 0;
+      const weekday = isoWeekdayIndex(fecha);
+      const metaDelDia = weekday == null ? 0 : metasPorDia[weekday] ?? 0;
       const diferencia = ventaReal - metaDelDia;
       ventasAcumuladas += ventaReal;
       diferenciaAcumulada += diferencia;

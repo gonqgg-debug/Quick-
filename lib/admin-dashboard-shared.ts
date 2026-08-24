@@ -9,6 +9,20 @@ export type DashboardFactura = {
   dueDate: string;
 };
 
+export type DashboardSparkPoint = {
+  fecha: string;
+  ventaReal: number;
+};
+
+export type DashboardTendenciaDia = {
+  fecha: string;
+  label: string;
+  ventaReal: number;
+  metaDelDia: number;
+  diferencia: number;
+  acumuladoMes: number;
+};
+
 export type AdminDashboardData = {
   mesActivo: string;
   ventasAcumuladas: number;
@@ -28,6 +42,8 @@ export type AdminDashboardData = {
   facturasPorVencer: DashboardFactura[];
   umbralCuidado: number;
   umbralStop: number;
+  sparkline14: DashboardSparkPoint[];
+  tendencia7: DashboardTendenciaDia[];
 };
 
 export type SemaforoNivel = "ok" | "cuidado" | "stop";
@@ -49,6 +65,22 @@ const MESES = [
 
 export function formatMesActivoLabel(year: number, month: number): string {
   return `${MESES[month - 1] ?? ""} ${year}`.trim();
+}
+
+/** Short weekday date, e.g. "Lun 18 ago". */
+export function formatTendenciaFecha(fecha: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha);
+  if (!match) {
+    return fecha;
+  }
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  const raw = new Intl.DateTimeFormat("es-DO", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(date);
+  return raw.replace(/\./g, "").replace(/^./, (letter) => letter.toUpperCase());
 }
 
 export function formatPercent(ratio: number): string {

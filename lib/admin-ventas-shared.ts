@@ -1,3 +1,5 @@
+import { isoWeekdayMonday1 } from "@/lib/local-day";
+
 export type VentaDiaria = {
   id: string;
   fecha: string;
@@ -8,15 +10,14 @@ export type VentaDiaria = {
 export const VENTAS_DEFAULT_LIMIT = 14;
 export const VENTAS_MAX_LIMIT = 90;
 
-const DIAS_SEMANA_ES = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"] as const;
+const DIAS_SEMANA_ISO = ["", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"] as const;
 
 export function diaSemanaFromFecha(fecha: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha);
-  if (!match) {
+  const iso = isoWeekdayMonday1(fecha);
+  if (iso == null) {
     return "";
   }
-  const jsDay = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))).getUTCDay();
-  return DIAS_SEMANA_ES[jsDay] ?? "";
+  return DIAS_SEMANA_ISO[iso] ?? "";
 }
 
 export function formatDiaSemana(value: string): string {

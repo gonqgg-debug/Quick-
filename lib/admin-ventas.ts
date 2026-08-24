@@ -1,5 +1,5 @@
 import { parsePrice } from "@/lib/catalog-import";
-import { isDayKey } from "@/lib/local-day";
+import { calendarDayKey, isDayKey } from "@/lib/local-day";
 import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import {
@@ -31,14 +31,14 @@ function mapVenta(row: VentaRow | null): VentaDiaria | null {
   if (!row) {
     return null;
   }
-  const fecha = String(row.fecha ?? "");
-  if (!isDayKey(fecha)) {
+  const fecha = calendarDayKey(row.fecha);
+  if (!fecha) {
     return null;
   }
   return {
     id: String(row.id ?? fecha),
     fecha,
-    diaSemana: String(row.dia_semana ?? "") || diaSemanaFromFecha(fecha),
+    diaSemana: diaSemanaFromFecha(fecha),
     monto: toMoney(row.venta_real),
   };
 }

@@ -25,9 +25,38 @@ export function isToday(iso: string, now = Date.now()): boolean {
 }
 
 const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DAY_KEY_PREFIX = /^(\d{4})-(\d{2})-(\d{2})/;
 
 export function isDayKey(value: string): boolean {
   return DAY_KEY.test(value);
+}
+
+/** Calendar `YYYY-MM-DD` as stored, without converting through a timezone (avoids shifting the day). */
+export function calendarDayKey(value: unknown): string {
+  if (typeof value === "string") {
+    const match = DAY_KEY_PREFIX.exec(value.trim());
+    if (!match) {
+      return "";
+    }
+    const key = `${match[1]}-${match[2]}-${match[3]}`;
+    return isDayKey(key) ? key : "";
+  }
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    const key = `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, "0")}-${String(value.getUTCDate()).padStart(2, "0")}`;
+    return isDayKey(key) ? key : "";
+  }
+  return "";
+}
+
+/** ISO weekday: 1 = Monday … 7 = Sunday. Derived from the calendar date, never from `dia_semana` text. */
+export function isoWeekdayMonday1(fecha: unknown): 1 | 2 | 3 | 4 | 5 | 6 | 7 | null {
+  const key = calendarDayKey(fecha);
+  const match = DAY_KEY.exec(key);
+  if (!match) {
+    return null;
+  }
+  const utcDay = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))).getUTCDay();
+  return (utcDay === 0 ? 7 : utcDay) as 1 | 2 | 3 | 4 | 5 | 6 | 7;
 }
 
 export function addDaysToDayKey(value: string, days: number): string {

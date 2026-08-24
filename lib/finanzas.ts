@@ -1,4 +1,4 @@
-import { addDaysToDayKey, isDayKey, todayDayKey } from "@/lib/local-day";
+import { addDaysToDayKey, calendarDayKey, isoWeekdayMonday1, isDayKey, todayDayKey } from "@/lib/local-day";
 import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
@@ -100,13 +100,13 @@ function dayKeyToUtcDate(dayKey: string): Date {
   return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
 }
 
-function isoWeekdayIndex(dayKey: string): DiaSemanaISO {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayKey);
-  if (!match) {
-    return 0;
+/** 0 = Monday … 6 = Sunday (ISO weekday minus one). Always from `fecha`, never `dia_semana`. */
+export function isoWeekdayIndex(fecha: unknown): DiaSemanaISO | null {
+  const iso = isoWeekdayMonday1(fecha);
+  if (iso == null) {
+    return null;
   }
-  const jsDay = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))).getUTCDay();
-  return ((jsDay + 6) % 7) as DiaSemanaISO;
+  return (iso - 1) as DiaSemanaISO;
 }
 
 function asRatio(value: unknown, fallback: number): number {
@@ -138,11 +138,15 @@ function sumaPromedios(promedios: PromediosPonderados): number {
   return total;
 }
 
+/** Groups sales by ISO weekday of `fecha` (1=Mon…7=Sun). Ignores any `dia_semana` text. */
 function promedioPorDiaSemana(ventas: VentaDiaria[]): PromediosPonderados {
   const sumas = emptyPromedios();
   const counts: Record<DiaSemanaISO, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
   for (const venta of ventas) {
     const dia = isoWeekdayIndex(venta.fecha);
+    if (dia == null) {
+      continue;
+    }
     sumas[dia] += venta.ventaReal;
     counts[dia] += 1;
   }
@@ -186,8 +190,8 @@ function mapParametros(data: Record<string, unknown> | null): Parametros {
 }
 
 function mapVenta(row: { fecha?: unknown; venta_real?: unknown }): VentaDiaria | null {
-  const fecha = String(row.fecha ?? "");
-  if (!isDayKey(fecha)) {
+  const fecha = calendarDayKey(row.fecha);
+  if (!fecha) {
     return null;
   }
   return { fecha, ventaReal: toMoney(row.venta_real) };
@@ -430,7 +434,7 @@ export async function getDisponibleMes(mesActivo: MesActivo): Promise<number> {
 
 export function getSemanaActual(): { inicio: Date; fin: Date } {
   const hoy = todayDayKey();
-  const lunes = addDaysToDayKey(hoy, -isoWeekdayIndex(hoy));
+  const lunes = addDaysToDayKey(hoy, -(isoWeekdayIndex(hoy) ?? 0));
   const domingo = addDaysToDayKey(lunes, 6);
   return { inicio: dayKeyToUtcDate(lunes), fin: dayKeyToUtcDate(domingo) };
 }
@@ -448,7 +452,8 @@ export async function getForecastSemanaActual(mesActivo: MesActivo): Promise<num
   for (let offset = 0; offset < 7; offset += 1) {
     const fecha = addDaysToDayKey(from, offset);
     const real = porFecha.get(fecha);
-    total += real === undefined ? promedios[isoWeekdayIndex(fecha)] : real;
+    const dia = isoWeekdayIndex(fecha);
+    total += real === undefined ? (dia == null ? 0 : promedios[dia]) : real;
   }
   return total;
 }
