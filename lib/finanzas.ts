@@ -131,7 +131,11 @@ function emptyPromedios(): PromediosPonderados {
 }
 
 function sumaPromedios(promedios: PromediosPonderados): number {
-  return DIAS_SEMANA.reduce((sum, dia) => sum + promedios[dia], 0);
+  let total = 0;
+  for (const dia of DIAS_SEMANA) {
+    total += promedios[dia];
+  }
+  return total;
 }
 
 function promedioPorDiaSemana(ventas: VentaDiaria[]): PromediosPonderados {
