@@ -337,7 +337,7 @@ function AdminSidebar({
       aria-label={ariaLabel}
       className={className}
       style={style}
-      {...(inert ? { inert: "" } : {})}
+      inert={inert || undefined}
     >
       <div className="flex items-center justify-between gap-2 px-2">
         <Link
