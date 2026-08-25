@@ -127,9 +127,14 @@ export function AdminHome({ greetingName }: AdminHomeProps) {
       ) : null}
 
       {dashboardLoading ? (
-        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
           {Array.from({ length: 10 }, (_, index) => (
-            <div key={index} className="h-24 animate-pulse rounded-lg bg-gray-100" />
+            <div
+              key={index}
+              className={`h-24 animate-pulse rounded-lg bg-gray-100 ${
+                index >= 8 ? "col-span-2 md:col-span-3 lg:col-span-2" : ""
+              }`}
+            />
           ))}
         </div>
       ) : dashboard ? (

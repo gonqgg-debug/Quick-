@@ -63,7 +63,7 @@ export function AdminDashboard({ data }: { data: AdminDashboardData }) {
 
   return (
     <div className="mt-6 space-y-6">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
         <MetricCard
           label="Ventas acumuladas"
           value={formatPrice(data.ventasAcumuladas)}
@@ -137,11 +137,11 @@ function MetricCard({
   const tone = signed == null ? INK : signed >= 0 ? GREEN : RED;
   const arrow = signed == null ? null : signed >= 0 ? "↑" : "↓";
   return (
-    <section className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide" style={{ color: MUTED }}>
+    <section className="min-w-0 rounded-lg border border-[#E5E7EB] bg-white px-3 py-3 shadow-sm sm:px-4 sm:py-4">
+      <p className="text-[10px] font-medium uppercase tracking-wide sm:text-xs" style={{ color: MUTED }}>
         {label}
       </p>
-      <p className="mt-1.5 text-xl font-semibold tabular-nums sm:text-2xl" style={{ color: tone }}>
+      <p className="mt-1.5 text-[15px] font-semibold leading-tight tabular-nums sm:text-xl lg:text-2xl" style={{ color: tone }}>
         {arrow ? <span className="mr-1 text-base font-medium">{arrow}</span> : null}
         {value}
         {hint ? (
@@ -201,7 +201,7 @@ function DisponibleCard({
   const arrow = disponible >= 0 ? "↑" : "↓";
   return (
     <section
-      className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-4 shadow-sm lg:col-span-2"
+      className="col-span-2 min-w-0 rounded-lg border border-[#E5E7EB] bg-white px-3 py-3 shadow-sm sm:px-4 sm:py-4 md:col-span-3 lg:col-span-2"
       style={{ borderLeftWidth: 4, borderLeftColor: tone.accent }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -215,8 +215,8 @@ function DisponibleCard({
           {tone.label}
         </span>
       </div>
-      <p className="mt-2 text-4xl font-semibold tabular-nums sm:text-5xl" style={{ color: INK }}>
-        <span className="mr-1 text-2xl font-medium sm:text-3xl" style={{ color: disponible >= 0 ? GREEN : RED }}>
+      <p className="mt-2 text-2xl font-semibold leading-tight tabular-nums sm:text-4xl lg:text-5xl" style={{ color: INK }}>
+        <span className="mr-1 text-lg font-medium sm:text-2xl lg:text-3xl" style={{ color: disponible >= 0 ? GREEN : RED }}>
           {arrow}
         </span>
         {formatSignedPrice(disponible)}
