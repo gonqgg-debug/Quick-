@@ -12,7 +12,9 @@ export type AdminNavIcon =
   | "cash"
   | "pnl"
   | "goals"
-  | "settings";
+  | "settings"
+  | "customers"
+  | "broadcast";
 
 export type AdminNavChild = {
   href: string;
@@ -29,7 +31,7 @@ export type AdminNavItem = {
   children?: AdminNavChild[];
 };
 
-export type AdminNavSectionId = "pedidos" | "catalogo" | "finanzas";
+export type AdminNavSectionId = "pedidos" | "clientes" | "catalogo" | "finanzas";
 
 export type AdminNavSection = {
   id: AdminNavSectionId;
@@ -76,6 +78,11 @@ export const ADMIN_PEDIDOS_NAV: AdminNavItem[] = [
   { href: "/admin/historial", label: "Historial de Delivery", icon: "history", status: "live" },
 ];
 
+export const ADMIN_CLIENTES_NAV: AdminNavItem[] = [
+  { href: "/admin/clientes", label: "Clientes", icon: "customers", status: "live" },
+  { href: "/admin/clientes/mensajes-masivos", label: "Mensajes masivos", icon: "broadcast", status: "live" },
+];
+
 export const ADMIN_CATALOGO_NAV: AdminNavItem[] = [
   { href: "/admin/catalogo/productos", label: "Productos", icon: "products", status: "live" },
   { href: "/admin/catalogo/importar", label: "Importar", icon: "import", status: "live" },
@@ -96,12 +103,14 @@ export const ADMIN_FINANZAS_NAV: AdminNavItem[] = [
 export const ADMIN_NAV: AdminNavItem[] = [
   ADMIN_HOME,
   ...ADMIN_PEDIDOS_NAV,
+  ...ADMIN_CLIENTES_NAV,
   ...ADMIN_CATALOGO_NAV,
   ...ADMIN_FINANZAS_NAV,
 ];
 
 export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   { id: "pedidos", label: "Pedidos", items: ADMIN_PEDIDOS_NAV },
+  { id: "clientes", label: "Clientes", items: ADMIN_CLIENTES_NAV },
   { id: "catalogo", label: "Catálogo", items: ADMIN_CATALOGO_NAV },
   { id: "finanzas", label: "Finanzas", items: ADMIN_FINANZAS_NAV },
 ];

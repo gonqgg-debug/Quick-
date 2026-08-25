@@ -29,12 +29,21 @@ function isActivePath(pathname: string, href: string): boolean {
   if (href === "/admin" || href === "/admin/ventas") {
     return pathname === href;
   }
+  if (href === "/admin/clientes") {
+    if (pathname.startsWith("/admin/clientes/mensajes-masivos")) {
+      return false;
+    }
+    return pathname === href || pathname.startsWith(`${href}/`);
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 function sectionForPath(pathname: string): AdminNavSectionId | null {
   if (pathname.startsWith("/admin/historial") || pathname.startsWith("/admin/pedidos")) {
     return "pedidos";
+  }
+  if (pathname.startsWith("/admin/clientes")) {
+    return "clientes";
   }
   if (pathname.startsWith("/admin/catalogo")) {
     return "catalogo";
@@ -54,6 +63,7 @@ function sectionForPath(pathname: string): AdminNavSectionId | null {
 function defaultOpen(): OpenState {
   return {
     pedidos: true,
+    clientes: true,
     catalogo: true,
     finanzas: true,
     caja: true,
@@ -711,6 +721,24 @@ function NavGlyph({
           <circle cx="9" cy="7" r="3.2" />
           <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
           <path d="M16 3.13a3.2 3.2 0 0 1 0 6.26" />
+        </svg>
+      );
+    case "customers":
+      return (
+        <svg {...common}>
+          <circle cx="9" cy="8" r="3.2" />
+          <path d="M3 20v-1.4A4.6 4.6 0 0 1 7.6 14h2.8A4.6 4.6 0 0 1 15 18.6V20" />
+          <circle cx="17" cy="8" r="2.4" />
+          <path d="M21.5 20v-1.2A3.8 3.8 0 0 0 18 15h-.4" />
+        </svg>
+      );
+    case "broadcast":
+      return (
+        <svg {...common}>
+          <path d="M4 10v4" />
+          <path d="M7 8v8" />
+          <path d="m10 5 9 3.5v7L10 19z" />
+          <path d="M10 8.5v7" />
         </svg>
       );
     case "sales":

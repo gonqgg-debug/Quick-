@@ -1,4 +1,4 @@
-import { appBaseUrl } from "@/lib/app-url";
+import { appBaseUrl, publicPedidoUrl } from "@/lib/app-url";
 import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import type { OrderEstado } from "@/lib/types";
@@ -81,7 +81,23 @@ export function getStaffPhoneOrNull(): string | null {
 function labelMetodoPago(metodo: string): string {
   if (metodo === "efectivo") return "Efectivo";
   if (metodo === "tarjeta") return "Tarjeta";
-  return metodo;
+  return metodo || "—";
+}
+
+function formatOrderWhatsAppSummary(input: {
+  headline: string;
+  direccion: unknown;
+  metodoPago: unknown;
+  total: unknown;
+  orderId: string;
+}): string {
+  return [
+    input.headline,
+    `📍 ${String(input.direccion ?? "").trim() || "—"}`,
+    `💳 ${labelMetodoPago(String(input.metodoPago ?? ""))}`,
+    `💰 *Total: ${formatRd(input.total)}*`,
+    `Ver detalle: ${publicPedidoUrl(input.orderId)}`,
+  ].join("\n");
 }
 
 function unwrapOne<T>(value: T | T[] | null | undefined): T | null {
@@ -654,21 +670,7 @@ export async function sendOrderToStaff(
 
   const { data: order, error } = await supabase
     .from("orders")
-    .select(
-      `
-      id,
-      direccion,
-      metodo_pago,
-      total_estimado,
-      chat_id,
-      order_items (
-        cantidad,
-        precio_unitario,
-        product_id,
-        products!order_items_product_id_fkey ( nombre )
-      )
-    `
-    )
+    .select("id, direccion, metodo_pago, total_estimado")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -680,31 +682,17 @@ export async function sendOrderToStaff(
     throw new Error(`No existe el pedido ${orderId}`);
   }
 
-  const items = Array.isArray(order.order_items) ? order.order_items : [];
-  const itemLines = items.map((item) => {
-    const product = unwrapOne(
-      item.products as { nombre: string } | { nombre: string }[] | null
-    );
-    const nombre = product?.nombre ?? "Producto";
-    const cantidad = Number(item.cantidad);
-    const lineTotal = toMoney(item.precio_unitario) * cantidad;
-    return `${cantidad}x ${nombre} - ${formatRd(lineTotal)}`;
-  });
-
   const numero = shortOrderId(order.id as string);
-  const message = [
-    esModificacion ? `✏️ *Pedido #${numero} MODIFICADO*` : `🆕 *Pedido #${numero}*`,
-    `📍 ${order.direccion}`,
-    `💳 ${labelMetodoPago(String(order.metodo_pago))}`,
-    "",
-    ...itemLines,
-    "",
-    `💰 *Total: ${formatRd(order.total_estimado)}*`,
-    "",
-    `Responde con /faltante ${order.id} [productId] para reportar un producto que no está disponible.`,
-  ].join("\n");
-
-  await sendTextMessage(staffPhone, message);
+  await sendTextMessage(
+    staffPhone,
+    formatOrderWhatsAppSummary({
+      headline: esModificacion ? `✏️ *Pedido #${numero} MODIFICADO*` : `🆕 *Pedido #${numero}*`,
+      direccion: order.direccion,
+      metodoPago: order.metodo_pago,
+      total: order.total_estimado,
+      orderId: order.id as string,
+    })
+  );
 }
 
 export async function confirmOrderToCustomer(
@@ -721,12 +709,7 @@ export async function confirmOrderToCustomer(
       direccion,
       metodo_pago,
       total_estimado,
-      chats!orders_chat_id_fkey ( phone_number ),
-      order_items (
-        cantidad,
-        precio_unitario,
-        products!order_items_product_id_fkey ( nombre )
-      )
+      chats!orders_chat_id_fkey ( phone_number )
     `
     )
     .eq("id", orderId)
@@ -749,33 +732,17 @@ export async function confirmOrderToCustomer(
     throw new Error("El pedido no tiene un teléfono de cliente");
   }
 
-  const items = Array.isArray(order.order_items) ? order.order_items : [];
-  const itemLines = items.map((item) => {
-    const product = unwrapOne(
-      item.products as { nombre: string } | { nombre: string }[] | null
-    );
-    const nombre = product?.nombre ?? "Producto";
-    const cantidad = Number(item.cantidad);
-    const lineTotal = toMoney(item.precio_unitario) * cantidad;
-    return `${cantidad}x ${nombre} - ${formatRd(lineTotal)}`;
-  });
-
   const numero = shortOrderId(order.id as string);
-  const message = [
-    esModificacion ? `✏️ *Pedido #${numero} actualizado*` : `✅ *Pedido #${numero} recibido*`,
-    "",
-    ...itemLines,
-    "",
-    `💰 *Total: ${formatRd(order.total_estimado)}*`,
-    `📍 ${order.direccion}`,
-    `💳 ${labelMetodoPago(String(order.metodo_pago))}`,
-    "",
-    esModificacion
-      ? "Guardamos los cambios. Te avisamos cuando esté en camino."
-      : "Te avisamos cuando esté en camino. ¡Gracias por tu pedido!",
-  ].join("\n");
-
-  await sendTextMessage(phoneNumber, message);
+  await sendTextMessage(
+    phoneNumber,
+    formatOrderWhatsAppSummary({
+      headline: esModificacion ? `✏️ *Pedido #${numero} actualizado*` : `🆕 *Pedido #${numero}*`,
+      direccion: order.direccion,
+      metodoPago: order.metodo_pago,
+      total: order.total_estimado,
+      orderId: order.id as string,
+    })
+  );
 }
 
 export async function notifyCustomerOfOrderStatus(
@@ -858,12 +825,14 @@ async function sendMissingItemPrompt(phoneNumber: string, bodyText: string): Pro
   }
 }
 
-export async function notifyMissingItem(orderId: string, productId: string): Promise<void> {
+export async function notifyMissingItem(orderId: string, _productId: string): Promise<void> {
   const supabase = getSupabaseAdminClient();
 
   const { data: order, error: orderError } = await supabase
     .from("orders")
-    .select("id, chat_id, chats!orders_chat_id_fkey ( phone_number )")
+    .select(
+      "id, chat_id, direccion, metodo_pago, total_estimado, chats!orders_chat_id_fkey ( phone_number )"
+    )
     .eq("id", orderId)
     .maybeSingle();
 
@@ -875,16 +844,6 @@ export async function notifyMissingItem(orderId: string, productId: string): Pro
     throw new Error("El pedido no tiene un chat asociado");
   }
 
-  const { data: product, error: productError } = await supabase
-    .from("products")
-    .select("nombre")
-    .eq("id", productId)
-    .maybeSingle();
-
-  if (productError) {
-    throw new Error("No pudimos leer el producto faltante");
-  }
-
   const chat = unwrapOne(
     order.chats as { phone_number: string } | { phone_number: string }[] | null
   );
@@ -894,9 +853,15 @@ export async function notifyMissingItem(orderId: string, productId: string): Pro
     throw new Error("El pedido no tiene un teléfono de cliente");
   }
 
-  const productName = product?.nombre ? String(product.nombre) : "un producto";
+  const numero = shortOrderId(order.id as string);
   const bodyText = [
-    `❗ No tenemos disponible: ${productName}`,
+    formatOrderWhatsAppSummary({
+      headline: `❗ Un producto de tu pedido #${numero} no está disponible.`,
+      direccion: order.direccion,
+      metodoPago: order.metodo_pago,
+      total: order.total_estimado,
+      orderId: order.id as string,
+    }),
     "¿Qué prefieres?",
     "1️⃣ Sugerir un reemplazo (respóndenos cuál)",
     "2️⃣ Eliminarlo del pedido",
@@ -942,12 +907,12 @@ export async function recordMissingItemDecision(
   orderId: string,
   decision: MissingItemDecision,
   clientNote?: string
-): Promise<{ productNames: string[] }> {
+): Promise<void> {
   const supabase = getSupabaseAdminClient();
 
   const { data: items, error: lookupError } = await supabase
     .from("order_items")
-    .select("id, products!order_items_product_id_fkey ( nombre )")
+    .select("id")
     .eq("order_id", orderId)
     .eq("estado", "faltante");
 
@@ -956,15 +921,8 @@ export async function recordMissingItemDecision(
   }
 
   const rows = Array.isArray(items) ? items : [];
-  const productNames = rows.map((item) => {
-    const product = unwrapOne(
-      item.products as { nombre: string } | { nombre: string }[] | null
-    );
-    return product?.nombre ? String(product.nombre) : "un producto";
-  });
-
   if (rows.length === 0) {
-    return { productNames };
+    return;
   }
 
   const { error: updateError } = await supabase
@@ -979,20 +937,23 @@ export async function recordMissingItemDecision(
 
   const staffPhone = getStaffPhoneOrNull();
   if (!staffPhone) {
-    return { productNames };
+    return;
   }
 
   const numero = shortOrderId(orderId);
-  const listed = productNames.join(", ");
+  const detalle = `Ver detalle: ${publicPedidoUrl(orderId)}`;
   const staffMessage =
     decision === "eliminado"
-      ? `❌ El cliente quiere ELIMINAR *${listed}* del pedido #${numero}. Ajusta el pedido.`
+      ? [
+          `❌ El cliente quiere ELIMINAR un producto del pedido #${numero}. Ajusta el pedido.`,
+          detalle,
+        ].join("\n")
       : [
-          `🔄 El cliente quiere REEMPLAZAR *${listed}* del pedido #${numero}.`,
+          `🔄 El cliente quiere REEMPLAZAR un producto del pedido #${numero}.`,
           clientNote ? `Sugerencia: "${clientNote}"` : "Todavía no indicó el producto de reemplazo.",
           "Ajusta el pedido manualmente (sin matching automático).",
+          detalle,
         ].join("\n");
 
   await sendTextMessage(staffPhone, staffMessage);
-  return { productNames };
 }

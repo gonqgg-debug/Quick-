@@ -20,3 +20,12 @@ export function publicMyOrdersUrl(sessionId: string): string {
 export function publicMyProfileUrl(sessionId: string): string {
   return `${publicOrderUrl(sessionId)}#mi-perfil`;
 }
+
+/** Public catalog / customer site URL. */
+export function catalogBaseUrl(): string {
+  return appBaseUrl();
+}
+
+export function publicPedidoUrl(orderId: string): string {
+  return `${catalogBaseUrl()}/pedido/${orderId}`;
+}

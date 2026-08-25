@@ -8,6 +8,7 @@ import {
   storeIncomingWhatsAppMedia,
   type IncomingWhatsAppMedia,
 } from "@/lib/whatsapp-media";
+import { isMarketingOptOutText, MARKETING_OPT_OUT_REPLY } from "@/lib/marketing-opt-out";
 import {
   formatShortOrderId,
   getActiveOrder,
@@ -47,6 +48,14 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+async function optOutMarketing(chatId: string): Promise<void> {
+  const supabase = getSupabaseAdminClient();
+  const { error } = await supabase.from("chats").update({ acepta_marketing: false }).eq("id", chatId);
+  if (error) {
+    throw error;
+  }
 }
 
 function extractIncomingMessages(payload: unknown): IncomingMessage[] {
@@ -383,6 +392,16 @@ async function handleIncomingMessage(message: IncomingMessage): Promise<void> {
     });
   } catch (error) {
     console.error("[whatsapp] no se pudo registrar el mensaje en whatsapp_log", error);
+  }
+
+  if (!fromStaff && isMarketingOptOutText(message.text)) {
+    try {
+      await optOutMarketing(chat.id);
+      await sendTextMessage(message.from, MARKETING_OPT_OUT_REPLY);
+    } catch (error) {
+      console.error("[whatsapp] error al procesar baja de marketing", error);
+    }
+    return;
   }
 
   if (!fromStaff) {
