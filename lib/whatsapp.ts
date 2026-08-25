@@ -825,7 +825,7 @@ async function sendMissingItemPrompt(phoneNumber: string, bodyText: string): Pro
   }
 }
 
-export async function notifyMissingItem(orderId: string, _productId: string): Promise<void> {
+export async function notifyMissingItem(orderId: string): Promise<void> {
   const supabase = getSupabaseAdminClient();
 
   const { data: order, error: orderError } = await supabase
@@ -897,7 +897,7 @@ export async function reportMissingItem(orderId: string, productId: string): Pro
     throw new Error("No pudimos actualizar el estado del pedido");
   }
 
-  await notifyMissingItem(orderId, productId);
+  await notifyMissingItem(orderId);
   return true;
 }
 

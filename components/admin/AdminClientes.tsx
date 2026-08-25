@@ -183,12 +183,15 @@ export function AdminClientes() {
             {COLUMNS.map((column) => {
               const active = sortKey === column.key;
               return (
-                <DataTableTh key={column.key} numeric={column.numeric}>
+                <DataTableTh
+                  key={column.key}
+                  numeric={column.numeric}
+                  aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
                   <button
                     type="button"
                     onClick={() => toggleSort(column.key)}
                     className="inline-flex items-center gap-1 uppercase tracking-wider"
-                    aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
                   >
                     {column.label}
                     <span className="text-[10px]" aria-hidden>
