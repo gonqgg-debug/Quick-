@@ -1,11 +1,17 @@
 import { CatalogExperience } from "@/components/catalog/CatalogExperience";
 import { InvalidSession } from "@/components/catalog/InvalidSession";
-import { getActiveOrderSession, getActiveProducts, getOrderDraft } from "@/lib/catalog";
+import {
+  getActiveOrderSession,
+  getActiveProductsByIds,
+  getOrderDraft,
+  listActiveCatalogCategories,
+} from "@/lib/catalog";
 import {
   getCatalogRecommendations,
   type CatalogRecommendations,
 } from "@/lib/catalog-recommendations";
 import { getCustomerForChat } from "@/lib/customers";
+import type { CatalogCategoryChip } from "@/lib/catalog-products-shared";
 import type { OrderDraft, Product } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +24,8 @@ type OrderCatalogPageProps = {
 
 export default async function OrderCatalogPage({ params }: OrderCatalogPageProps) {
   let session = null;
-  let products: Product[] = [];
+  let categories: CatalogCategoryChip[] = [];
+  let seedProducts: Product[] = [];
   let editOrder: OrderDraft | null = null;
   let customer = null;
   let recommendations: CatalogRecommendations = {
@@ -31,11 +38,18 @@ export default async function OrderCatalogPage({ params }: OrderCatalogPageProps
   try {
     session = await getActiveOrderSession(params.sessionId);
     if (session) {
-      products = await getActiveProducts();
       customer = await getCustomerForChat(session.chat_id);
-      recommendations = await getCatalogRecommendations(customer?.id ?? null);
+      const [catalogCategories, catalogRecommendations] = await Promise.all([
+        listActiveCatalogCategories(),
+        getCatalogRecommendations(customer?.id ?? null),
+      ]);
+      categories = catalogCategories;
+      recommendations = catalogRecommendations;
       if (session.edit_order_id) {
         editOrder = await getOrderDraft(session.edit_order_id);
+        if (editOrder) {
+          seedProducts = await getActiveProductsByIds(editOrder.items.map((item) => item.productId));
+        }
       }
     }
   } catch {
@@ -67,7 +81,8 @@ export default async function OrderCatalogPage({ params }: OrderCatalogPageProps
   return (
     <CatalogExperience
       sessionId={session.id}
-      products={products}
+      categories={categories}
+      seedProducts={seedProducts}
       editOrder={editOrder}
       customer={customer}
       recommendations={recommendations}

@@ -1,5 +1,6 @@
 "use client";
 
+import { CatalogProductPhoto } from "@/components/catalog/CatalogProductPhoto";
 import { formatCustomerOrderDate } from "@/lib/customer-orders-shared";
 import { formatPrice } from "@/lib/money";
 import { brand } from "@/lib/theme";
@@ -158,19 +159,13 @@ function RepeatLastOrderCard({
 }
 
 function RailPhoto({ product }: { product: Product }) {
-  if (product.foto_url) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={product.foto_url} alt="" className="h-28 w-full object-cover" />
-    );
-  }
   return (
-    <div
-      className="flex h-28 items-center justify-center font-display text-3xl font-bold"
-      style={{ backgroundColor: `${brand.green}18`, color: brand.green }}
-    >
-      {product.nombre.slice(0, 1).toUpperCase()}
-    </div>
+    <CatalogProductPhoto
+      product={product}
+      className="h-28 w-full"
+      sizes="42vw"
+      roundedClassName="rounded-none"
+    />
   );
 }
 

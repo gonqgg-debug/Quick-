@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { fetchCatalogSearchSuggestions } from "@/lib/catalog-products-client";
+import { CatalogProductPhoto } from "@/components/catalog/CatalogProductPhoto";
 import { formatPrice } from "@/lib/money";
 import {
-  rankSearchSuggestions,
   SEARCH_DEBOUNCE_MS,
   SEARCH_SUGGESTION_MIN_CHARS,
 } from "@/lib/catalog-search";
@@ -12,7 +13,7 @@ import type { Product } from "@/lib/types";
 
 type CatalogSearchProps = {
   query: string;
-  products: Product[];
+  sessionId: string;
   onQueryChange: (value: string) => void;
   onSelectProduct: (product: Product) => void;
   onRequestProduct: (query: string) => void;
@@ -20,7 +21,7 @@ type CatalogSearchProps = {
 
 export function CatalogSearch({
   query,
-  products,
+  sessionId,
   onQueryChange,
   onSelectProduct,
   onRequestProduct,
@@ -29,6 +30,7 @@ export function CatalogSearch({
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [suggestions, setSuggestions] = useState<Product[]>([]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -36,6 +38,28 @@ export function CatalogSearch({
     }, SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(timeout);
   }, [query]);
+
+  useEffect(() => {
+    if (debouncedQuery.length < SEARCH_SUGGESTION_MIN_CHARS) {
+      setSuggestions([]);
+      return;
+    }
+    const controller = new AbortController();
+    void fetchCatalogSearchSuggestions({
+      sessionId,
+      q: debouncedQuery,
+      signal: controller.signal,
+    })
+      .then((products) => {
+        setSuggestions(products);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setSuggestions([]);
+        }
+      });
+    return () => controller.abort();
+  }, [debouncedQuery, sessionId]);
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
@@ -57,7 +81,6 @@ export function CatalogSearch({
   }, []);
 
   const ready = debouncedQuery.length >= SEARCH_SUGGESTION_MIN_CHARS;
-  const suggestions = ready ? rankSearchSuggestions(products, debouncedQuery) : [];
   const showDropdown = open && query.trim().length >= SEARCH_SUGGESTION_MIN_CHARS && ready;
 
   return (
@@ -103,7 +126,12 @@ export function CatalogSearch({
                     className="flex w-full items-center gap-3 border-b px-3 py-2.5 text-left last:border-b-0 hover:bg-black/[0.03] active:bg-black/[0.05]"
                     style={{ borderColor: "rgba(0,0,0,0.04)" }}
                   >
-                    <SuggestionPhoto product={product} />
+                    <CatalogProductPhoto
+                      product={product}
+                      className="h-11 w-11"
+                      sizes="44px"
+                      roundedClassName="rounded-xl"
+                    />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-bold text-brand-ink">{product.nombre}</span>
                       {product.marca ? (
@@ -158,29 +186,6 @@ export function ProductRequestEmpty({
         Solicitar este producto
       </button>
     </div>
-  );
-}
-
-function SuggestionPhoto({ product }: { product: Product }) {
-  if (product.foto_url) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={product.foto_url}
-        alt=""
-        className="h-11 w-11 shrink-0 rounded-xl object-cover"
-      />
-    );
-  }
-
-  return (
-    <span
-      aria-hidden="true"
-      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl font-display text-base font-bold"
-      style={{ backgroundColor: `${brand.green}18`, color: brand.green }}
-    >
-      {product.nombre.slice(0, 1).toUpperCase()}
-    </span>
   );
 }
 

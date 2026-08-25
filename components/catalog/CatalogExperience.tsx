@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CatalogProductList, CatalogProductSkeletons } from "@/components/catalog/CatalogProductList";
+import { CatalogProductPhoto } from "@/components/catalog/CatalogProductPhoto";
 import { CustomerRegisterForm } from "@/components/catalog/CustomerRegisterForm";
 import { DeliveryAddressFields } from "@/components/catalog/DeliveryAddressFields";
 import { MyOrders, orderMetodoPago, orderToCart } from "@/components/catalog/MyOrders";
@@ -9,11 +11,14 @@ import { CatalogRecommendations } from "@/components/catalog/CatalogRecommendati
 import { CatalogSearch, ProductRequestEmpty } from "@/components/catalog/CatalogSearch";
 import { ProductRequestSheet } from "@/components/catalog/ProductRequestSheet";
 import { PromoBanner } from "@/components/catalog/PromoBanner";
+import { useCatalogProductPages } from "@/components/catalog/useCatalogProductPages";
 import { Badge } from "@/components/brand/Badge";
 import { CartIcon } from "@/components/brand/CartIcon";
 import { Logo } from "@/components/brand/Logo";
 import { CATALOG_PROMO_BANNERS } from "@/lib/catalog-promo";
-import { productAnchor } from "@/lib/catalog-search";
+import { SEARCH_DEBOUNCE_MS, productAnchor } from "@/lib/catalog-search";
+import { fetchCatalogProductsByIds } from "@/lib/catalog-products-client";
+import type { CatalogCategoryChip } from "@/lib/catalog-products-shared";
 import { MY_ORDERS_HASH, MY_PROFILE_HASH, type CustomerOrder } from "@/lib/customer-orders-shared";
 import type { CatalogRecommendations as CatalogRecommendationsData } from "@/lib/catalog-recommendations";
 import {
@@ -32,7 +37,8 @@ import type { CreateOrderPayload, MetodoPago, OrderDraft, Product } from "@/lib/
 
 type CatalogExperienceProps = {
   sessionId: string;
-  products: Product[];
+  categories?: CatalogCategoryChip[];
+  seedProducts?: Product[];
   editOrder?: OrderDraft | null;
   customer?: CatalogCustomer | null;
   recommendations?: CatalogRecommendationsData;
@@ -75,29 +81,21 @@ function cartFromDraft(editOrder: OrderDraft | null | undefined): CartMap {
   return next;
 }
 
-function categoryAnchor(categoria: string) {
-  return `cat-${categoria.toLowerCase().replace(/[^a-z0-9]+/gi, "-")}`;
-}
-
-function matchesQuery(product: Product, query: string) {
-  if (!query) {
-    return true;
+function collectSeedProducts(
+  seedProducts: Product[] | undefined,
+  recommendations: CatalogRecommendationsData
+): Record<string, Product> {
+  const next: Record<string, Product> = {};
+  const sources = [
+    ...(seedProducts ?? []),
+    ...recommendations.bestSellers,
+    ...(recommendations.lastOrder?.products ?? []),
+    ...recommendations.favorites,
+  ];
+  for (const product of sources) {
+    next[product.id] = product;
   }
-  const haystack = [product.nombre, product.marca, product.descripcion, product.categoria]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  return haystack.includes(query);
-}
-
-function groupProducts(products: Product[]) {
-  const groups = new Map<string, Product[]>();
-  for (const product of products) {
-    const list = groups.get(product.categoria) ?? [];
-    list.push(product);
-    groups.set(product.categoria, list);
-  }
-  return Array.from(groups.entries());
+  return next;
 }
 
 function defaultAddress(customer: CatalogCustomer | null | undefined): CustomerAddress | null {
@@ -115,7 +113,8 @@ const EMPTY_RECOMMENDATIONS: CatalogRecommendationsData = {
 
 export function CatalogExperience({
   sessionId,
-  products,
+  categories: initialCategories = [],
+  seedProducts = [],
   editOrder = null,
   customer: initialCustomer = null,
   recommendations = EMPTY_RECOMMENDATIONS,
@@ -131,6 +130,12 @@ export function CatalogExperience({
   const isEditing = Boolean(activeEditOrderId);
   const [hydrated, setHydrated] = useState(false);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [categories, setCategories] = useState<CatalogCategoryChip[]>(initialCategories);
+  const [productCache, setProductCache] = useState<Record<string, Product>>(() =>
+    collectSeedProducts(seedProducts, recommendations)
+  );
   const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestPrefill, setRequestPrefill] = useState("");
@@ -148,27 +153,51 @@ export function CatalogExperience({
   const [orderId, setOrderId] = useState<string | null>(null);
   const [reorderNotice, setReorderNotice] = useState<string | null>(null);
 
-  const productById = useMemo(
-    () => new Map(products.map((product) => [product.id, product])),
-    [products]
-  );
+  const rememberProducts = useCallback((items: Product[]) => {
+    if (items.length === 0) {
+      return;
+    }
+    setProductCache((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const product of items) {
+        if (next[product.id] !== product) {
+          next[product.id] = product;
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, []);
 
-  const normalizedQuery = query.trim().toLowerCase();
-  const visibleProducts = useMemo(
-    () => products.filter((product) => matchesQuery(product, normalizedQuery)),
-    [products, normalizedQuery]
-  );
+  const {
+    products: pageProducts,
+    hasMore,
+    loading: listLoading,
+    loadingMore,
+    error: listError,
+    loadMore,
+  } = useCatalogProductPages({
+    sessionId,
+    categoria: selectedCategory,
+    q: debouncedQuery,
+    enabled: step !== "register",
+    onProducts: rememberProducts,
+    onCategories: setCategories,
+  });
 
-  const grouped = useMemo(() => groupProducts(visibleProducts), [visibleProducts]);
-  const marketGroups = grouped.filter(([categoria]) => !isPharmaCategory(categoria));
-  const pharmaGroups = grouped.filter(([categoria]) => isPharmaCategory(categoria));
-  const chipCategories = useMemo(() => {
-    const all = groupProducts(products);
-    return [
-      ...all.filter(([categoria]) => !isPharmaCategory(categoria)),
-      ...all.filter(([categoria]) => isPharmaCategory(categoria)),
-    ];
-  }, [products]);
+  const productById = useMemo(() => new Map(Object.entries(productCache)), [productCache]);
+
+  const visibleProducts = useMemo(() => {
+    if (!highlightedProductId) {
+      return pageProducts;
+    }
+    if (pageProducts.some((product) => product.id === highlightedProductId)) {
+      return pageProducts;
+    }
+    const extra = productCache[highlightedProductId];
+    return extra ? [extra, ...pageProducts] : pageProducts;
+  }, [highlightedProductId, pageProducts, productCache]);
 
   const lines = useMemo(() => {
     return Object.entries(cart)
@@ -202,19 +231,54 @@ export function CatalogExperience({
   }, [sessionId, editOrder, customer]);
 
   useEffect(() => {
-    if (!highlightedProductId) {
+    const timeout = window.setTimeout(() => {
+      setDebouncedQuery(query.trim());
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timeout);
+  }, [query]);
+
+  useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
+    const missing = Object.entries(cart)
+      .filter(([productId, cantidad]) => cantidad > 0 && !productCache[productId])
+      .map(([productId]) => productId);
+    if (missing.length === 0) {
+      return;
+    }
+    let cancelled = false;
+    void fetchCatalogProductsByIds({ sessionId, ids: missing }).then((products) => {
+      if (!cancelled) {
+        rememberProducts(products);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cart, hydrated, productCache, rememberProducts, sessionId]);
+
+  useEffect(() => {
+    if (step !== "catalog" || view !== "shop") {
+      return;
+    }
+    window.scrollTo({ top: 0 });
+  }, [selectedCategory, debouncedQuery, step, view]);
+
+  useEffect(() => {
+    if (!highlightedProductId || listLoading) {
       return;
     }
     const id = productAnchor(highlightedProductId);
     const scrollTimer = window.setTimeout(() => {
       document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 60);
-    const clearTimer = window.setTimeout(() => setHighlightedProductId(null), 1800);
+    }, 120);
+    const clearTimer = window.setTimeout(() => setHighlightedProductId(null), 2000);
     return () => {
       window.clearTimeout(scrollTimer);
       window.clearTimeout(clearTimer);
     };
-  }, [highlightedProductId]);
+  }, [highlightedProductId, listLoading, visibleProducts]);
 
   useEffect(() => {
     if (!hydrated) {
@@ -259,7 +323,7 @@ export function CatalogExperience({
     };
   }, [step]);
 
-  function setQuantity(productId: string, cantidad: number) {
+  const setQuantity = useCallback((productId: string, cantidad: number) => {
     setCart((current) => {
       const next = { ...current };
       if (cantidad <= 0) {
@@ -269,20 +333,22 @@ export function CatalogExperience({
       }
       return next;
     });
-  }
+  }, []);
 
   function repeatLastOrder() {
     const lastOrder = recommendations.lastOrder;
     if (!lastOrder) {
       return;
     }
+    const available = new Set(lastOrder.products.map((product) => product.id));
+    rememberProducts(lastOrder.products);
     const missing = lastOrder.items
-      .filter((item) => !item.available || !productById.has(item.productId))
+      .filter((item) => !item.available || !available.has(item.productId))
       .map((item) => item.nombre);
     setCart((current) => {
       const next = { ...current };
       for (const item of lastOrder.items) {
-        if (!item.available || !productById.has(item.productId)) {
+        if (!item.available || !available.has(item.productId)) {
           continue;
         }
         next[item.productId] = (next[item.productId] ?? 0) + item.cantidad;
@@ -401,6 +467,10 @@ export function CatalogExperience({
     const metodo = orderMetodoPago(order);
     if (metodo) {
       setMetodoPago(metodo);
+    }
+    const ids = order.items.map((item) => item.productId).filter(Boolean);
+    if (ids.length > 0) {
+      void fetchCatalogProductsByIds({ sessionId, ids }).then(rememberProducts);
     }
     goToShop();
     setCartOpen(true);
@@ -540,10 +610,12 @@ export function CatalogExperience({
           {!hashReady ? null : view === "shop" ? (
             <CatalogSearch
               query={query}
-              products={products}
+              sessionId={sessionId}
               onQueryChange={setQuery}
               onSelectProduct={(product) => {
+                rememberProducts([product]);
                 setQuery("");
+                setSelectedCategory(product.categoria);
                 setHighlightedProductId(product.id);
               }}
               onRequestProduct={(term) => openProductRequest(term)}
@@ -608,7 +680,7 @@ export function CatalogExperience({
           </p>
         ) : null}
 
-        {!normalizedQuery ? (
+        {!query.trim() ? (
           <CatalogRecommendations
             recommendations={recommendations}
             cart={cart}
@@ -617,66 +689,92 @@ export function CatalogExperience({
           />
         ) : null}
 
-        {chipCategories.length > 0 ? (
-          <nav
-            className="-mx-4 mt-10 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            aria-label="Categorías"
-          >
-            {chipCategories.map(([categoria], index) => {
-              const color = brandChipColor(index);
-              return (
-                <a
-                  key={categoria}
-                  href={`#${categoryAnchor(categoria)}`}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border-2 bg-white px-3.5 py-1.5 text-sm font-bold"
-                  style={{ borderColor: color, color }}
-                >
-                  <span aria-hidden="true">{categoryEmoji(categoria)}</span>
-                  {categoria}
-                </a>
-              );
-            })}
-          </nav>
-        ) : null}
-
-        {visibleProducts.length === 0 ? (
-          <ProductRequestEmpty query={query} onRequest={() => openProductRequest(query)} />
-        ) : (
-          <div className="mt-6 space-y-8">
-            {marketGroups.map(([categoria, items]) => (
-              <CategorySection
-                key={categoria}
-                categoria={categoria}
-                items={items}
-                cart={cart}
-                highlightedProductId={highlightedProductId}
-                onQuantityChange={setQuantity}
+        <nav
+          className="-mx-4 mt-10 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          aria-label="Categorías"
+        >
+          <CategoryChip
+            label="Todos"
+            emoji={categoryEmoji("todos")}
+            color={brand.green}
+            selected={selectedCategory === null}
+            onSelect={() => setSelectedCategory(null)}
+          />
+          {categories.map((chip, index) => {
+            const color = brandChipColor(index);
+            return (
+              <CategoryChip
+                key={chip.name}
+                label={chip.name}
+                emoji={categoryEmoji(chip.name)}
+                color={color}
+                selected={selectedCategory === chip.name}
+                onSelect={() =>
+                  setSelectedCategory((current) => (current === chip.name ? null : chip.name))
+                }
               />
-            ))}
+            );
+          })}
+        </nav>
 
-            {pharmaGroups.length > 0 ? (
-              <div className="space-y-4">
-                <div className="overflow-hidden rounded-3xl text-white" style={{ backgroundColor: brand.blue }}>
-                  <div className="px-5 py-6">
-                    <Logo variant="pharma" onDark className="h-20 w-auto max-w-full sm:h-24" />
-                    <p className="mt-3 text-base text-white/90">Farmacia y cuidado personal</p>
-                  </div>
+        {selectedCategory ? (
+          <div className="mt-6">
+            {isPharmaCategory(selectedCategory) ? (
+              <div className="mb-4 overflow-hidden rounded-3xl text-white" style={{ backgroundColor: brand.blue }}>
+                <div className="px-5 py-6">
+                  <Logo variant="pharma" onDark className="h-20 w-auto max-w-full sm:h-24" />
+                  <p className="mt-3 text-base text-white/90">Farmacia y cuidado personal</p>
                 </div>
-                {pharmaGroups.map(([categoria, items]) => (
-                  <CategorySection
-                    key={categoria}
-                    categoria={categoria}
-                    items={items}
-                    cart={cart}
-                    highlightedProductId={highlightedProductId}
-                    onQuantityChange={setQuantity}
-                    pharma
-                  />
-                ))}
               </div>
             ) : null}
+            <div className="mb-3 flex items-center gap-2">
+              <h2 className="font-display text-2xl font-bold text-brand-ink">{selectedCategory}</h2>
+              {isPharmaCategory(selectedCategory) ? <Badge variant="blue">PharmaQuick!</Badge> : null}
+            </div>
           </div>
-        )}
+        ) : null}
+
+        <div className={selectedCategory ? "mt-2" : "mt-6"}>
+          {listLoading && visibleProducts.length === 0 ? (
+            <CatalogProductSkeletons />
+          ) : visibleProducts.length === 0 ? (
+            listError ? (
+              <p
+                className="rounded-2xl px-4 py-3 text-sm font-semibold"
+                style={{ backgroundColor: "#FEE2E2", color: brand.error }}
+              >
+                {listError}
+              </p>
+            ) : (
+              <ProductRequestEmpty
+                query={query || selectedCategory || "productos"}
+                onRequest={() => openProductRequest(query)}
+              />
+            )
+          ) : (
+            <>
+              <CatalogProductList
+                key={`${selectedCategory ?? "todos"}:${debouncedQuery}`}
+                products={visibleProducts}
+                cart={cart}
+                highlightedProductId={highlightedProductId}
+                showCategory={!selectedCategory}
+                hasMore={hasMore}
+                loadingMore={loadingMore}
+                onLoadMore={loadMore}
+                onQuantityChange={setQuantity}
+              />
+              {listError ? (
+                <p
+                  className="mt-3 rounded-2xl px-4 py-3 text-sm font-semibold"
+                  style={{ backgroundColor: "#FEE2E2", color: brand.error }}
+                >
+                  {listError}
+                </p>
+              ) : null}
+            </>
+          )}
+        </div>
 
         <p className="mt-10 pb-4 text-center">
           <button
@@ -749,119 +847,34 @@ function OrdersIcon({ className, color }: { className?: string; color: string })
   );
 }
 
-function CategorySection({
-  categoria,
-  items,
-  cart,
-  highlightedProductId,
-  onQuantityChange,
-  pharma = false,
+function CategoryChip({
+  label,
+  emoji,
+  color,
+  selected,
+  onSelect,
 }: {
-  categoria: string;
-  items: Product[];
-  cart: CartMap;
-  highlightedProductId: string | null;
-  onQuantityChange: (productId: string, cantidad: number) => void;
-  pharma?: boolean;
+  label: string;
+  emoji: string;
+  color: string;
+  selected: boolean;
+  onSelect: () => void;
 }) {
   return (
-    <section id={categoryAnchor(categoria)} className="scroll-mt-28">
-      <div className="mb-3 flex items-center gap-2">
-        <h2 className="font-display text-2xl font-bold text-brand-ink">{categoria}</h2>
-        {pharma ? <Badge variant="blue">PharmaQuick!</Badge> : null}
-      </div>
-      <ul className="space-y-3">
-        {items.map((product) => (
-          <li key={product.id}>
-            <ProductCard
-              product={product}
-              cantidad={cart[product.id] ?? 0}
-              highlighted={highlightedProductId === product.id}
-              onQuantityChange={(cantidad) => onQuantityChange(product.id, cantidad)}
-            />
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function ProductCard({
-  product,
-  cantidad,
-  highlighted,
-  onQuantityChange,
-}: {
-  product: Product;
-  cantidad: number;
-  highlighted: boolean;
-  onQuantityChange: (cantidad: number) => void;
-}) {
-  return (
-    <article
-      id={productAnchor(product.id)}
-      className="scroll-mt-36 overflow-hidden rounded-3xl border bg-white shadow-[0_8px_24px_rgba(26,26,26,0.06)] transition-[box-shadow,border-color] duration-300"
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border-2 px-3.5 py-1.5 text-sm font-bold"
       style={{
-        borderColor: highlighted ? brand.orange : "rgba(26,26,26,0.06)",
-        boxShadow: highlighted
-          ? `0 0 0 3px ${brand.orange}55, 0 8px 24px rgba(26,26,26,0.06)`
-          : "0 8px 24px rgba(26,26,26,0.06)",
+        borderColor: color,
+        color: selected ? "#FFFFFF" : color,
+        backgroundColor: selected ? color : "#FFFFFF",
       }}
     >
-      <div className="flex gap-3 p-3">
-        <ProductPhoto product={product} className="h-[7.25rem] w-[7.25rem]" />
-        <div className="min-w-0 flex-1">
-          {product.marca ? (
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: brand.blue }}>
-              {product.marca}
-            </p>
-          ) : null}
-          <h3 className="font-display mt-0.5 text-[1.15rem] font-bold leading-tight text-brand-ink">
-            {product.nombre}
-          </h3>
-          {product.descripcion ? (
-            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-brand-muted">
-              {product.descripcion}
-            </p>
-          ) : null}
-          <div className="mt-3 flex items-end justify-between gap-2">
-            <p className="font-display text-lg font-bold" style={{ color: brand.orange }}>
-              {formatPrice(product.precio)}
-            </p>
-            <QuantityStepper value={cantidad} onChange={onQuantityChange} />
-          </div>
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function ProductPhoto({
-  product,
-  className = "h-24 w-24",
-}: {
-  product: Product;
-  className?: string;
-}) {
-  if (product.foto_url) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={product.foto_url}
-        alt={product.nombre}
-        className={`shrink-0 rounded-2xl object-cover ${className}`}
-      />
-    );
-  }
-
-  return (
-    <div
-      aria-hidden="true"
-      className={`flex shrink-0 items-center justify-center rounded-2xl font-display text-3xl font-bold ${className}`}
-      style={{ backgroundColor: `${brand.green}18`, color: brand.green }}
-    >
-      {product.nombre.slice(0, 1).toUpperCase()}
-    </div>
+      <span aria-hidden="true">{emoji}</span>
+      {label}
+    </button>
   );
 }
 
@@ -964,7 +977,7 @@ function CartSheet({
                 key={line.product.id}
                 className="flex items-center gap-3 rounded-2xl border border-black/[0.06] p-2.5"
               >
-                <ProductPhoto product={line.product} className="h-16 w-16" />
+                <CatalogProductPhoto product={line.product} className="h-16 w-16" sizes="64px" />
                 <div className="min-w-0 flex-1">
                   {line.product.marca ? (
                     <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: brand.blue }}>
@@ -1066,7 +1079,7 @@ function CheckoutScreen({
       <ul className="mt-5 space-y-2">
         {lines.map((line) => (
           <li key={line.product.id} className="flex items-center gap-3 rounded-2xl border border-black/[0.06] p-2">
-            <ProductPhoto product={line.product} className="h-12 w-12" />
+            <CatalogProductPhoto product={line.product} className="h-12 w-12" sizes="48px" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-bold">{line.product.nombre}</p>
               <p className="text-xs text-brand-muted">x{line.cantidad}</p>
