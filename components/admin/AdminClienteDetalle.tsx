@@ -91,9 +91,8 @@ export function AdminClienteDetalle() {
       if (!response.ok || !body?.cliente) {
         throw new Error(body?.error || "No pudimos guardar el cambio");
       }
-      setCliente((current) =>
-        current ? { ...current, aceptaMarketing: body.cliente.aceptaMarketing } : current
-      );
+      const aceptaMarketing = body.cliente.aceptaMarketing;
+      setCliente((current) => (current ? { ...current, aceptaMarketing } : current));
     } catch (toggleError) {
       setError(toggleError instanceof Error ? toggleError.message : "No pudimos guardar el cambio");
     } finally {
