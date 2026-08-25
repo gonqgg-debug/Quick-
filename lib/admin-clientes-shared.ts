@@ -27,8 +27,22 @@ export type AdminClientePedido = {
   esPrueba: boolean;
 };
 
+export type AdminClienteFavorito = {
+  productId: string;
+  nombre: string;
+  veces: number;
+  cantidadTotal: number;
+  ultimoPedidoAt: string;
+  ultimoPedidoLabel: string;
+};
+
 export type AdminClienteDetalle = AdminClienteListItem & {
   pedidos: AdminClientePedido[];
+  favoritos: AdminClienteFavorito[];
+  frecuenciaCompraDias: number | null;
+  frecuenciaCompraLabel: string;
+  metodoPagoPreferido: "efectivo" | "tarjeta" | null;
+  metodoPagoPreferidoLabel: string;
 };
 
 export type AdminClienteSortKey =

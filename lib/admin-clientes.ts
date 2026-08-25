@@ -2,8 +2,10 @@ import { formatCustomerPhone } from "@/lib/customers";
 import { formatPrice, toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import type { OrderEstado } from "@/lib/types";
+import { metodoPagoLabel } from "@/lib/customer-orders-shared";
 import type {
   AdminClienteDetalle,
+  AdminClienteFavorito,
   AdminClienteListItem,
   AdminClientePedido,
 } from "@/lib/admin-clientes-shared";
@@ -35,6 +37,14 @@ type ChatRow = {
   customers?: CustomerEmbed;
 };
 
+type ItemRow = {
+  id?: unknown;
+  product_id?: unknown;
+  cantidad?: unknown;
+  estado?: unknown;
+  products?: { nombre?: unknown } | { nombre?: unknown }[] | null;
+};
+
 type OrderRow = {
   id?: unknown;
   chat_id?: unknown;
@@ -42,7 +52,27 @@ type OrderRow = {
   total_estimado?: unknown;
   estado?: unknown;
   es_prueba?: unknown;
+  metodo_pago?: unknown;
+  order_items?: ItemRow[] | null;
 };
+
+const FAVORITOS_LIMIT = 10;
+const DETAIL_ORDER_SELECT = `
+  id,
+  chat_id,
+  created_at,
+  total_estimado,
+  estado,
+  es_prueba,
+  metodo_pago,
+  order_items (
+    id,
+    product_id,
+    cantidad,
+    estado,
+    products!order_items_product_id_fkey ( nombre )
+  )
+`;
 
 function unwrapOne<T>(value: T | T[] | null | undefined): T | null {
   if (!value) {
@@ -178,6 +208,136 @@ function mapPedido(row: OrderRow): AdminClientePedido {
   };
 }
 
+function isPreferenceOrder(row: OrderRow): boolean {
+  if (Boolean(row.es_prueba)) {
+    return false;
+  }
+  return String(row.estado ?? "") !== "cancelada";
+}
+
+function averageDaysBetween(isoDates: string[]): number | null {
+  const times = isoDates
+    .map((iso) => new Date(iso).getTime())
+    .filter((time) => Number.isFinite(time))
+    .sort((left, right) => left - right);
+  if (times.length < 2) {
+    return null;
+  }
+  let sum = 0;
+  for (let index = 1; index < times.length; index += 1) {
+    sum += (times[index] - times[index - 1]) / 86_400_000;
+  }
+  return sum / (times.length - 1);
+}
+
+function formatFrecuencia(days: number | null): string {
+  if (days == null) {
+    return "—";
+  }
+  if (days < 1) {
+    return "Menos de 1 día";
+  }
+  const rounded = days >= 10 ? Math.round(days) : Math.round(days * 10) / 10;
+  return rounded === 1 ? "Cada 1 día" : `Cada ${rounded} días`;
+}
+
+function preferenceStats(orders: OrderRow[]): Pick<
+  AdminClienteDetalle,
+  | "frecuenciaCompraDias"
+  | "frecuenciaCompraLabel"
+  | "metodoPagoPreferido"
+  | "metodoPagoPreferidoLabel"
+> {
+  const usable = orders.filter(isPreferenceOrder);
+  const frecuenciaCompraDias = averageDaysBetween(usable.map((row) => String(row.created_at ?? "")));
+  const counts: Record<"efectivo" | "tarjeta", number> = { efectivo: 0, tarjeta: 0 };
+  let latestAt = "";
+  let latestMethod: "efectivo" | "tarjeta" | null = null;
+  for (const row of usable) {
+    const metodo = String(row.metodo_pago ?? "");
+    if (metodo !== "efectivo" && metodo !== "tarjeta") {
+      continue;
+    }
+    counts[metodo] += 1;
+    const createdAt = String(row.created_at ?? "");
+    if (createdAt && createdAt >= latestAt) {
+      latestAt = createdAt;
+      latestMethod = metodo;
+    }
+  }
+  let metodoPagoPreferido: "efectivo" | "tarjeta" | null = null;
+  if (counts.efectivo > counts.tarjeta) {
+    metodoPagoPreferido = "efectivo";
+  } else if (counts.tarjeta > counts.efectivo) {
+    metodoPagoPreferido = "tarjeta";
+  } else {
+    metodoPagoPreferido = latestMethod;
+  }
+
+  return {
+    frecuenciaCompraDias,
+    frecuenciaCompraLabel: formatFrecuencia(frecuenciaCompraDias),
+    metodoPagoPreferido,
+    metodoPagoPreferidoLabel: metodoPagoPreferido ? metodoPagoLabel(metodoPagoPreferido) : "—",
+  };
+}
+
+function favoriteProducts(orders: OrderRow[]): AdminClienteFavorito[] {
+  const grouped = new Map<
+    string,
+    { nombre: string; veces: number; cantidadTotal: number; ultimoPedidoAt: string }
+  >();
+
+  for (const order of orders) {
+    if (!isPreferenceOrder(order)) {
+      continue;
+    }
+    const createdAt = String(order.created_at ?? "");
+    const items = Array.isArray(order.order_items) ? order.order_items : [];
+    for (const item of items) {
+      if (String(item.estado ?? "ok") === "eliminado") {
+        continue;
+      }
+      const productId = String(item.product_id ?? "");
+      if (!productId) {
+        continue;
+      }
+      const product = unwrapOne(item.products);
+      const nombre = product?.nombre ? String(product.nombre) : "Producto";
+      const cantidad = Number(item.cantidad);
+      const qty = Number.isFinite(cantidad) ? cantidad : 0;
+      const current = grouped.get(productId);
+      if (!current) {
+        grouped.set(productId, {
+          nombre,
+          veces: 1,
+          cantidadTotal: qty,
+          ultimoPedidoAt: createdAt,
+        });
+        continue;
+      }
+      current.veces += 1;
+      current.cantidadTotal += qty;
+      if (createdAt > current.ultimoPedidoAt) {
+        current.ultimoPedidoAt = createdAt;
+        current.nombre = nombre;
+      }
+    }
+  }
+
+  return Array.from(grouped.entries())
+    .map(([productId, row]) => ({
+      productId,
+      nombre: row.nombre,
+      veces: row.veces,
+      cantidadTotal: row.cantidadTotal,
+      ultimoPedidoAt: row.ultimoPedidoAt,
+      ultimoPedidoLabel: row.ultimoPedidoAt ? formatDate(row.ultimoPedidoAt) : "—",
+    }))
+    .sort((left, right) => right.cantidadTotal - left.cantidadTotal || right.veces - left.veces)
+    .slice(0, FAVORITOS_LIMIT);
+}
+
 async function fetchAllChats(): Promise<ChatRow[]> {
   const supabase = getSupabaseAdminClient();
   const rows: ChatRow[] = [];
@@ -265,7 +425,7 @@ export async function getAdminCliente(chatId: string): Promise<AdminClienteDetal
 
   const { data: orders, error: ordersError } = await supabase
     .from("orders")
-    .select("id, chat_id, created_at, total_estimado, estado, es_prueba")
+    .select(DETAIL_ORDER_SELECT)
     .eq("chat_id", id)
     .order("created_at", { ascending: false });
 
@@ -277,6 +437,8 @@ export async function getAdminCliente(chatId: string): Promise<AdminClienteDetal
   return {
     ...mapListItem(chat as ChatRow, orderRows),
     pedidos: orderRows.map(mapPedido),
+    favoritos: favoriteProducts(orderRows),
+    ...preferenceStats(orderRows),
   };
 }
 

@@ -91,7 +91,9 @@ export function AdminClienteDetalle() {
       if (!response.ok || !body?.cliente) {
         throw new Error(body?.error || "No pudimos guardar el cambio");
       }
-      setCliente((current) => (current ? { ...current, ...body.cliente, pedidos: current.pedidos } : current));
+      setCliente((current) =>
+        current ? { ...current, aceptaMarketing: body.cliente.aceptaMarketing } : current
+      );
     } catch (toggleError) {
       setError(toggleError instanceof Error ? toggleError.message : "No pudimos guardar el cambio");
     } finally {
@@ -140,12 +142,45 @@ export function AdminClienteDetalle() {
         </p>
       ) : null}
 
-      <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3">
         <Metric label="Pedidos" value={String(cliente.pedidosCount)} />
         <Metric label="Total histórico" value={cliente.totalGastadoLabel} />
         <Metric label="Ticket promedio" value={cliente.ticketPromedioLabel} />
         <Metric label="Último pedido" value={cliente.ultimoPedidoLabel} />
+        <Metric label="Frecuencia de compra" value={cliente.frecuenciaCompraLabel} />
+        <Metric label="Método de pago preferido" value={cliente.metodoPagoPreferidoLabel} />
       </div>
+
+      <h2 className="font-display mt-8 text-xl font-bold">Productos favoritos</h2>
+      {cliente.favoritos.length === 0 ? (
+        <div className="mt-4 rounded-lg px-5 py-10 text-center" style={{ backgroundColor: "#F8FAF7" }}>
+          <p className="text-sm text-brand-muted">Todavía no hay productos de pedidos no cancelados.</p>
+        </div>
+      ) : (
+        <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {cliente.favoritos.map((favorito) => (
+            <li
+              key={favorito.productId}
+              className="rounded-lg border px-4 py-3"
+              style={{ borderColor: "#E5E7EB" }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <p className="min-w-0 font-semibold leading-snug">{favorito.nombre}</p>
+                <span
+                  className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold"
+                  style={{ backgroundColor: `${brand.green}22`, color: brand.green }}
+                >
+                  Pedido {favorito.veces} {favorito.veces === 1 ? "vez" : "veces"}
+                </span>
+              </div>
+              <p className="mt-1.5 text-sm text-brand-muted">
+                Cantidad total: {favorito.cantidadTotal}
+                {favorito.ultimoPedidoLabel !== "—" ? ` · Último: ${favorito.ultimoPedidoLabel}` : ""}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <h2 className="font-display mt-8 text-xl font-bold">Historial de pedidos</h2>
       {cliente.pedidos.length === 0 ? (
