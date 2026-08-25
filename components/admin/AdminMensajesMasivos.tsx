@@ -178,34 +178,32 @@ export function AdminMensajesMasivos() {
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
         throw new Error(body?.error || "No pudimos enviar los mensajes");
       }
-      let latest: { sent: number; failed: number; skipped: number; total: number } | null = null;
       await readNdjson(response, (event) => {
         if (event.type === "error") {
           throw new Error(event.error);
         }
         if (event.type === "start") {
-          latest = { sent: 0, failed: 0, skipped: 0, total: event.total };
-          setProgress(latest);
+          setProgress({ sent: 0, failed: 0, skipped: 0, total: event.total });
           return;
         }
-        latest = {
+        const next = {
           sent: event.sent,
           failed: event.failed,
           skipped: event.skipped,
           total: event.total,
         };
-        setProgress(latest);
+        setProgress(next);
+        if (event.type === "done") {
+          const parts = [`${next.sent} de ${next.total} enviados`];
+          if (next.failed) {
+            parts.push(`${next.failed} con error`);
+          }
+          if (next.skipped) {
+            parts.push(`${next.skipped} omitidos (ya no aceptan marketing)`);
+          }
+          setDoneMessage(parts.join(" · "));
+        }
       });
-      if (latest) {
-        const parts = [`${latest.sent} de ${latest.total} enviados`];
-        if (latest.failed) {
-          parts.push(`${latest.failed} con error`);
-        }
-        if (latest.skipped) {
-          parts.push(`${latest.skipped} omitidos (ya no aceptan marketing)`);
-        }
-        setDoneMessage(parts.join(" · "));
-      }
       setPreview(null);
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : "No pudimos enviar los mensajes");
