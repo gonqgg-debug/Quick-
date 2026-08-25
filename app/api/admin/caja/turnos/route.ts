@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "No pudimos registrar el turno";
     console.error("[admin] caja turnos create", error);
-    return NextResponse.json({ error: message }, { status: 400 });
+    const status = message.includes("Ya hay un cierre") ? 409 : 400;
+    return NextResponse.json({ error: message }, { status });
   }
 }

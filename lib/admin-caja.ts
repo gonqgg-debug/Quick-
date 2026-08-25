@@ -117,7 +117,7 @@ export async function listCajaTurnos(fecha?: string | null): Promise<CajaTurnoLi
     .filter((row): row is CajaTurnoListItem => Boolean(row));
 }
 
-export async function createCajaTurno(body: {
+type CajaTurnoBody = {
   fecha?: unknown;
   turno?: unknown;
   sistemaTarjeta?: unknown;
@@ -127,14 +127,16 @@ export async function createCajaTurno(body: {
   reportadoUsd?: unknown;
   verificado?: unknown;
   notas?: unknown;
-}): Promise<CajaTurnoListItem> {
+};
+
+function cajaTurnoPayload(body: CajaTurnoBody) {
   const fechaRaw = typeof body.fecha === "string" ? body.fecha.trim() : "";
   const fecha = isDayKey(fechaRaw) ? fechaRaw : todayDayKey();
   if (!isDayKey(fecha)) {
     throw new Error("La fecha no es válida");
   }
   const turno = isCajaTurnoPeriodo(body.turno) ? body.turno : defaultTurnoPeriodo();
-  const payload = {
+  return {
     fecha,
     turno,
     sistema_tarjeta: parseAmount(body.sistemaTarjeta, 0),
@@ -145,17 +147,53 @@ export async function createCajaTurno(body: {
     verificado: Boolean(body.verificado),
     notas: trimText(body.notas, TEXT_MAX) || null,
   };
+}
 
-  const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase.from("caja_turnos").insert(payload).select(TURNO_SELECT).single();
-  if (error) {
-    throw error;
+function throwCajaTurnoWriteError(error: { code?: string; message?: string }): never {
+  if (error.code === "23505") {
+    throw new Error("Ya hay un cierre para esa fecha y turno");
   }
-  const mapped = mapTurno({ ...(data as TurnoRow), tasaUsdDop: (await getCajaParametros()).tasaUsdDop });
+  throw error instanceof Error ? error : new Error(error.message || "No pudimos guardar el turno");
+}
+
+async function mapSavedTurno(row: TurnoRow): Promise<CajaTurnoListItem> {
+  const mapped = mapTurno({ ...row, tasaUsdDop: (await getCajaParametros()).tasaUsdDop });
   if (!mapped) {
     throw new Error("No pudimos guardar el turno");
   }
   return mapped;
+}
+
+export async function createCajaTurno(body: CajaTurnoBody): Promise<CajaTurnoListItem> {
+  const payload = cajaTurnoPayload(body);
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.from("caja_turnos").insert(payload).select(TURNO_SELECT).single();
+  if (error) {
+    throwCajaTurnoWriteError(error);
+  }
+  return mapSavedTurno(data as TurnoRow);
+}
+
+export async function updateCajaTurno(id: string, body: CajaTurnoBody): Promise<CajaTurnoListItem> {
+  const turnoId = id.trim();
+  if (!turnoId) {
+    throw new Error("No encontramos el turno");
+  }
+  const payload = cajaTurnoPayload(body);
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("caja_turnos")
+    .update(payload)
+    .eq("id", turnoId)
+    .select(TURNO_SELECT)
+    .maybeSingle();
+  if (error) {
+    throwCajaTurnoWriteError(error);
+  }
+  if (!data) {
+    throw new Error("No encontramos el turno");
+  }
+  return mapSavedTurno(data as TurnoRow);
 }
 
 export async function listCajaLedger(filters: {

@@ -31,7 +31,7 @@ export function AdminCajaTurnos() {
   const [fecha, setFecha] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [registerOpen, setRegisterOpen] = useState(false);
+  const [editing, setEditing] = useState<CajaTurnoListItem | "new" | null>(null);
 
   const load = useCallback(async () => {
     const params = new URLSearchParams();
@@ -102,7 +102,7 @@ export function AdminCajaTurnos() {
           ) : null}
           <button
             type="button"
-            onClick={() => setRegisterOpen(true)}
+            onClick={() => setEditing("new")}
             className="rounded-full px-4 text-sm font-bold text-white"
             style={{ minHeight: 44, backgroundColor: brand.green }}
           >
@@ -125,7 +125,7 @@ export function AdminCajaTurnos() {
           <p className="mt-2 text-sm text-brand-muted">Registra el cierre para verlo aquí.</p>
         </div>
       ) : (
-        <DataTable className="mt-6" tableClassName="min-w-[1100px]">
+        <DataTable className="mt-6" tableClassName="min-w-[1180px]">
           <DataTableHead>
             <DataTableTh>Fecha</DataTableTh>
             <DataTableTh>Turno</DataTableTh>
@@ -139,6 +139,9 @@ export function AdminCajaTurnos() {
             <DataTableTh numeric>Var. efectivo</DataTableTh>
             <DataTableTh>Verificado</DataTableTh>
             <DataTableTh>Notas</DataTableTh>
+            <DataTableTh className="w-24">
+              <span className="sr-only">Editar</span>
+            </DataTableTh>
           </DataTableHead>
           <tbody>
             {turnos.map((turno) => (
@@ -165,17 +168,28 @@ export function AdminCajaTurnos() {
                   </span>
                 </DataTableCell>
                 <DataTableCell className="max-w-[180px] truncate text-brand-muted">{turno.notas ?? "—"}</DataTableCell>
+                <DataTableCell>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(turno)}
+                    className="text-sm font-bold"
+                    style={{ color: brand.green }}
+                  >
+                    Editar
+                  </button>
+                </DataTableCell>
               </DataTableRow>
             ))}
           </tbody>
         </DataTable>
       )}
 
-      {registerOpen ? (
-        <RegistrarTurnoModal
-          onClose={() => setRegisterOpen(false)}
+      {editing ? (
+        <TurnoModal
+          turno={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
           onSaved={async () => {
-            setRegisterOpen(false);
+            setEditing(null);
             await load();
           }}
         />
@@ -193,31 +207,57 @@ function VarianceCell({ value }: { value: number }) {
   );
 }
 
-function RegistrarTurnoModal({
+function amountDraft(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+  return String(value);
+}
+
+function TurnoModal({
+  turno: existing,
   onClose,
   onSaved,
 }: {
+  turno: CajaTurnoListItem | null;
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {
-  const [fecha, setFecha] = useState(todayDayKey());
-  const [turno, setTurno] = useState<CajaTurnoPeriodo>(defaultTurnoPeriodo());
-  const [sistemaTarjeta, setSistemaTarjeta] = useState("");
-  const [sistemaEfectivo, setSistemaEfectivo] = useState("");
-  const [reportadoTarjeta, setReportadoTarjeta] = useState("");
-  const [reportadoEfectivo, setReportadoEfectivo] = useState("");
-  const [reportadoUsd, setReportadoUsd] = useState("");
-  const [verificado, setVerificado] = useState(false);
-  const [notas, setNotas] = useState("");
+  const isNew = !existing;
+  const [fecha, setFecha] = useState(existing?.fecha ?? todayDayKey());
+  const [turno, setTurno] = useState<CajaTurnoPeriodo>(existing?.turno ?? defaultTurnoPeriodo());
+  const [sistemaTarjeta, setSistemaTarjeta] = useState(existing ? amountDraft(existing.sistemaTarjeta) : "");
+  const [sistemaEfectivo, setSistemaEfectivo] = useState(existing ? amountDraft(existing.sistemaEfectivo) : "");
+  const [reportadoTarjeta, setReportadoTarjeta] = useState(existing ? amountDraft(existing.reportadoTarjeta) : "");
+  const [reportadoEfectivo, setReportadoEfectivo] = useState(existing ? amountDraft(existing.reportadoEfectivo) : "");
+  const [reportadoUsd, setReportadoUsd] = useState(existing ? amountDraft(existing.reportadoUsd) : "");
+  const [verificado, setVerificado] = useState(existing?.verificado ?? false);
+  const [notas, setNotas] = useState(existing?.notas ?? "");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
 
   async function save() {
     setSaving(true);
     setFormError(null);
     try {
-      const response = await fetch("/api/admin/caja/turnos", {
-        method: "POST",
+      const response = await fetch(isNew ? "/api/admin/caja/turnos" : `/api/admin/caja/turnos/${existing.id}`, {
+        method: isNew ? "POST" : "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -234,11 +274,17 @@ function RegistrarTurnoModal({
       });
       const body = (await response.json().catch(() => null)) as { error?: string } | null;
       if (!response.ok) {
-        throw new Error(body?.error || "No pudimos registrar el turno");
+        throw new Error(body?.error || (isNew ? "No pudimos registrar el turno" : "No pudimos guardar el turno"));
       }
       await onSaved();
     } catch (saveError) {
-      setFormError(saveError instanceof Error ? saveError.message : "No pudimos registrar el turno");
+      setFormError(
+        saveError instanceof Error
+          ? saveError.message
+          : isNew
+            ? "No pudimos registrar el turno"
+            : "No pudimos guardar el turno",
+      );
     } finally {
       setSaving(false);
     }
@@ -260,7 +306,7 @@ function RegistrarTurnoModal({
       >
         <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Caja</p>
         <h2 id="turno-title" className="font-display mt-1 text-2xl font-bold">
-          Registrar cierre de turno
+          {isNew ? "Registrar cierre de turno" : "Editar cierre de turno"}
         </h2>
         <p className="mt-1 text-sm text-brand-muted">Fecha y turno alcanzan para guardar. Los montos pueden ir en 0.</p>
 
@@ -322,7 +368,7 @@ function RegistrarTurnoModal({
             className="rounded-full px-5 text-sm font-bold text-white disabled:opacity-40"
             style={{ minHeight: 44, backgroundColor: brand.green }}
           >
-            {saving ? "Guardando..." : "Registrar"}
+            {saving ? "Guardando..." : isNew ? "Registrar" : "Guardar"}
           </button>
         </div>
       </form>
