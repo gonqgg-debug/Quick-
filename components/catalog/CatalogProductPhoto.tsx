@@ -53,7 +53,8 @@ export function CatalogProductPhoto({
         fill
         sizes={sizes}
         loading="lazy"
-        className="object-cover"
+        draggable={false}
+        className="pointer-events-none object-cover [-webkit-user-drag:none]"
         unoptimized={!canOptimizeImage(product.foto_url)}
       />
     </span>

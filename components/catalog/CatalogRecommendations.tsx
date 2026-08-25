@@ -15,10 +15,10 @@ type CatalogRecommendationsProps = {
 };
 
 const RAIL_TRACK =
-  "-mx-4 mt-3 flex gap-3 overflow-x-auto overscroll-x-contain scroll-pl-4 scroll-pr-4 px-4 pb-1 snap-x snap-mandatory [scrollbar-width:none] [touch-action:pan-x] [&::-webkit-scrollbar]:hidden";
+  "-mx-4 mt-3 flex h-auto gap-3 overflow-x-auto overflow-y-clip overscroll-x-contain overscroll-y-auto scroll-pl-4 scroll-pr-4 px-4 pb-1 snap-x snap-mandatory select-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [touch-action:pan-x_pan-y] [&::-webkit-scrollbar]:hidden";
 
 const RAIL_CARD =
-  "w-[42%] shrink-0 snap-start overflow-hidden rounded-[22px] border border-black/[0.06] bg-white";
+  "w-[42%] shrink-0 snap-start overflow-clip rounded-[22px] border border-black/[0.06] bg-white";
 
 export function CatalogRecommendations({
   recommendations,
@@ -104,7 +104,11 @@ function ProductCarouselTrack({
   }
 
   return (
-    <div className={RAIL_TRACK} role="list">
+    <div
+      className={RAIL_TRACK}
+      role="list"
+      style={{ touchAction: "pan-x pan-y", overscrollBehaviorX: "contain" }}
+    >
       {products.map((product) => (
         <article key={product.id} role="listitem" className={RAIL_CARD}>
           <RailPhoto product={product} />
