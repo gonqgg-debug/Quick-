@@ -215,7 +215,7 @@ export async function listCajaLedger(filters: {
   return (data ?? []).map((row) => mapLedger(row as LedgerRow)).filter((row): row is CajaLedgerItem => Boolean(row));
 }
 
-export async function createCajaLedger(body: {
+type CajaLedgerBody = {
   fecha?: unknown;
   caja?: unknown;
   moneda?: unknown;
@@ -223,7 +223,9 @@ export async function createCajaLedger(body: {
   monto?: unknown;
   concepto?: unknown;
   referencia?: unknown;
-}): Promise<CajaLedgerItem> {
+};
+
+function cajaLedgerPayload(body: CajaLedgerBody) {
   const fechaRaw = typeof body.fecha === "string" ? body.fecha.trim() : "";
   const fecha = isDayKey(fechaRaw) ? fechaRaw : todayDayKey();
   if (!isDayKey(fecha)) {
@@ -239,27 +241,68 @@ export async function createCajaLedger(body: {
   if (!(monto > 0)) {
     throw new Error("El monto tiene que ser mayor que 0");
   }
+  return {
+    fecha,
+    caja,
+    moneda,
+    tipo,
+    monto,
+    concepto: trimText(body.concepto, TEXT_MAX) || null,
+    referencia: trimText(body.referencia, TEXT_MAX) || null,
+  };
+}
 
-  const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from("caja_ledger")
-    .insert({
-      fecha,
-      caja,
-      moneda,
-      tipo,
-      monto,
-      concepto: trimText(body.concepto, TEXT_MAX) || null,
-      referencia: trimText(body.referencia, TEXT_MAX) || null,
-    })
-    .select(LEDGER_SELECT)
-    .single();
-  if (error) {
-    throw error;
-  }
-  const mapped = mapLedger(data as LedgerRow);
+function mapSavedLedger(row: LedgerRow): CajaLedgerItem {
+  const mapped = mapLedger(row);
   if (!mapped) {
     throw new Error("No pudimos guardar el movimiento");
   }
   return mapped;
+}
+
+export async function createCajaLedger(body: CajaLedgerBody): Promise<CajaLedgerItem> {
+  const payload = cajaLedgerPayload(body);
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.from("caja_ledger").insert(payload).select(LEDGER_SELECT).single();
+  if (error) {
+    throw error;
+  }
+  return mapSavedLedger(data as LedgerRow);
+}
+
+export async function updateCajaLedger(id: string, body: CajaLedgerBody): Promise<CajaLedgerItem> {
+  const ledgerId = id.trim();
+  if (!ledgerId) {
+    throw new Error("No encontramos el movimiento");
+  }
+  const payload = cajaLedgerPayload(body);
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("caja_ledger")
+    .update(payload)
+    .eq("id", ledgerId)
+    .select(LEDGER_SELECT)
+    .maybeSingle();
+  if (error) {
+    throw error;
+  }
+  if (!data) {
+    throw new Error("No encontramos el movimiento");
+  }
+  return mapSavedLedger(data as LedgerRow);
+}
+
+export async function deleteCajaLedger(id: string): Promise<void> {
+  const ledgerId = id.trim();
+  if (!ledgerId) {
+    throw new Error("No encontramos el movimiento");
+  }
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.from("caja_ledger").delete().eq("id", ledgerId).select("id").maybeSingle();
+  if (error) {
+    throw error;
+  }
+  if (!data) {
+    throw new Error("No encontramos el movimiento");
+  }
 }

@@ -27,7 +27,8 @@ export function AdminCajaLedger() {
   const [moneda, setMoneda] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [registerOpen, setRegisterOpen] = useState(false);
+  const [editing, setEditing] = useState<CajaLedgerItem | "new" | null>(null);
+  const [deleting, setDeleting] = useState<CajaLedgerItem | null>(null);
 
   const load = useCallback(async () => {
     const params = new URLSearchParams();
@@ -107,7 +108,7 @@ export function AdminCajaLedger() {
         </div>
         <button
           type="button"
-          onClick={() => setRegisterOpen(true)}
+          onClick={() => setEditing("new")}
           className="rounded-full px-4 text-sm font-bold text-white"
           style={{ minHeight: 44, backgroundColor: brand.green }}
         >
@@ -129,7 +130,7 @@ export function AdminCajaLedger() {
           <p className="mt-2 text-sm text-brand-muted">Registra una entrada o una salida para verla aquí.</p>
         </div>
       ) : (
-        <DataTable className="mt-6" tableClassName="min-w-[760px]">
+        <DataTable className="mt-6" tableClassName="min-w-[880px]">
           <DataTableHead>
             <DataTableTh>Fecha</DataTableTh>
             <DataTableTh>Caja</DataTableTh>
@@ -138,6 +139,9 @@ export function AdminCajaLedger() {
             <DataTableTh numeric>Monto</DataTableTh>
             <DataTableTh>Concepto</DataTableTh>
             <DataTableTh>Referencia</DataTableTh>
+            <DataTableTh className="w-36">
+              <span className="sr-only">Acciones</span>
+            </DataTableTh>
           </DataTableHead>
           <tbody>
             {movimientos.map((item) => (
@@ -158,17 +162,49 @@ export function AdminCajaLedger() {
                 </DataTableCell>
                 <DataTableCell>{item.concepto ?? "—"}</DataTableCell>
                 <DataTableCell className="text-brand-muted">{item.referencia ?? "—"}</DataTableCell>
+                <DataTableCell>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setEditing(item)}
+                      className="text-sm font-bold"
+                      style={{ color: brand.green }}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleting(item)}
+                      className="text-sm font-bold"
+                      style={{ color: brand.error }}
+                    >
+                      Borrar
+                    </button>
+                  </div>
+                </DataTableCell>
               </DataTableRow>
             ))}
           </tbody>
         </DataTable>
       )}
 
-      {registerOpen ? (
-        <RegistrarMovimientoModal
-          onClose={() => setRegisterOpen(false)}
+      {editing ? (
+        <MovimientoModal
+          movimiento={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
           onSaved={async () => {
-            setRegisterOpen(false);
+            setEditing(null);
+            await load();
+          }}
+        />
+      ) : null}
+
+      {deleting ? (
+        <ConfirmDeleteMovimiento
+          movimiento={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={async () => {
+            setDeleting(null);
             await load();
           }}
         />
@@ -177,40 +213,76 @@ export function AdminCajaLedger() {
   );
 }
 
-function RegistrarMovimientoModal({
+function amountDraft(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+  return String(value);
+}
+
+function useModalEscape(onClose: () => void) {
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+}
+
+function MovimientoModal({
+  movimiento: existing,
   onClose,
   onSaved,
 }: {
+  movimiento: CajaLedgerItem | null;
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {
-  const [fecha, setFecha] = useState(todayDayKey());
-  const [caja, setCaja] = useState<Caja>("Chica");
-  const [moneda, setMoneda] = useState<CajaMoneda>("DOP");
-  const [tipo, setTipo] = useState<CajaLedgerTipo>("Entrada");
-  const [monto, setMonto] = useState("");
-  const [concepto, setConcepto] = useState("");
-  const [referencia, setReferencia] = useState("");
+  const isNew = !existing;
+  const [fecha, setFecha] = useState(existing?.fecha ?? todayDayKey());
+  const [caja, setCaja] = useState<Caja>(existing?.caja ?? "Chica");
+  const [moneda, setMoneda] = useState<CajaMoneda>(existing?.moneda ?? "DOP");
+  const [tipo, setTipo] = useState<CajaLedgerTipo>(existing?.tipo ?? "Entrada");
+  const [monto, setMonto] = useState(existing ? amountDraft(existing.monto) : "");
+  const [concepto, setConcepto] = useState(existing?.concepto ?? "");
+  const [referencia, setReferencia] = useState(existing?.referencia ?? "");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  useModalEscape(onClose);
 
   async function save() {
     setSaving(true);
     setFormError(null);
     try {
-      const response = await fetch("/api/admin/caja/ledger", {
-        method: "POST",
+      const response = await fetch(isNew ? "/api/admin/caja/ledger" : `/api/admin/caja/ledger/${existing.id}`, {
+        method: isNew ? "POST" : "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fecha, caja, moneda, tipo, monto, concepto, referencia }),
       });
       const body = (await response.json().catch(() => null)) as { error?: string } | null;
       if (!response.ok) {
-        throw new Error(body?.error || "No pudimos registrar el movimiento");
+        throw new Error(body?.error || (isNew ? "No pudimos registrar el movimiento" : "No pudimos guardar el movimiento"));
       }
       await onSaved();
     } catch (saveError) {
-      setFormError(saveError instanceof Error ? saveError.message : "No pudimos registrar el movimiento");
+      setFormError(
+        saveError instanceof Error
+          ? saveError.message
+          : isNew
+            ? "No pudimos registrar el movimiento"
+            : "No pudimos guardar el movimiento",
+      );
     } finally {
       setSaving(false);
     }
@@ -223,7 +295,7 @@ function RegistrarMovimientoModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="ledger-title"
-        className="relative z-10 w-full max-w-md overflow-hidden rounded-[28px] bg-white p-6"
+        className="relative z-10 max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[28px] bg-white p-6"
         style={{ boxShadow: "0 24px 64px rgba(26, 26, 26, 0.18)", color: brand.ink }}
         onSubmit={(event) => {
           event.preventDefault();
@@ -232,9 +304,11 @@ function RegistrarMovimientoModal({
       >
         <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Caja</p>
         <h2 id="ledger-title" className="font-display mt-1 text-2xl font-bold">
-          Registrar movimiento
+          {isNew ? "Registrar movimiento" : "Editar movimiento"}
         </h2>
-        <p className="mt-1 text-sm text-brand-muted">Solo el monto es obligatorio. El resto ya viene prellenado.</p>
+        <p className="mt-1 text-sm text-brand-muted">
+          {isNew ? "Solo el monto es obligatorio. El resto ya viene prellenado." : "Cambia lo que haga falta y guarda."}
+        </p>
 
         <label className={`${adminLabelClass} mt-5`}>
           Monto
@@ -323,10 +397,93 @@ function RegistrarMovimientoModal({
             className="rounded-full px-5 text-sm font-bold text-white disabled:opacity-40"
             style={{ minHeight: 44, backgroundColor: brand.green }}
           >
-            {saving ? "Guardando..." : "Registrar"}
+            {saving ? "Guardando..." : isNew ? "Registrar" : "Guardar"}
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function ConfirmDeleteMovimiento({
+  movimiento,
+  onClose,
+  onDeleted,
+}: {
+  movimiento: CajaLedgerItem;
+  onClose: () => void;
+  onDeleted: () => void | Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  useModalEscape(onClose);
+
+  async function confirm() {
+    setBusy(true);
+    setFormError(null);
+    try {
+      const response = await fetch(`/api/admin/caja/ledger/${movimiento.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) {
+        throw new Error(body?.error || "No pudimos borrar el movimiento");
+      }
+      await onDeleted();
+    } catch (deleteError) {
+      setFormError(deleteError instanceof Error ? deleteError.message : "No pudimos borrar el movimiento");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+      <button type="button" className="absolute inset-0 bg-black/40" aria-label="Cerrar" onClick={onClose} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ledger-delete-title"
+        className="relative z-10 w-full max-w-md overflow-hidden rounded-[28px] bg-white p-6"
+        style={{ boxShadow: "0 24px 64px rgba(26, 26, 26, 0.18)", color: brand.ink }}
+      >
+        <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Caja</p>
+        <h2 id="ledger-delete-title" className="font-display mt-1 text-2xl font-bold">
+          Borrar movimiento
+        </h2>
+        <p className="mt-2 text-sm text-brand-muted">
+          Se va a borrar {movimiento.tipo.toLowerCase()} de {formatCajaMoney(movimiento.monto, movimiento.moneda)}
+          {movimiento.concepto ? ` · ${movimiento.concepto}` : ""}. Esta acción no se puede deshacer.
+        </p>
+
+        {formError ? (
+          <p className="mt-4 rounded-2xl px-3 py-2 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
+            {formError}
+          </p>
+        ) : null}
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full px-4 text-sm font-bold"
+            style={{ minHeight: 44, border: "1px solid #E5E7EB", color: brand.ink }}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void confirm()}
+            className="rounded-full px-5 text-sm font-bold text-white disabled:opacity-40"
+            style={{ minHeight: 44, backgroundColor: brand.error }}
+          >
+            {busy ? "Borrando..." : "Borrar"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
