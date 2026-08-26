@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { PhoneFrame } from "@/components/PhoneFrame";
 import { brand } from "@/lib/theme";
 import { LandingInner, SectionEyebrow, SectionWave } from "@/components/landing/LandingSection";
 
@@ -21,29 +22,18 @@ const FEATURES = [
   },
 ] as const;
 
-function PhoneFrame() {
+function CatalogScreenshot() {
   return (
-    <div className="mx-auto w-full max-w-[280px] md:max-w-[300px]">
-      <div
-        className="relative rounded-[2.75rem] border-[10px] border-[#1A1A1A] bg-[#1A1A1A] p-2 shadow-[0_24px_60px_rgba(26,26,26,0.28)]"
-        aria-hidden="true"
-      >
-        <div className="pointer-events-none absolute left-1/2 top-3 z-10 h-6 w-24 -translate-x-1/2 rounded-full bg-[#1A1A1A]" />
-        <div className="relative overflow-hidden rounded-[2rem] bg-white">
-          <div className="relative aspect-[9/19.5] w-full">
-            <Image
-              src="/images/catalogo-screenshot.png"
-              alt="Catálogo de Quick! Mini Market en el celular: búsqueda, productos con precios y botón para agregar al pedido"
-              fill
-              unoptimized
-              className="object-cover object-[center_12%] scale-[1.08]"
-              sizes="(min-width: 768px) 300px, 280px"
-              priority={false}
-            />
-          </div>
-        </div>
-      </div>
-    </div>
+    <PhoneFrame>
+      <Image
+        src="/images/catalogo-screenshot.png"
+        alt="Catálogo de Quick! Mini Market en el celular: búsqueda, productos con precios y botón para agregar al pedido"
+        fill
+        unoptimized
+        className="object-cover object-[center_12%] scale-[1.08]"
+        sizes="(min-width: 768px) 360px, 320px"
+      />
+    </PhoneFrame>
   );
 }
 
@@ -79,7 +69,7 @@ export function LandingCatalogPreview() {
               ))}
             </ul>
           </div>
-          <PhoneFrame />
+          <CatalogScreenshot />
         </div>
       </LandingInner>
       <SectionWave fill="#FFFFFF" />
