@@ -50,27 +50,23 @@ export function LandingHeader() {
         scrolled ? "shadow-[0_4px_24px_rgba(26,26,26,0.12)]" : ""
       }`}
     >
-      {/* Mobile */}
+      {/* Mobile — OXXO: naranja con logo a la izquierda + verde menú */}
       <div className="md:hidden">
-        <div className="flex items-center justify-center bg-white px-6 py-4">
+        <div className="flex h-14 overflow-hidden rounded-t-3xl">
           <a
             href="#inicio"
+            className="flex min-w-0 flex-1 items-center justify-start bg-[#F79521] px-4"
             aria-label="Quick! Mini Market"
             onClick={(e) => {
               e.preventDefault();
               goTo("#inicio");
             }}
           >
-            <Logo variant="contour" className="h-11 w-auto max-w-[200px]" />
+            <Logo variant="contour" className="h-10 w-auto max-w-[180px]" />
           </a>
-        </div>
-
-        <div className="flex h-14">
-          <div className="flex-[4]" style={{ backgroundColor: brand.green }} aria-hidden="true" />
           <button
             type="button"
-            className="flex flex-1 items-center justify-center"
-            style={{ backgroundColor: brand.orange }}
+            className="flex h-full w-14 shrink-0 items-center justify-center bg-[#7EB341]"
             aria-label={open ? "Cerrar menú" : "Abrir menú"}
             aria-expanded={open}
             onClick={() => setOpen((value) => !value)}
@@ -116,13 +112,19 @@ export function LandingHeader() {
         ) : null}
       </div>
 
-      {/* Desktop — naranja escalonado + verde + logo con halo, sin placa */}
-      <div className="relative hidden bg-white md:block">
-        <div className="h-10 bg-white" aria-hidden="true" />
-
-        <div className="bg-[#F79521]">
-          <div className="mx-auto h-6 w-[min(40vw,380px)] rounded-t-3xl bg-[#F79521]" />
-          <div className="h-10" />
+      {/* Desktop — naranja con logo + verde de navegación */}
+      <div className="hidden md:block">
+        <div className="flex items-center justify-center bg-[#F79521] py-3">
+          <a
+            href="#inicio"
+            aria-label="Quick! Mini Market"
+            onClick={(e) => {
+              e.preventDefault();
+              goTo("#inicio");
+            }}
+          >
+            <Logo variant="contour" className="h-14 w-auto max-w-[240px]" />
+          </a>
         </div>
 
         <div className="relative flex w-full items-center bg-[#7EB341] py-3">
@@ -152,18 +154,6 @@ export function LandingHeader() {
             Empleados
           </Link>
         </div>
-
-        <a
-          href="#inicio"
-          className="absolute left-1/2 top-10 z-30 -translate-x-1/2 -translate-y-1/2"
-          aria-label="Quick! Mini Market"
-          onClick={(e) => {
-            e.preventDefault();
-            goTo("#inicio");
-          }}
-        >
-          <Logo variant="contour" className="h-14 w-auto max-w-[240px]" />
-        </a>
       </div>
     </header>
   );
