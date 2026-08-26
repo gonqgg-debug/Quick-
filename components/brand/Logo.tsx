@@ -19,7 +19,13 @@ export function Logo({ className = "", variant = "market", onDark = false }: Log
         : logoPublicPath;
 
   if (failed) {
-    return <Wordmark variant={variant} onDark={onDark} className={className} />;
+    return (
+      <Wordmark
+        variant={variant === "pharma" ? "pharma" : "market"}
+        onDark={onDark}
+        className={className}
+      />
+    );
   }
 
   return (
