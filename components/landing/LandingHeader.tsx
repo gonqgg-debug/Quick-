@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
-import { SectionWave } from "@/components/landing/LandingSection";
 import { brand } from "@/lib/theme";
 
 const NAV_LINKS = [
@@ -51,22 +50,21 @@ export function LandingHeader() {
         scrolled ? "shadow-[0_4px_24px_rgba(26,26,26,0.12)]" : ""
       }`}
     >
-      {/* Franja 1 — logo centrado (mobile + desktop) */}
-      <div className="flex items-center justify-center bg-white px-6 py-4 md:py-5">
-        <a
-          href="#inicio"
-          aria-label="Quick! Mini Market"
-          onClick={(e) => {
-            e.preventDefault();
-            goTo("#inicio");
-          }}
-        >
-          <Logo className="h-11 w-auto max-w-[200px] md:h-14 md:max-w-[260px]" />
-        </a>
-      </div>
-
-      {/* Mobile — franja 2: verde + botón naranja (hamburguesa) */}
+      {/* Mobile */}
       <div className="md:hidden">
+        <div className="flex items-center justify-center bg-white px-6 py-4">
+          <a
+            href="#inicio"
+            aria-label="Quick! Mini Market"
+            onClick={(e) => {
+              e.preventDefault();
+              goTo("#inicio");
+            }}
+          >
+            <Logo className="h-11 w-auto max-w-[200px]" />
+          </a>
+        </div>
+
         <div className="flex h-14">
           <div className="flex-[4]" style={{ backgroundColor: brand.green }} aria-hidden="true" />
           <button
@@ -118,36 +116,67 @@ export function LandingHeader() {
         ) : null}
       </div>
 
-      {/* Desktop — franja 2: nav centrado + Empleados a la derecha */}
-      <div className="hidden md:block" style={{ backgroundColor: brand.green }}>
-        <div className="relative flex h-14 items-center">
-          <nav
-            className="absolute left-1/2 flex -translate-x-1/2 items-center gap-8"
-            aria-label="Secciones"
-          >
-            {NAV_LINKS.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                className={NAV_LINK_CLASS}
-                onClick={(e) => {
-                  e.preventDefault();
-                  goTo(link.href);
-                }}
-              >
-                {link.label}
-              </a>
-            ))}
+      {/* Desktop — 3 franjas OXXO: blanco / naranja / verde */}
+      <div className="relative hidden md:block">
+        <div className="h-2 bg-white" aria-hidden="true" />
+        <div className="h-16 w-full" style={{ backgroundColor: brand.orange }} />
+        <div
+          className="relative flex h-16 items-center"
+          style={{ backgroundColor: brand.green }}
+        >
+          <nav className="flex min-w-0 flex-1 items-center px-8" aria-label="Secciones">
+            <div className="flex flex-1 items-center justify-end gap-8 pr-4">
+              {NAV_LINKS.slice(0, 2).map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className={NAV_LINK_CLASS}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    goTo(link.href);
+                  }}
+                >
+                  {link.label}
+                </a>
+              ))}
+            </div>
+            <div className="w-[280px] shrink-0" aria-hidden="true" />
+            <div className="flex flex-1 items-center justify-start gap-8 pl-4">
+              {NAV_LINKS.slice(2).map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className={NAV_LINK_CLASS}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    goTo(link.href);
+                  }}
+                >
+                  {link.label}
+                </a>
+              ))}
+            </div>
           </nav>
           <Link
             href="/empleados"
-            className="ml-auto mr-8 inline-flex min-h-10 items-center justify-center rounded-full px-5 py-1.5 text-sm font-bold text-white"
+            className="mr-8 shrink-0 inline-flex min-h-9 items-center justify-center rounded-full px-5 py-1 text-sm font-bold text-white"
             style={{ backgroundColor: brand.orange }}
           >
             Empleados
           </Link>
         </div>
-        <SectionWave fill="#FFFFFF" />
+
+        <a
+          href="#inicio"
+          className="absolute left-1/2 top-[4.5rem] z-30 -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white px-10 py-5 shadow-[0_10px_28px_rgba(26,26,26,0.14)]"
+          aria-label="Quick! Mini Market"
+          onClick={(e) => {
+            e.preventDefault();
+            goTo("#inicio");
+          }}
+        >
+          <Logo className="h-14 w-auto max-w-[260px]" />
+        </a>
       </div>
     </header>
   );
