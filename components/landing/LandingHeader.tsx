@@ -116,16 +116,31 @@ export function LandingHeader() {
         ) : null}
       </div>
 
-      {/* Desktop — 3 franjas OXXO: blanco / naranja / verde */}
-      <div className="relative hidden md:block">
-        <div className="h-2 bg-white" aria-hidden="true" />
-        <div className="h-16 w-full" style={{ backgroundColor: brand.orange }} />
+      {/* Desktop — OXXO: pedestal naranja escalonado + nav verde + placa del logo */}
+      <div className="relative hidden md:block bg-white">
+        <div className="h-7 bg-white" aria-hidden="true" />
+
+        <div className="flex items-end">
+          <div
+            className="h-9 flex-1 rounded-tr-xl"
+            style={{ backgroundColor: brand.orange }}
+          />
+          <div
+            className="h-[4.75rem] w-[min(42vw,420px)] shrink-0 rounded-t-2xl"
+            style={{ backgroundColor: brand.orange }}
+          />
+          <div
+            className="h-9 flex-1 rounded-tl-xl"
+            style={{ backgroundColor: brand.orange }}
+          />
+        </div>
+
         <div
-          className="relative flex h-16 items-center"
+          className="relative flex h-12 items-center"
           style={{ backgroundColor: brand.green }}
         >
-          <nav className="flex min-w-0 flex-1 items-center px-8" aria-label="Secciones">
-            <div className="flex flex-1 items-center justify-end gap-8 pr-4">
+          <nav className="flex min-w-0 flex-1 items-center px-6" aria-label="Secciones">
+            <div className="flex flex-1 items-center justify-end gap-8 pr-6">
               {NAV_LINKS.slice(0, 2).map((link) => (
                 <a
                   key={link.href}
@@ -140,8 +155,8 @@ export function LandingHeader() {
                 </a>
               ))}
             </div>
-            <div className="w-[280px] shrink-0" aria-hidden="true" />
-            <div className="flex flex-1 items-center justify-start gap-8 pl-4">
+            <div className="w-[min(36vw,340px)] shrink-0" aria-hidden="true" />
+            <div className="flex flex-1 items-center justify-start gap-8 pl-6">
               {NAV_LINKS.slice(2).map((link) => (
                 <a
                   key={link.href}
@@ -159,7 +174,7 @@ export function LandingHeader() {
           </nav>
           <Link
             href="/empleados"
-            className="mr-8 shrink-0 inline-flex min-h-9 items-center justify-center rounded-full px-5 py-1 text-sm font-bold text-white"
+            className="mr-8 shrink-0 inline-flex min-h-9 items-center justify-center rounded-full px-5 py-1.5 text-sm font-bold text-white"
             style={{ backgroundColor: brand.orange }}
           >
             Empleados
@@ -168,14 +183,14 @@ export function LandingHeader() {
 
         <a
           href="#inicio"
-          className="absolute left-1/2 top-[4.5rem] z-30 -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white px-10 py-5 shadow-[0_10px_28px_rgba(26,26,26,0.14)]"
+          className="absolute left-1/2 top-3 z-30 -translate-x-1/2 rounded-2xl bg-white px-12 py-7 shadow-[0_12px_32px_rgba(26,26,26,0.18)]"
           aria-label="Quick! Mini Market"
           onClick={(e) => {
             e.preventDefault();
             goTo("#inicio");
           }}
         >
-          <Logo className="h-14 w-auto max-w-[260px]" />
+          <Logo className="h-16 w-auto max-w-[280px]" />
         </a>
       </div>
     </header>
