@@ -99,23 +99,7 @@ body {
 }
 
 .logo-halo-white {
-  filter:
-    drop-shadow(0 1px 0 #fff)
-    drop-shadow(0 -1px 0 #fff)
-    drop-shadow(1px 0 0 #fff)
-    drop-shadow(-1px 0 0 #fff)
-    drop-shadow(0 2px 0 #fff)
-    drop-shadow(0 -2px 0 #fff)
-    drop-shadow(2px 0 0 #fff)
-    drop-shadow(-2px 0 0 #fff)
-    drop-shadow(1.5px 1.5px 0 #fff)
-    drop-shadow(-1.5px 1.5px 0 #fff)
-    drop-shadow(1.5px -1.5px 0 #fff)
-    drop-shadow(-1.5px -1.5px 0 #fff)
-    drop-shadow(2.5px 1px 0 #fff)
-    drop-shadow(-2.5px 1px 0 #fff)
-    drop-shadow(2.5px -1px 0 #fff)
-    drop-shadow(-2.5px -1px 0 #fff);
+  filter: drop-shadow(0 0 2px #fff) drop-shadow(0 1px 1px rgba(255, 255, 255, 0.9));
 }
 
 @media (min-width: 768px) {
