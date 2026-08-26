@@ -14,24 +14,23 @@ export function LandingHero() {
           <div className="text-center md:text-left">
             <h1 className="font-display text-balance">
               <span
-                className="block text-3xl font-semibold leading-tight md:text-5xl"
+                className="block text-2xl font-semibold leading-snug md:text-4xl"
                 style={{ color: brand.orange }}
               >
                 Traemos la conveniencia
               </span>
               <span
-                className="mt-1 block text-5xl font-extrabold uppercase leading-[0.9] tracking-tight md:mt-2 md:text-7xl lg:text-8xl"
+                className="mt-2 block text-4xl font-extrabold uppercase leading-[0.95] tracking-tight md:mt-3 md:text-6xl lg:text-7xl"
                 style={{ color: brand.orange }}
               >
                 A tu residencial
               </span>
             </h1>
             <p
-              className="mx-auto mt-5 max-w-lg text-base leading-relaxed md:mx-0 md:mt-6 md:text-lg"
+              className="mx-auto mt-5 max-w-md text-base leading-relaxed md:mx-0 md:mt-6"
               style={{ color: brand.muted }}
             >
-              Una cadena de mini markets pensada para las comunidades residenciales — la calidad y
-              consistencia de una cadena, con la cercanía de estar justo donde vives.
+              Mini market de cadena, a un paso de casa.
             </p>
             <div className="mt-7 flex justify-center md:mt-8 md:justify-start">
               <a
