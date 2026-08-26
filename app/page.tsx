@@ -136,8 +136,8 @@ function SectionPhoto({
 export default function Home() {
   const year = new Date().getFullYear();
   const hasHero = hasPublicImage("hero.jpeg");
-  const hasQuienesSomos = hasPublicImage("quienes-somos.jpg");
-  const hasUbicacion = hasPublicImage("ubicacion.webp");
+  const hasQuienesSomos = hasPublicImage("ubicacion.webp");
+  const hasUbicacion = hasPublicImage("tienda-fachada.jpeg");
   const hasPharmaStorefront = hasPublicImage("pharmaquick-storefront.jpeg");
 
   return (
@@ -193,8 +193,8 @@ export default function Home() {
           >
             {hasQuienesSomos ? (
               <SectionPhoto
-                src="/images/quienes-somos.jpg"
-                alt="Bolsas de compras con frutas, pan y productos frescos listas para entregar"
+                src="/images/ubicacion.webp"
+                alt="Pasillo iluminado de la tienda Quick! Mini Market con estantes de productos"
                 className="mx-auto aspect-[4/5] w-full max-w-md md:max-w-none"
               />
             ) : null}
@@ -306,11 +306,11 @@ export default function Home() {
               <div className="mx-auto w-full max-w-sm rotate-[2deg] bg-white p-3 shadow-[0_24px_50px_rgba(26,26,26,0.28)] md:p-4">
                 <div className="relative aspect-[4/5] overflow-hidden">
                   <Image
-                    src="/images/ubicacion.webp"
-                    alt="Pasillo iluminado de la tienda Quick! Mini Market con estantes de productos"
+                    src="/images/tienda-fachada.jpeg"
+                    alt="Entrada de Quick! Mini Market en el Residencial Jardines 3 con el logo sobre las puertas de cristal"
                     fill
                     unoptimized
-                    className="object-cover"
+                    className="object-cover object-center"
                     sizes="(min-width: 768px) 380px, 90vw"
                     loading="lazy"
                   />
