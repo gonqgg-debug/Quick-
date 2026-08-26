@@ -148,7 +148,7 @@ export default function Home() {
         <LandingInner className="pb-8 md:pb-10">
           <div className="grid items-center gap-10 md:grid-cols-2 md:gap-14">
             <div className="order-2 text-center md:order-1 md:text-left">
-              <Logo className="mx-auto h-16 max-w-[220px] md:mx-0 md:h-20 md:max-w-[280px]" />
+              <Logo variant="contour" className="mx-auto h-16 max-w-[220px] md:mx-0 md:h-20 md:max-w-[280px]" />
               <h1 className="font-display mt-6 text-balance text-4xl font-extrabold leading-[1.05] md:mt-7 md:text-6xl">
                 Traemos la conveniencia a tu residencial
               </h1>
@@ -327,7 +327,7 @@ export default function Home() {
         <LandingInner>
           <div className="grid gap-10 text-center md:grid-cols-3 md:gap-8 md:text-left">
             <div className="flex flex-col items-center gap-4 md:items-start">
-              <Logo className="h-12 max-w-[180px]" />
+              <Logo variant="contour" className="h-12 max-w-[180px]" />
               <WhatsAppButton small />
               <StaffButton />
             </div>

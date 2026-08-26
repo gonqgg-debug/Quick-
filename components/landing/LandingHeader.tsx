@@ -61,7 +61,7 @@ export function LandingHeader() {
               goTo("#inicio");
             }}
           >
-            <Logo className="h-11 w-auto max-w-[200px]" />
+            <Logo variant="contour" className="h-11 w-auto max-w-[200px]" />
           </a>
         </div>
 
@@ -120,10 +120,9 @@ export function LandingHeader() {
       <div className="relative hidden bg-white md:block">
         <div className="h-10 bg-white" aria-hidden="true" />
 
-        <div className="flex items-end">
-          <div className="h-10 flex-1 rounded-tr-2xl bg-[#F79521]" />
-          <div className="h-16 w-[min(40vw,380px)] shrink-0 rounded-t-3xl bg-[#F79521]" />
-          <div className="h-10 flex-1 rounded-tl-2xl bg-[#F79521]" />
+        <div className="bg-[#F79521]">
+          <div className="mx-auto h-6 w-[min(40vw,380px)] rounded-t-3xl bg-[#F79521]" />
+          <div className="h-10" />
         </div>
 
         <div className="relative flex w-full items-center bg-[#7EB341] py-3">
@@ -163,7 +162,7 @@ export function LandingHeader() {
             goTo("#inicio");
           }}
         >
-          <Logo className="logo-halo-white h-14 w-auto max-w-[240px]" />
+          <Logo variant="contour" className="h-14 w-auto max-w-[240px]" />
         </a>
       </div>
     </header>

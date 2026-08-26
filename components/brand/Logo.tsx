@@ -1,17 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { brand, logoPublicPath, pharmaLogoPublicPath } from "@/lib/theme";
+import { brand, logoContourPublicPath, logoPublicPath, pharmaLogoPublicPath } from "@/lib/theme";
 
 type LogoProps = {
   className?: string;
-  variant?: "market" | "pharma";
+  variant?: "market" | "pharma" | "contour";
   onDark?: boolean;
 };
 
 export function Logo({ className = "", variant = "market", onDark = false }: LogoProps) {
   const [failed, setFailed] = useState(false);
-  const src = variant === "pharma" ? pharmaLogoPublicPath : logoPublicPath;
+  const src =
+    variant === "pharma"
+      ? pharmaLogoPublicPath
+      : variant === "contour"
+        ? logoContourPublicPath
+        : logoPublicPath;
 
   if (failed) {
     return <Wordmark variant={variant} onDark={onDark} className={className} />;
