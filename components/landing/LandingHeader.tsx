@@ -116,29 +116,11 @@ export function LandingHeader() {
         ) : null}
       </div>
 
-      {/* Desktop — OXXO: pedestal naranja escalonado + nav verde + placa del logo */}
-      <div className="relative hidden md:block bg-white">
-        <div className="h-7 bg-white" aria-hidden="true" />
+      {/* Desktop — franjas naranja/verde + placa anclada al borde entre ambas */}
+      <div className="relative hidden md:block">
+        <div className="h-16 w-full rounded-t-3xl bg-[#F79521]" />
 
-        <div className="flex items-end">
-          <div
-            className="h-9 flex-1 rounded-tr-xl"
-            style={{ backgroundColor: brand.orange }}
-          />
-          <div
-            className="h-[4.75rem] w-[min(42vw,420px)] shrink-0 rounded-t-2xl"
-            style={{ backgroundColor: brand.orange }}
-          />
-          <div
-            className="h-9 flex-1 rounded-tl-xl"
-            style={{ backgroundColor: brand.orange }}
-          />
-        </div>
-
-        <div
-          className="relative flex h-12 items-center"
-          style={{ backgroundColor: brand.green }}
-        >
+        <div className="flex w-full items-center bg-[#7EB341] py-3">
           <nav className="flex min-w-0 flex-1 items-center px-6" aria-label="Secciones">
             <div className="flex flex-1 items-center justify-end gap-8 pr-6">
               {NAV_LINKS.slice(0, 2).map((link) => (
@@ -155,7 +137,7 @@ export function LandingHeader() {
                 </a>
               ))}
             </div>
-            <div className="w-[min(36vw,340px)] shrink-0" aria-hidden="true" />
+            <div className="w-[220px] shrink-0" aria-hidden="true" />
             <div className="flex flex-1 items-center justify-start gap-8 pl-6">
               {NAV_LINKS.slice(2).map((link) => (
                 <a
@@ -183,14 +165,14 @@ export function LandingHeader() {
 
         <a
           href="#inicio"
-          className="absolute left-1/2 top-3 z-30 -translate-x-1/2 rounded-2xl bg-white px-12 py-7 shadow-[0_12px_32px_rgba(26,26,26,0.18)]"
+          className="absolute left-1/2 top-16 z-30 w-fit -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white px-6 py-3 shadow-md"
           aria-label="Quick! Mini Market"
           onClick={(e) => {
             e.preventDefault();
             goTo("#inicio");
           }}
         >
-          <Logo className="h-16 w-auto max-w-[280px]" />
+          <Logo className="h-10 w-auto" />
         </a>
       </div>
     </header>
