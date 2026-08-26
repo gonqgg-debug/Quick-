@@ -27,11 +27,11 @@ function CatalogScreenshot() {
     <PhoneFrame>
       <Image
         src="/images/catalogo-screenshot.png"
-        alt="Catálogo de Quick! Mini Market en el celular: búsqueda, productos con precios y botón para agregar al pedido"
+        alt="Catálogo Quick! en el celular"
         fill
         unoptimized
-        className="object-cover object-[50%_8%] scale-[1.14]"
-        sizes="(min-width: 768px) 360px, 320px"
+        className="object-cover object-top"
+        sizes="300px"
       />
     </PhoneFrame>
   );

@@ -1,29 +1,16 @@
 type PhoneFrameProps = {
   children: React.ReactNode;
   className?: string;
-  /** Applied to the inner screen container. */
-  screenClassName?: string;
 };
 
-export function PhoneFrame({ children, className = "", screenClassName = "" }: PhoneFrameProps) {
+export function PhoneFrame({ children, className = "" }: PhoneFrameProps) {
   return (
-    <div className={`mx-auto w-full max-w-[320px] md:max-w-[360px] ${className}`}>
-      <div className="relative aspect-[9/19.5] w-full rounded-[2.75rem] bg-neutral-900 shadow-2xl shadow-neutral-900/30 md:rounded-[3rem]">
-        {/* Volume buttons */}
-        <span className="absolute -left-[2px] top-[21%] z-30 h-7 w-[3px] rounded-l-sm bg-neutral-800" />
-        <span className="absolute -left-[2px] top-[28%] z-30 h-11 w-[3px] rounded-l-sm bg-neutral-800" />
-        {/* Power button */}
-        <span className="absolute -right-[2px] top-[24%] z-30 h-14 w-[3px] rounded-r-sm bg-neutral-800" />
-
-        {/* Screen inset — absolute so it fills the bezel exactly */}
-        <div
-          className={`absolute inset-[13px] overflow-hidden rounded-[2rem] bg-neutral-950 md:rounded-[2.25rem] ${screenClassName}`}
-        >
-          <div className="relative h-full w-full">{children}</div>
+    <div className={`relative mx-auto w-[300px] ${className}`}>
+      <div className="relative rounded-[2.75rem] bg-neutral-900 p-3 shadow-2xl">
+        <div className="relative aspect-[9/19.5] overflow-hidden rounded-[2rem] bg-white">
+          {children}
+          <div className="absolute left-1/2 top-0 z-10 h-6 w-24 -translate-x-1/2 rounded-b-2xl bg-neutral-900" />
         </div>
-
-        {/* Dynamic Island — sits over the screen */}
-        <span className="pointer-events-none absolute left-1/2 top-[23px] z-20 h-6 w-24 -translate-x-1/2 rounded-full bg-neutral-900 md:top-[25px]" />
       </div>
     </div>
   );
