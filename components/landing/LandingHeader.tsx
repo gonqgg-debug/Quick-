@@ -13,7 +13,7 @@ const NAV_LINKS = [
 ] as const;
 
 const NAV_LINK_CLASS =
-  "text-sm font-bold text-white/95 underline-offset-4 transition hover:text-white hover:underline";
+  "text-[13px] font-bold uppercase tracking-[0.12em] text-white transition hover:text-white hover:underline underline-offset-4";
 
 export function LandingHeader() {
   const [scrolled, setScrolled] = useState(false);
@@ -116,47 +116,38 @@ export function LandingHeader() {
         ) : null}
       </div>
 
-      {/* Desktop — franjas naranja/verde + placa anclada al borde entre ambas */}
-      <div className="relative hidden md:block">
-        <div className="h-16 w-full rounded-t-3xl bg-[#F79521]" />
+      {/* Desktop — naranja escalonado + verde + logo con halo, sin placa */}
+      <div className="relative hidden bg-white md:block">
+        <div className="h-10 bg-white" aria-hidden="true" />
 
-        <div className="flex w-full items-center bg-[#7EB341] py-3">
-          <nav className="flex min-w-0 flex-1 items-center px-6" aria-label="Secciones">
-            <div className="flex flex-1 items-center justify-end gap-8 pr-6">
-              {NAV_LINKS.slice(0, 2).map((link) => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  className={NAV_LINK_CLASS}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    goTo(link.href);
-                  }}
-                >
-                  {link.label}
-                </a>
-              ))}
-            </div>
-            <div className="w-[220px] shrink-0" aria-hidden="true" />
-            <div className="flex flex-1 items-center justify-start gap-8 pl-6">
-              {NAV_LINKS.slice(2).map((link) => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  className={NAV_LINK_CLASS}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    goTo(link.href);
-                  }}
-                >
-                  {link.label}
-                </a>
-              ))}
-            </div>
+        <div className="flex items-end">
+          <div className="h-10 flex-1 rounded-tr-2xl bg-[#F79521]" />
+          <div className="h-16 w-[min(40vw,380px)] shrink-0 rounded-t-3xl bg-[#F79521]" />
+          <div className="h-10 flex-1 rounded-tl-2xl bg-[#F79521]" />
+        </div>
+
+        <div className="relative flex w-full items-center bg-[#7EB341] py-3">
+          <nav
+            className="absolute left-1/2 flex -translate-x-1/2 items-center gap-8"
+            aria-label="Secciones"
+          >
+            {NAV_LINKS.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                className={NAV_LINK_CLASS}
+                onClick={(e) => {
+                  e.preventDefault();
+                  goTo(link.href);
+                }}
+              >
+                {link.label}
+              </a>
+            ))}
           </nav>
           <Link
             href="/empleados"
-            className="mr-8 shrink-0 inline-flex min-h-9 items-center justify-center rounded-full px-5 py-1.5 text-sm font-bold text-white"
+            className="ml-auto mr-8 inline-flex min-h-9 items-center justify-center rounded-full px-5 py-1.5 text-sm font-bold text-white"
             style={{ backgroundColor: brand.orange }}
           >
             Empleados
@@ -165,14 +156,14 @@ export function LandingHeader() {
 
         <a
           href="#inicio"
-          className="absolute left-1/2 top-16 z-30 w-fit -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white px-6 py-3 shadow-md"
+          className="absolute left-1/2 top-10 z-30 -translate-x-1/2 -translate-y-1/2"
           aria-label="Quick! Mini Market"
           onClick={(e) => {
             e.preventDefault();
             goTo("#inicio");
           }}
         >
-          <Logo className="h-10 w-auto" />
+          <Logo className="logo-halo-white h-14 w-auto max-w-[240px]" />
         </a>
       </div>
     </header>
