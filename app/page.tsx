@@ -156,8 +156,8 @@ export default function Home() {
                 className="mx-auto mt-4 max-w-lg text-base leading-relaxed md:mx-0 md:mt-5 md:text-xl"
                 style={{ color: brand.muted }}
               >
-                Pasa a la tienda en tu residencial o pide por WhatsApp con un catálogo real — fotos,
-                precios y entrega a tu puerta, sin app.
+                Una cadena de mini markets pensada para las comunidades residenciales — la calidad y
+                consistencia de una cadena, con la cercanía de estar justo donde vives.
               </p>
               <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap md:mt-8 md:items-start">
                 <WhatsAppButton />
