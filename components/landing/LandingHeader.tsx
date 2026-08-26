@@ -7,8 +7,9 @@ import { brand } from "@/lib/theme";
 
 const NAV_LINKS = [
   { href: "#quienes-somos", label: "Quiénes somos" },
+  { href: "#como-funciona", label: "Cómo comprar" },
+  { href: "#catalogo", label: "En el celular" },
   { href: "#donde-estamos", label: "Dónde estamos" },
-  { href: "#como-funciona", label: "Cómo funciona" },
 ] as const;
 
 export function LandingHeader() {

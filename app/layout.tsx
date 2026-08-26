@@ -16,7 +16,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Quick! Mini Market",
   description:
-    "La conveniencia de tu residencial, todos los días. Pedidos por WhatsApp en Pueblo Bávaro.",
+    "La conveniencia de tu residencial, todos los días. Tienda en Pueblo Bávaro y pedidos por WhatsApp con catálogo en el celular.",
   icons: {
     icon: [
       { url: "/favicon.ico" },
