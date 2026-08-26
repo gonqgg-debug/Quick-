@@ -150,7 +150,7 @@ export default function Home() {
             <div className="order-2 text-center md:order-1 md:text-left">
               <Logo className="mx-auto h-16 max-w-[220px] md:mx-0 md:h-20 md:max-w-[280px]" />
               <h1 className="font-display mt-6 text-balance text-4xl font-extrabold leading-[1.05] md:mt-7 md:text-6xl">
-                La conveniencia de tu residencial, todos los días
+                Traemos la conveniencia a tu residencial
               </h1>
               <p
                 className="mx-auto mt-4 max-w-lg text-base leading-relaxed md:mx-0 md:mt-5 md:text-xl"
