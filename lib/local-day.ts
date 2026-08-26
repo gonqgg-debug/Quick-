@@ -68,6 +68,11 @@ export function addDaysToDayKey(value: string, days: number): string {
   return new Date(utc).toISOString().slice(0, 10);
 }
 
+/** Last calendar day that already ended in the staff timezone (never “today”). */
+export function yesterdayDayKey(now = Date.now(), timeZone = STAFF_TIMEZONE): string {
+  return addDaysToDayKey(todayDayKey(now, timeZone), -1);
+}
+
 export function diffDayKeys(from: string, to: string): number {
   const start = DAY_KEY.exec(from);
   const end = DAY_KEY.exec(to);

@@ -28,7 +28,7 @@ import {
   type FacturaPendiente,
   type MesActivo,
 } from "@/lib/finanzas";
-import { addDaysToDayKey, todayDayKey } from "@/lib/local-day";
+import { addDaysToDayKey, yesterdayDayKey } from "@/lib/local-day";
 
 const SPARKLINE_DAYS = 14;
 const TENDENCIA_DAYS = 7;
@@ -65,10 +65,10 @@ async function loadTendencias(mesActivo: MesActivo): Promise<{
   sparkline14: DashboardSparkPoint[];
   tendencia7: DashboardTendenciaDia[];
 }> {
-  const today = todayDayKey();
+  const yesterday = yesterdayDayKey();
   const monthStart = `${mesActivo.year}-${pad2(mesActivo.month)}-01`;
   const monthEnd = `${mesActivo.year}-${pad2(mesActivo.month)}-${pad2(mesActivo.diasEnMes)}`;
-  const sparkFrom = addDaysToDayKey(today, -(SPARKLINE_DAYS - 1));
+  const sparkFrom = addDaysToDayKey(yesterday, -(SPARKLINE_DAYS - 1));
   const needsPrevMonth = sparkFrom < monthStart;
 
   const [ventasMes, ventasPrev, metasPorDia] = await Promise.all([
@@ -84,17 +84,17 @@ async function loadTendencias(mesActivo: MesActivo): Promise<{
   const sparkline14: DashboardSparkPoint[] = [];
   for (let offset = 0; offset < SPARKLINE_DAYS; offset += 1) {
     const fecha = addDaysToDayKey(sparkFrom, offset);
-    if (fecha > today) {
+    if (fecha > yesterday) {
       break;
     }
     sparkline14.push({ fecha, ventaReal: porFecha.get(fecha) ?? 0 });
   }
 
   const mesDias: DashboardTendenciaDia[] = [];
-  if (today >= monthStart) {
+  if (yesterday >= monthStart) {
     let fecha = monthStart;
     let acumuladoMes = 0;
-    const last = today < monthEnd ? today : monthEnd;
+    const last = yesterday < monthEnd ? yesterday : monthEnd;
     while (fecha <= last) {
       const weekday = isoWeekdayIndex(fecha);
       const ventaReal = porFecha.get(fecha) ?? 0;

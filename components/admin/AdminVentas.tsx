@@ -7,7 +7,7 @@ import {
   formatDiaSemana,
   type VentaDiaria,
 } from "@/lib/admin-ventas-shared";
-import { formatDayKey, todayDayKey } from "@/lib/local-day";
+import { formatDayKey, todayDayKey, yesterdayDayKey } from "@/lib/local-day";
 import { formatPrice, toMoney } from "@/lib/money";
 import { brand } from "@/lib/theme";
 import { AdminInput, adminControlClass, adminLabelClass, cx } from "@/components/admin/AdminField";
@@ -33,7 +33,8 @@ function moneyEqual(left: number, right: number): boolean {
 export function AdminVentas() {
   const router = useRouter();
   const today = todayDayKey();
-  const [fecha, setFecha] = useState(today);
+  const yesterday = yesterdayDayKey();
+  const [fecha, setFecha] = useState(yesterday);
   const [monto, setMonto] = useState("");
   const [ventas, setVentas] = useState<VentaDiaria[]>([]);
   const [loading, setLoading] = useState(true);
@@ -172,7 +173,7 @@ export function AdminVentas() {
               type="date"
               required
               value={fecha}
-              max={today}
+              max={yesterday}
               onChange={(event) => changeFecha(event.target.value)}
             />
           </label>

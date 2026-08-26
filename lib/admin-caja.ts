@@ -1,5 +1,5 @@
 import { parsePrice } from "@/lib/catalog-import";
-import { calendarDayKey, isDayKey, todayDayKey } from "@/lib/local-day";
+import { calendarDayKey, isDayKey, yesterdayDayKey } from "@/lib/local-day";
 import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import { getCajaParametros, getVarianzas } from "@/lib/caja";
@@ -131,8 +131,9 @@ type CajaTurnoBody = {
 
 function cajaTurnoPayload(body: CajaTurnoBody) {
   const fechaRaw = typeof body.fecha === "string" ? body.fecha.trim() : "";
-  const fecha = isDayKey(fechaRaw) ? fechaRaw : todayDayKey();
-  if (!isDayKey(fecha)) {
+  const yesterday = yesterdayDayKey();
+  const fecha = isDayKey(fechaRaw) ? fechaRaw : yesterday;
+  if (!isDayKey(fecha) || fecha > yesterday) {
     throw new Error("La fecha no es válida");
   }
   const turno = isCajaTurnoPeriodo(body.turno) ? body.turno : defaultTurnoPeriodo();
@@ -227,7 +228,7 @@ type CajaLedgerBody = {
 
 function cajaLedgerPayload(body: CajaLedgerBody) {
   const fechaRaw = typeof body.fecha === "string" ? body.fecha.trim() : "";
-  const fecha = isDayKey(fechaRaw) ? fechaRaw : todayDayKey();
+  const fecha = isDayKey(fechaRaw) ? fechaRaw : yesterdayDayKey();
   if (!isDayKey(fecha)) {
     throw new Error("La fecha no es válida");
   }

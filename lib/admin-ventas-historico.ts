@@ -18,7 +18,7 @@ import {
   type DiaSemanaISO,
   type MesActivo,
 } from "@/lib/finanzas";
-import { addDaysToDayKey, todayDayKey } from "@/lib/local-day";
+import { addDaysToDayKey, yesterdayDayKey } from "@/lib/local-day";
 
 const DIAS_SEMANA: DiaSemanaISO[] = [0, 1, 2, 3, 4, 5, 6];
 
@@ -43,11 +43,11 @@ function toMesActivo(mes: string): MesActivo {
 function lastVisibleDay(mesActivo: MesActivo): string | null {
   const from = `${mesActivo.year}-${pad2(mesActivo.month)}-01`;
   const to = `${mesActivo.year}-${pad2(mesActivo.month)}-${pad2(mesActivo.diasEnMes)}`;
-  const today = todayDayKey();
-  if (today < from) {
+  const yesterday = yesterdayDayKey();
+  if (yesterday < from) {
     return null;
   }
-  return today < to ? today : to;
+  return yesterday < to ? yesterday : to;
 }
 
 function mapMesResumen(

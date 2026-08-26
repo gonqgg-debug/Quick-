@@ -10,7 +10,7 @@ import {
   type CajaTurnoListItem,
   type CajaTurnoPeriodo,
 } from "@/lib/admin-caja-shared";
-import { formatDayKey, todayDayKey } from "@/lib/local-day";
+import { formatDayKey, yesterdayDayKey } from "@/lib/local-day";
 import { formatPrice } from "@/lib/money";
 import { brand } from "@/lib/theme";
 import { AdminInput, AdminSelect, AdminTextarea, adminLabelClass } from "@/components/admin/AdminField";
@@ -224,7 +224,7 @@ function TurnoModal({
   onSaved: () => void | Promise<void>;
 }) {
   const isNew = !existing;
-  const [fecha, setFecha] = useState(existing?.fecha ?? todayDayKey());
+  const [fecha, setFecha] = useState(existing?.fecha ?? yesterdayDayKey());
   const [turno, setTurno] = useState<CajaTurnoPeriodo>(existing?.turno ?? defaultTurnoPeriodo());
   const [sistemaTarjeta, setSistemaTarjeta] = useState(existing ? amountDraft(existing.sistemaTarjeta) : "");
   const [sistemaEfectivo, setSistemaEfectivo] = useState(existing ? amountDraft(existing.sistemaEfectivo) : "");
@@ -313,7 +313,13 @@ function TurnoModal({
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <label className={adminLabelClass}>
             Fecha
-            <AdminInput type="date" required value={fecha} onChange={(event) => setFecha(event.target.value)} />
+            <AdminInput
+              type="date"
+              required
+              value={fecha}
+              max={yesterdayDayKey()}
+              onChange={(event) => setFecha(event.target.value)}
+            />
           </label>
           <label className={adminLabelClass}>
             Turno

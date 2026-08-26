@@ -9,7 +9,7 @@ import {
   type CajaLedgerTipo,
   type CajaMoneda,
 } from "@/lib/admin-caja-shared";
-import { formatDayKey, todayDayKey } from "@/lib/local-day";
+import { formatDayKey, yesterdayDayKey } from "@/lib/local-day";
 import { brand } from "@/lib/theme";
 import { AdminInput, AdminSelect, adminLabelClass } from "@/components/admin/AdminField";
 import {
@@ -248,7 +248,7 @@ function MovimientoModal({
   onSaved: () => void | Promise<void>;
 }) {
   const isNew = !existing;
-  const [fecha, setFecha] = useState(existing?.fecha ?? todayDayKey());
+  const [fecha, setFecha] = useState(existing?.fecha ?? yesterdayDayKey());
   const [caja, setCaja] = useState<Caja>(existing?.caja ?? "Chica");
   const [moneda, setMoneda] = useState<CajaMoneda>(existing?.moneda ?? "DOP");
   const [tipo, setTipo] = useState<CajaLedgerTipo>(existing?.tipo ?? "Entrada");

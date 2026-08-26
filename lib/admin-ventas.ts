@@ -1,5 +1,5 @@
 import { parsePrice } from "@/lib/catalog-import";
-import { calendarDayKey, isDayKey } from "@/lib/local-day";
+import { calendarDayKey, isDayKey, yesterdayDayKey } from "@/lib/local-day";
 import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import {
@@ -45,7 +45,7 @@ function mapVenta(row: VentaRow | null): VentaDiaria | null {
 
 export function parseVentaInput(body: { fecha?: unknown; monto?: unknown }): { fecha: string; monto: number } {
   const fecha = typeof body.fecha === "string" ? body.fecha.trim() : "";
-  if (!isDayKey(fecha)) {
+  if (!isDayKey(fecha) || fecha > yesterdayDayKey()) {
     throw new Error("La fecha no es válida");
   }
 
