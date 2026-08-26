@@ -3,6 +3,7 @@ export const brand = {
   orange: "#F79521",
   blue: "#1F82C5",
   white: "#FFFFFF",
+  cream: "#FFF6E8",
   ink: "#1A1A1A",
   muted: "#6B7280",
   error: "#DC2626",

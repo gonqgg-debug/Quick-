@@ -7,6 +7,7 @@ import { LandingBuyHowYouWant } from "@/components/landing/LandingBuyHowYouWant"
 import { LandingCatalogPreview } from "@/components/landing/LandingCatalogPreview";
 import { LandingDifferentiators } from "@/components/landing/LandingDifferentiators";
 import { LandingHeader } from "@/components/landing/LandingHeader";
+import { LandingHero } from "@/components/landing/LandingHero";
 import { LandingInner, SectionWave, SoftCircles } from "@/components/landing/LandingSection";
 import { WhatsAppFloat } from "@/components/landing/WhatsAppFloat";
 import { brand, whatsappHref } from "@/lib/theme";
@@ -135,7 +136,6 @@ function SectionPhoto({
 
 export default function Home() {
   const year = new Date().getFullYear();
-  const hasHero = hasPublicImage("hero.jpeg");
   const hasQuienesSomos = hasPublicImage("ubicacion.webp");
   const hasUbicacion = hasPublicImage("tienda-fachada.jpeg");
   const hasPharmaStorefront = hasPublicImage("pharmaquick-storefront.jpeg");
@@ -143,47 +143,7 @@ export default function Home() {
   return (
     <main style={{ color: brand.ink }}>
       <LandingHeader />
-      {/* Hero */}
-      <section id="inicio" className="scroll-mt-20 bg-white pt-8 md:scroll-mt-24 md:pt-12">
-        <LandingInner className="pb-8 md:pb-10">
-          <div className="grid items-center gap-10 md:grid-cols-2 md:gap-14">
-            <div className="order-2 text-center md:order-1 md:text-left">
-              <Logo variant="contour" className="mx-auto h-16 max-w-[220px] md:mx-0 md:h-20 md:max-w-[280px]" />
-              <h1 className="font-display mt-6 text-balance text-4xl font-extrabold leading-[1.05] md:mt-7 md:text-6xl">
-                Traemos la conveniencia a tu residencial
-              </h1>
-              <p
-                className="mx-auto mt-4 max-w-lg text-base leading-relaxed md:mx-0 md:mt-5 md:text-xl"
-                style={{ color: brand.muted }}
-              >
-                Una cadena de mini markets pensada para las comunidades residenciales — la calidad y
-                consistencia de una cadena, con la cercanía de estar justo donde vives.
-              </p>
-              <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap md:mt-8 md:items-start">
-                <WhatsAppButton />
-                <a
-                  href="#donde-estamos"
-                  className="inline-flex min-h-12 items-center justify-center rounded-full border-2 px-7 py-3.5 text-base font-bold"
-                  style={{ borderColor: brand.green, color: brand.green }}
-                >
-                  Visítanos en tienda
-                </a>
-              </div>
-            </div>
-            {hasHero ? (
-              <div className="relative order-1 mx-auto w-full max-w-md md:order-2 md:max-w-none">
-                <SectionPhoto
-                  src="/images/hero.jpeg"
-                  alt="Repartidor de Quick! Mini Market entregando una bolsa de compras en la puerta de casa"
-                  priority
-                  className="aspect-[4/5]"
-                />
-              </div>
-            ) : null}
-          </div>
-        </LandingInner>
-        <SectionWave fill="#F1F7EA" />
-      </section>
+      <LandingHero />
 
       {/* Quiénes somos */}
       <section id="quienes-somos" className="scroll-mt-20 bg-[#F1F7EA] pt-20 md:scroll-mt-24 md:pt-28">
