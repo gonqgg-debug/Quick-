@@ -30,7 +30,7 @@ function CatalogScreenshot() {
         alt="Catálogo de Quick! Mini Market en el celular: búsqueda, productos con precios y botón para agregar al pedido"
         fill
         unoptimized
-        className="object-cover object-[center_12%] scale-[1.08]"
+        className="object-cover object-[50%_8%] scale-[1.14]"
         sizes="(min-width: 768px) 360px, 320px"
       />
     </PhoneFrame>
