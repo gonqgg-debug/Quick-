@@ -2,14 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { Logo } from "@/components/brand/Logo";
 import { brand } from "@/lib/theme";
 
 const NAV_LINKS = [
-  { href: "#quienes-somos", label: "Quiénes somos" },
-  { href: "#como-funciona", label: "Cómo comprar" },
-  { href: "#catalogo", label: "En el celular" },
-  { href: "#donde-estamos", label: "Dónde estamos" },
+  { href: "/quienes-somos", label: "Quiénes somos" },
+  { href: "/#donde-estamos", label: "Dónde estamos" },
 ] as const;
 
 const NAV_LINK_CLASS =
@@ -18,6 +17,8 @@ const NAV_LINK_CLASS =
 export function LandingHeader() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -35,13 +36,19 @@ export function LandingHeader() {
 
   function goTo(href: string) {
     setOpen(false);
-    const id = href.slice(1);
-    const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (href.startsWith("/#") || href.startsWith("#")) {
+      const id = href.replace(/^\/?#/, "");
+      if (pathname === "/") {
+        const el = document.getElementById(id);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          return;
+        }
+      }
+      window.location.href = `/#${id}`;
       return;
     }
-    window.location.hash = href;
+    router.push(href);
   }
 
   return (
@@ -50,20 +57,16 @@ export function LandingHeader() {
         scrolled ? "shadow-[0_4px_24px_rgba(26,26,26,0.12)]" : ""
       }`}
     >
-      {/* Mobile — OXXO: naranja con logo a la izquierda + verde menú */}
       <div className="md:hidden">
         <div className="flex h-14 overflow-hidden rounded-t-3xl">
-          <a
-            href="#inicio"
+          <Link
+            href="/"
             className="flex min-w-0 flex-1 items-center justify-start bg-[#F79521] px-4"
             aria-label="Quick! Mini Market"
-            onClick={(e) => {
-              e.preventDefault();
-              goTo("#inicio");
-            }}
+            onClick={() => setOpen(false)}
           >
             <Logo variant="contour" className="h-10 w-auto max-w-[180px]" />
-          </a>
+          </Link>
           <button
             type="button"
             className="flex h-full w-14 shrink-0 items-center justify-center bg-[#7EB341]"
@@ -112,19 +115,11 @@ export function LandingHeader() {
         ) : null}
       </div>
 
-      {/* Desktop — naranja con logo + verde de navegación */}
       <div className="hidden md:block">
         <div className="flex items-center justify-center bg-[#F79521] py-3">
-          <a
-            href="#inicio"
-            aria-label="Quick! Mini Market"
-            onClick={(e) => {
-              e.preventDefault();
-              goTo("#inicio");
-            }}
-          >
+          <Link href="/" aria-label="Quick! Mini Market">
             <Logo variant="contour" className="h-14 w-auto max-w-[240px]" />
-          </a>
+          </Link>
         </div>
 
         <div className="relative flex w-full items-center bg-[#7EB341] py-3">

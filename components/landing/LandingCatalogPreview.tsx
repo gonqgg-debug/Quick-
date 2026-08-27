@@ -1,7 +1,7 @@
 import Image from "next/image";
 import { PhoneFrame } from "@/components/PhoneFrame";
 import { brand } from "@/lib/theme";
-import { LandingInner, SectionEyebrow, SectionWave } from "@/components/landing/LandingSection";
+import { LandingInner, SectionWave } from "@/components/landing/LandingSection";
 
 const FEATURES = [
   {
@@ -39,12 +39,11 @@ function CatalogScreenshot() {
 
 export function LandingCatalogPreview() {
   return (
-    <section id="catalogo" className="scroll-mt-20 bg-[#F1F7EA] pt-20 md:scroll-mt-24 md:pt-28">
+    <section className="bg-[#F1F7EA] pt-20 md:pt-28">
       <LandingInner className="pb-20 md:pb-28">
         <div className="grid items-center gap-12 md:grid-cols-2 md:gap-16">
           <div>
-            <SectionEyebrow>En el celular</SectionEyebrow>
-            <h2 className="font-display mt-3 text-4xl font-extrabold leading-tight md:text-5xl">
+            <h2 className="font-display text-4xl font-extrabold leading-tight md:text-5xl">
               Tu mini market, ahora en el celular
             </h2>
             <p className="mt-5 text-base leading-relaxed md:text-lg" style={{ color: brand.muted }}>
@@ -72,7 +71,7 @@ export function LandingCatalogPreview() {
           <CatalogScreenshot />
         </div>
       </LandingInner>
-      <SectionWave fill="#FFFFFF" />
+      <SectionWave fill={brand.green} />
     </section>
   );
 }
