@@ -6,11 +6,11 @@ export function LandingHero() {
   return (
     <section
       id="inicio"
-      className="scroll-mt-20 pt-10 md:scroll-mt-24 md:pt-14"
+      className="scroll-mt-20 pt-16 md:scroll-mt-24 md:pt-24"
       style={{ backgroundColor: brand.cream }}
     >
-      <LandingInner className="pb-10 md:pb-14">
-        <div className="grid items-center gap-10 md:grid-cols-2 md:gap-12 lg:gap-16">
+      <LandingInner className="pb-16 md:pb-24">
+        <div className="grid items-center gap-12 md:grid-cols-2 md:gap-16 lg:gap-20">
           <div className="text-center md:text-left">
             <h1 className="font-display text-balance">
               <span
