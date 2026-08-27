@@ -14,13 +14,13 @@ export function LandingHero() {
           <div className="text-center md:text-left">
             <h1 className="font-display text-balance">
               <span
-                className="block text-2xl font-semibold leading-snug md:text-4xl"
+                className="block text-3xl font-semibold leading-tight md:text-5xl"
                 style={{ color: brand.orange }}
               >
                 Traemos la conveniencia
               </span>
               <span
-                className="mt-2 block text-4xl font-extrabold uppercase leading-[0.95] tracking-tight md:mt-3 md:text-6xl lg:text-7xl"
+                className="mt-1 block text-5xl font-extrabold uppercase leading-[0.9] tracking-tight md:mt-2 md:text-7xl lg:text-8xl"
                 style={{ color: brand.orange }}
               >
                 A tu residencial
@@ -30,7 +30,7 @@ export function LandingHero() {
               className="mx-auto mt-5 max-w-md text-base leading-relaxed md:mx-0 md:mt-6"
               style={{ color: brand.muted }}
             >
-              Mini market de cadena, a un paso de casa.
+              Mini market de cadena, a un paso de tu casa.
             </p>
             <div className="mt-7 flex justify-center md:mt-8 md:justify-start">
               <a
@@ -56,7 +56,7 @@ export function LandingHero() {
           </div>
         </div>
       </LandingInner>
-      <SectionWave fill="#F1F7EA" />
+      <SectionWave fill={brand.green} />
     </section>
   );
 }

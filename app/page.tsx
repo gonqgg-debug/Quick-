@@ -8,6 +8,7 @@ import { LandingCatalogPreview } from "@/components/landing/LandingCatalogPrevie
 import { LandingDifferentiators } from "@/components/landing/LandingDifferentiators";
 import { LandingHeader } from "@/components/landing/LandingHeader";
 import { LandingHero } from "@/components/landing/LandingHero";
+import { QuickCoinsBanner } from "@/components/landing/QuickCoinsBanner";
 import { LandingInner, SectionWave, SoftCircles } from "@/components/landing/LandingSection";
 import { WhatsAppFloat } from "@/components/landing/WhatsAppFloat";
 import { brand, whatsappHref } from "@/lib/theme";
@@ -144,6 +145,7 @@ export default function Home() {
     <main style={{ color: brand.ink }}>
       <LandingHeader />
       <LandingHero />
+      <QuickCoinsBanner />
 
       {/* Quiénes somos */}
       <section id="quienes-somos" className="scroll-mt-20 bg-[#F1F7EA] pt-20 md:scroll-mt-24 md:pt-28">
