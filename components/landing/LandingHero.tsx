@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { brand } from "@/lib/theme";
-import { LandingInner, SectionWave } from "@/components/landing/LandingSection";
+import { LandingInner } from "@/components/landing/LandingSection";
 
 export function LandingHero() {
   return (
@@ -56,7 +56,6 @@ export function LandingHero() {
           </div>
         </div>
       </LandingInner>
-      <SectionWave fill={brand.green} />
     </section>
   );
 }
