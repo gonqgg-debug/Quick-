@@ -59,7 +59,7 @@ export function LandingHeader() {
       }`}
     >
       <div className="md:hidden">
-        <div className="flex h-14 overflow-hidden rounded-t-3xl">
+        <div className="flex h-14 overflow-hidden">
           <Link
             href="/"
             className="flex min-w-0 flex-1 items-center justify-start bg-[#F79521] px-4"
