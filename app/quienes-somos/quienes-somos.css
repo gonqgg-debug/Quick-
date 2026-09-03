@@ -1,0 +1,146 @@
+.quienes-somos-page {
+  color: #333333;
+  line-height: 1.6;
+  background-color: #ffffff;
+}
+
+.quienes-somos-page .container {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* Hero Banner */
+.quienes-somos-page .hero-banner {
+  background-color: #f79521;
+  color: #ffffff;
+  padding: 80px 0;
+}
+
+.quienes-somos-page .sub-heading {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  color: #fff6e8;
+}
+
+.quienes-somos-page .main-heading {
+  font-size: 42px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+/* About Section */
+.quienes-somos-page .about-section {
+  padding: 60px 0;
+}
+
+.quienes-somos-page .content-block {
+  margin-bottom: 40px;
+}
+
+.quienes-somos-page .content-block h2 {
+  font-size: 28px;
+  color: #f79521;
+  margin-bottom: 16px;
+  font-weight: 700;
+}
+
+.quienes-somos-page .content-block p {
+  font-size: 16px;
+  color: #4a4a4a;
+  margin-bottom: 12px;
+}
+
+/* Purpose & Values Section */
+.quienes-somos-page .purpose-values-section {
+  background-color: #f8f9fa;
+  padding: 60px 0;
+}
+
+.quienes-somos-page .grid-2-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+}
+
+.quienes-somos-page .card {
+  background-color: #ffffff;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.quienes-somos-page .card h3 {
+  color: #f79521;
+  font-size: 20px;
+  margin-bottom: 12px;
+  font-weight: 700;
+}
+
+.quienes-somos-page .card p {
+  font-size: 15px;
+  color: #555555;
+}
+
+/* FAQ Section */
+.quienes-somos-page .faq-section {
+  padding: 60px 0;
+}
+
+.quienes-somos-page .faq-title {
+  font-size: 28px;
+  color: #111111;
+  margin-bottom: 30px;
+}
+
+.quienes-somos-page .faq-item {
+  border-bottom: 1px solid #e0e0e0;
+  margin-bottom: 15px;
+  padding-bottom: 15px;
+}
+
+.quienes-somos-page summary {
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #222222;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.quienes-somos-page summary::-webkit-details-marker {
+  display: none;
+}
+
+.quienes-somos-page summary::after {
+  content: "+";
+  font-size: 22px;
+  color: #f79521;
+}
+
+.quienes-somos-page details[open] summary::after {
+  content: "-";
+}
+
+.quienes-somos-page .faq-answer {
+  margin-top: 12px;
+  color: #555555;
+  font-size: 15px;
+}
+
+/* Responsivo */
+@media (max-width: 768px) {
+  .quienes-somos-page .main-heading {
+    font-size: 30px;
+  }
+
+  .quienes-somos-page .grid-2-col {
+    grid-template-columns: 1fr;
+  }
+}

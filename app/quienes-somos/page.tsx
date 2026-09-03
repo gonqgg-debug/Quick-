@@ -1,12 +1,8 @@
-import fs from "fs";
-import path from "path";
 import type { Metadata } from "next";
-import Image from "next/image";
 import { LandingFooter } from "@/components/landing/LandingFooter";
 import { LandingHeader } from "@/components/landing/LandingHeader";
-import { LandingInner, SectionWave } from "@/components/landing/LandingSection";
 import { WhatsAppFloat } from "@/components/landing/WhatsAppFloat";
-import { brand } from "@/lib/theme";
+import "./quienes-somos.css";
 
 export const metadata: Metadata = {
   title: "Quiénes somos | Quick! Mini Market",
@@ -14,113 +10,118 @@ export const metadata: Metadata = {
     "Nacimos para que no tengas que ir lejos por lo que necesitas cada día. Mini markets de cadena para comunidades residenciales.",
 };
 
-function hasPublicImage(filename: string): boolean {
-  return fs.existsSync(path.join(process.cwd(), "public", "images", filename));
-}
-
-const VALUES = [
+const FAQ_ITEMS = [
   {
-    name: "Cercanía",
-    description: "Abrimos donde vives, no donde es más fácil para nosotros.",
-    color: brand.green,
+    question: "¿Qué es Quick! Mini Market?",
+    answer:
+      "Quick! Mini Market es una cadena de mini markets pensada para comunidades residenciales. Traemos productos del día a día directo a donde vives, con la consistencia de una cadena y la cercanía de tu vecino.",
   },
   {
-    name: "Consistencia",
-    description: "Calidad de cadena, trato de vecino.",
-    color: brand.orange,
+    question: "¿Dónde están ubicados?",
+    answer:
+      "Nuestra primera tienda está en Residencial Jardines 3, Pueblo Bávaro. Estamos creciendo hacia más residenciales próximamente.",
   },
   {
-    name: "Simplicidad",
-    description: "Lo que necesitas, sin complicaciones.",
-    color: brand.blue,
-  },
-  {
-    name: "Innovación",
-    description: "Siempre buscando cómo hacer la experiencia más fácil para ti.",
-    color: brand.green,
+    question: "¿Tienen programa de lealtad?",
+    answer:
+      "Sí. QuickCoins es nuestro programa de lealtad. Ganas puntos con cada compra y los cambias por descuentos en tu próximo pedido.",
   },
 ] as const;
 
 export default function QuienesSomosPage() {
-  const hasPhoto = hasPublicImage("ubicacion.webp");
-
   return (
-    <main style={{ color: brand.ink, backgroundColor: brand.cream }}>
+    <>
       <LandingHeader />
-      <header className="pt-16 md:pt-24">
-        <LandingInner className="pb-14 md:pb-16">
-          <span
-            className="text-xs font-bold uppercase tracking-[0.18em]"
-            style={{ color: brand.orange }}
-          >
-            QUIÉNES SOMOS
-          </span>
-          <h1 className="font-display mt-4 max-w-4xl text-4xl font-extrabold leading-tight md:text-6xl">
-            Nacimos para que no tengas que ir lejos por lo que necesitas cada día.
-          </h1>
-        </LandingInner>
-      </header>
+      <main className="quienes-somos-page">
+        <header className="hero-banner">
+          <div className="container">
+            <span className="sub-heading">QUIÉNES SOMOS</span>
+            <h1 className="main-heading">
+              Nacimos para que no tengas que ir lejos
+              <br />
+              por lo que necesitas cada día.
+            </h1>
+          </div>
+        </header>
 
-      <section>
-        <LandingInner className="pb-20 md:pb-24">
-          <div className={`grid items-start gap-10 ${hasPhoto ? "md:grid-cols-2 md:gap-14" : ""}`}>
-            <div className={hasPhoto ? "" : "max-w-3xl"}>
-              <h2 className="font-display text-2xl font-bold md:text-3xl">
-                Una nueva forma de la conveniencia de todos los días
-              </h2>
-              <p className="mt-5 text-base leading-relaxed md:text-lg" style={{ color: brand.muted }}>
-                Quick! Mini Market es una cadena de mini markets diseñada desde cero para comunidades
-                residenciales. Creemos que la conveniencia no debería estar a 20 minutos en carro —
-                debería estar a pasos de tu casa. Por eso abrimos tiendas dentro de los residenciales
-                donde vives, con los productos que necesitas todos los días y un servicio que se
-                mantiene consistente en cada tienda.
+        <section className="about-section">
+          <div className="container">
+            <div className="content-block">
+              <h2>Una nueva forma de conveniencia cotidiana</h2>
+              <p>
+                <strong>Quick! Mini Market</strong> es una cadena de mini markets diseñada desde cero
+                para comunidades residenciales. Creemos que la conveniencia no debería estar a 20
+                minutos en carro — debería estar a pasos de tu casa. Por eso abrimos tiendas dentro
+                de los residenciales donde vives, con los productos que necesitas todos los días y un
+                servicio que se mantiene consistente en cada tienda.
               </p>
             </div>
-            {hasPhoto ? (
-              <div className="relative mx-auto aspect-[4/5] w-full max-w-md overflow-hidden rounded-3xl shadow-[0_18px_40px_rgba(26,26,26,0.12)] md:max-w-none">
-                <Image
-                  src="/images/ubicacion.webp"
-                  alt="Pasillo iluminado de la tienda Quick! Mini Market con estantes de productos"
-                  fill
-                  unoptimized
-                  className="object-cover"
-                  sizes="(min-width: 768px) 480px, 100vw"
-                  priority
-                />
-              </div>
-            ) : null}
-          </div>
-        </LandingInner>
-      </section>
 
-      <section style={{ backgroundColor: brand.ink }}>
-        <LandingInner className="py-20 md:py-24">
-          <div className="grid gap-6 md:grid-cols-2">
-            <article className="rounded-3xl bg-white/10 p-7 md:p-8">
-              <h3 className="font-display text-xl font-extrabold uppercase tracking-wide text-white">Propósito</h3>
-              <p className="mt-4 text-base leading-relaxed text-white/85 md:text-lg">
+            <div className="content-block">
+              <h2>Hecho para la vida diaria. Aquí mismo.</h2>
+              <p>
+                Llevamos esa experiencia a comunidades residenciales, empezando con nuestra primera
+                tienda en Residencial Jardines 3, Pueblo Bávaro. Estamos enfocados en crear valor
+                económico y social mientras entregamos una experiencia de conveniencia moderna en los
+                vecindarios donde tenemos presencia.
+              </p>
+              <p>
+                Cada tienda está diseñada para apoyar las necesidades del día a día — ofreciendo
+                productos de calidad, empleos locales y una contribución positiva a las comunidades
+                que nos reciben.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="purpose-values-section">
+          <div className="container grid-2-col">
+            <div className="card">
+              <h3>PROPÓSITO</h3>
+              <p>
                 Que nadie tenga que ir lejos por lo básico. Existimos para llevar conveniencia real a
                 comunidades residenciales, con un servicio que se siente cercano y una operación que
                 crece junto a los vecinos que nos reciben.
               </p>
-            </article>
-            <article className="rounded-3xl bg-white/10 p-7 md:p-8">
-              <h3 className="font-display text-xl font-extrabold uppercase tracking-wide text-white">Valores</h3>
-              <div className="mt-4 space-y-3 text-white/85">
-                {VALUES.map((value) => (
-                  <p key={value.name} className="text-base leading-relaxed">
-                    <span className="font-bold text-white">{value.name}:</span> {value.description}
-                  </p>
-                ))}
-              </div>
-            </article>
+            </div>
+            <div className="card">
+              <h3>VALORES</h3>
+              <p>
+                <strong>Cercanía:</strong> Abrimos donde vives, no donde es más fácil para nosotros.
+              </p>
+              <p>
+                <strong>Consistencia:</strong> Calidad de cadena, trato de vecino.
+              </p>
+              <p>
+                <strong>Simplicidad:</strong> Lo que necesitas, sin complicaciones.
+              </p>
+              <p>
+                <strong>Innovación:</strong> Siempre buscando cómo hacer la experiencia más fácil
+                para ti.
+              </p>
+            </div>
           </div>
-        </LandingInner>
-        <SectionWave fill={brand.cream} />
-      </section>
+        </section>
 
+        <section className="faq-section">
+          <div className="container">
+            <h2 className="faq-title">Preguntas frecuentes</h2>
+
+            {FAQ_ITEMS.map((item) => (
+              <div className="faq-item" key={item.question}>
+                <details>
+                  <summary>{item.question}</summary>
+                  <div className="faq-answer">
+                    <p>{item.answer}</p>
+                  </div>
+                </details>
+              </div>
+            ))}
+          </div>
+        </section>
+      </main>
       <LandingFooter />
       <WhatsAppFloat />
-    </main>
+    </>
   );
 }
