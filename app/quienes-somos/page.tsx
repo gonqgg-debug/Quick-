@@ -37,7 +37,7 @@ export default function QuienesSomosPage() {
           <div className="hero-title-card">
             <h1 className="hero-title">QUIÉNES SOMOS</h1>
             <p className="hero-subtitle">
-              Nacimos para que no tengas que ir lejos por lo que necesitas cada día.
+              Un poco sobre nosotros. Mucho sobre hacerte la vida más fácil.
             </p>
           </div>
         </header>

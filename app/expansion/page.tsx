@@ -23,7 +23,15 @@ export default function ExpansionPage() {
         </header>
 
         <section className="partner-band">
-          <h2>Trae Quick! a tu comunidad</h2>
+          <div className="container">
+            <h2>Trae Quick! a tu comunidad</h2>
+            <p>
+              En Quick! Mini Market evaluamos de forma continua oportunidades para llevar
+              conveniencia a más comunidades residenciales. Buscamos locales bien ubicados,
+              espacios dentro de residenciales y propuestas que encajen con nuestro plan de
+              crecimiento a largo plazo.
+            </p>
+          </div>
         </section>
 
         <section className="lead-section">

@@ -12,6 +12,10 @@
 
 /* Hero Banner */
 .quienes-somos-page .hero-banner {
+  --s: 14px;
+  --c1: #fff6e8;
+  --c2: #f79521;
+  --g: radial-gradient(30% 50% at 30% 100%, #0000 66%, var(--c1) 67% 98%, #0000);
   position: relative;
   display: flex;
   align-items: flex-end;
@@ -26,14 +30,11 @@
   content: "";
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(135deg, #fde9c8 25%, transparent 25%),
-    linear-gradient(225deg, #fde9c8 25%, transparent 25%),
-    linear-gradient(45deg, #fde9c8 25%, transparent 25%),
-    linear-gradient(315deg, #fde9c8 25%, #f79521 25%);
-  background-position: 35px 0, 35px 0, 0 0, 0 0;
-  background-size: 70px 70px;
-  background-repeat: repeat;
+  background:
+    var(--g),
+    var(--g) calc(5 * var(--s)) calc(3 * var(--s)),
+    repeating-linear-gradient(90deg, var(--c1) 0 10%, var(--c2) 0 50%);
+  background-size: calc(10 * var(--s)) calc(6 * var(--s));
 }
 
 .quienes-somos-page .hero-title-card {
