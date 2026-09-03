@@ -17,7 +17,7 @@
   align-items: center;
   justify-content: center;
   min-height: 280px;
-  padding: 72px 20px 96px;
+  padding: 72px 20px 48px;
   background-color: #f79521;
   overflow: hidden;
 }
@@ -69,24 +69,25 @@
 
 /* About Section */
 .quienes-somos-page .about-section {
-  padding: 60px 0;
+  padding: 12px 0 72px;
+  background-color: #f79521;
 }
 
 .quienes-somos-page .content-block {
-  margin-bottom: 40px;
+  margin-bottom: 0;
 }
 
 .quienes-somos-page .content-block h2 {
   font-size: 28px;
-  color: #f79521;
+  color: #fde9c8;
   margin-bottom: 16px;
   font-weight: 700;
 }
 
 .quienes-somos-page .content-block p {
   font-size: 16px;
-  color: #4a4a4a;
-  margin-bottom: 12px;
+  color: #ffffff;
+  margin-bottom: 0;
 }
 
 /* Split photo sections (OXXO layout) */
@@ -191,7 +192,7 @@
 @media (max-width: 768px) {
   .quienes-somos-page .hero-banner {
     min-height: 220px;
-    padding: 48px 16px 72px;
+    padding: 48px 16px 32px;
   }
 
   .quienes-somos-page .hero-title-card {
