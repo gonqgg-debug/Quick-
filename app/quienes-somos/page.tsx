@@ -57,49 +57,62 @@ export default function QuienesSomosPage() {
               </p>
             </div>
 
-            <div className="content-block">
-              <h2>Hecho para la vida diaria. Aquí mismo.</h2>
-              <p>
-                Llevamos esa experiencia a comunidades residenciales, empezando con nuestra primera
-                tienda en Residencial Jardines 3, Pueblo Bávaro. Estamos enfocados en crear valor
-                económico y social mientras entregamos una experiencia de conveniencia moderna en los
-                vecindarios donde tenemos presencia.
-              </p>
-              <p>
-                Cada tienda está diseñada para apoyar las necesidades del día a día — ofreciendo
-                productos de calidad, empleos locales y una contribución positiva a las comunidades
-                que nos reciben.
-              </p>
-            </div>
           </div>
         </section>
 
-        <section className="purpose-values-section">
-          <div className="container grid-2-col">
-            <div className="card">
-              <h3>PROPÓSITO</h3>
-              <p>
-                Que nadie tenga que ir lejos por lo básico. Existimos para llevar conveniencia real a
-                comunidades residenciales, con un servicio que se siente cercano y una operación que
-                crece junto a los vecinos que nos reciben.
-              </p>
-            </div>
-            <div className="card">
-              <h3>VALORES</h3>
-              <p>
-                <strong>Cercanía:</strong> Abrimos donde vives, no donde es más fácil para nosotros.
-              </p>
-              <p>
-                <strong>Consistencia:</strong> Calidad de cadena, trato de vecino.
-              </p>
-              <p>
-                <strong>Simplicidad:</strong> Lo que necesitas, sin complicaciones.
-              </p>
-              <p>
-                <strong>Innovación:</strong> Siempre buscando cómo hacer la experiencia más fácil
-                para ti.
-              </p>
-            </div>
+        <section className="split-section">
+          <div className="split-copy">
+            <h2>Hecho para la vida diaria. Aquí mismo.</h2>
+            <p>
+              Llevamos esa experiencia a comunidades residenciales, empezando con nuestra primera
+              tienda en Residencial Jardines 3, Pueblo Bávaro. Estamos enfocados en crear valor
+              económico y social mientras entregamos una experiencia de conveniencia moderna en los
+              vecindarios donde tenemos presencia.
+            </p>
+            <p>
+              Cada tienda está diseñada para apoyar las necesidades del día a día — ofreciendo
+              productos de calidad, empleos locales y una contribución positiva a las comunidades
+              que nos reciben.
+            </p>
+          </div>
+          <div className="split-photo">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/quienes-somos-tienda.jpg"
+              alt="Interior de Quick! Mini Market con una colaboradora en caja y pasillos de productos"
+            />
+          </div>
+        </section>
+
+        <section className="split-section split-section-reverse">
+          <div className="split-photo">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/quienes-somos-equipo.jpg"
+              alt="Equipo de Quick! Mini Market frente a la tienda"
+            />
+          </div>
+          <div className="split-copy">
+            <h3>PROPÓSITO</h3>
+            <p>
+              Que nadie tenga que ir lejos por lo básico. Existimos para llevar conveniencia real a
+              comunidades residenciales, con un servicio que se siente cercano y una operación que
+              crece junto a los vecinos que nos reciben.
+            </p>
+            <h3>VALORES</h3>
+            <p>
+              <strong>Cercanía:</strong> Abrimos donde vives, no donde es más fácil para nosotros.
+            </p>
+            <p>
+              <strong>Consistencia:</strong> Calidad de cadena, trato de vecino.
+            </p>
+            <p>
+              <strong>Simplicidad:</strong> Lo que necesitas, sin complicaciones.
+            </p>
+            <p>
+              <strong>Innovación:</strong> Siempre buscando cómo hacer la experiencia más fácil para
+              ti.
+            </p>
           </div>
         </section>
 
