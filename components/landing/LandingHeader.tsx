@@ -8,6 +8,7 @@ import { brand } from "@/lib/theme";
 
 const NAV_LINKS = [
   { href: "/quienes-somos", label: "Quiénes somos" },
+  { href: "/expansion", label: "Expansión" },
   { href: "/#donde-estamos", label: "Dónde estamos" },
 ] as const;
 
