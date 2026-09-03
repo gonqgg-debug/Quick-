@@ -34,13 +34,11 @@ export default function QuienesSomosPage() {
       <LandingHeader />
       <main className="quienes-somos-page">
         <header className="hero-banner">
-          <div className="container">
-            <span className="sub-heading">QUIÉNES SOMOS</span>
-            <h1 className="main-heading">
-              Nacimos para que no tengas que ir lejos
-              <br />
-              por lo que necesitas cada día.
-            </h1>
+          <div className="hero-title-card">
+            <h1 className="hero-title">QUIÉNES SOMOS</h1>
+            <p className="hero-subtitle">
+              Nacimos para que no tengas que ir lejos por lo que necesitas cada día.
+            </p>
           </div>
         </header>
 
