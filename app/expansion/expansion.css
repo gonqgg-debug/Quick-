@@ -135,7 +135,7 @@
   color: #1a1a1a;
 }
 
-.expansion-page input,
+.expansion-page input:not([type="radio"]):not([type="checkbox"]),
 .expansion-page select,
 .expansion-page textarea {
   width: 100%;
@@ -160,19 +160,32 @@
 }
 
 .expansion-page .radio-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px 24px;
-  min-height: 46px;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .expansion-page .radio-option {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 500;
+  justify-content: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 0 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.expansion-page .radio-option input {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: #f79521;
 }
 
 .expansion-page .checkbox-row {
