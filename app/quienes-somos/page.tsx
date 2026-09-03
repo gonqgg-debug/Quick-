@@ -47,13 +47,35 @@ export default function QuienesSomosPage() {
   return (
     <main style={{ color: brand.ink, backgroundColor: brand.cream }}>
       <LandingHeader />
-
-      {/* Hero */}
-      <section className="pt-16 md:pt-24">
-        <LandingInner className="pb-20 md:pb-28">
-          <div
-            className={`grid items-center gap-10 ${hasPhoto ? "md:grid-cols-2 md:gap-14" : ""}`}
+      <header className="pt-16 md:pt-24">
+        <LandingInner className="pb-14 md:pb-16">
+          <span
+            className="text-xs font-bold uppercase tracking-[0.18em]"
+            style={{ color: brand.orange }}
           >
+            QUIÉNES SOMOS
+          </span>
+          <h1 className="font-display mt-4 max-w-4xl text-4xl font-extrabold leading-tight md:text-6xl">
+            Nacimos para que no tengas que ir lejos por lo que necesitas cada día.
+          </h1>
+        </LandingInner>
+      </header>
+
+      <section>
+        <LandingInner className="pb-20 md:pb-24">
+          <div className={`grid items-start gap-10 ${hasPhoto ? "md:grid-cols-2 md:gap-14" : ""}`}>
+            <div className={hasPhoto ? "" : "max-w-3xl"}>
+              <h2 className="font-display text-2xl font-bold md:text-3xl">
+                Una nueva forma de la conveniencia de todos los días
+              </h2>
+              <p className="mt-5 text-base leading-relaxed md:text-lg" style={{ color: brand.muted }}>
+                Quick! Mini Market es una cadena de mini markets diseñada desde cero para comunidades
+                residenciales. Creemos que la conveniencia no debería estar a 20 minutos en carro —
+                debería estar a pasos de tu casa. Por eso abrimos tiendas dentro de los residenciales
+                donde vives, con los productos que necesitas todos los días y un servicio que se
+                mantiene consistente en cada tienda.
+              </p>
+            </div>
             {hasPhoto ? (
               <div className="relative mx-auto aspect-[4/5] w-full max-w-md overflow-hidden rounded-3xl shadow-[0_18px_40px_rgba(26,26,26,0.12)] md:max-w-none">
                 <Image
@@ -67,80 +89,31 @@ export default function QuienesSomosPage() {
                 />
               </div>
             ) : null}
-            <div className={hasPhoto ? "" : "mx-auto max-w-2xl"}>
-              <p
-                className="text-xs font-bold uppercase tracking-[0.18em]"
-                style={{ color: brand.orange }}
-              >
-                Quiénes somos
-              </p>
-              <h1 className="font-display mt-3 text-4xl font-extrabold leading-tight md:text-5xl">
-                Nacimos para que no tengas que ir lejos por lo que necesitas
-                cada día.
-              </h1>
-              <p
-                className="mt-5 text-base leading-relaxed md:text-lg"
-                style={{ color: brand.muted }}
-              >
-                Quick! Mini Market es una cadena de mini markets diseñada desde
-                cero para comunidades residenciales. Creemos que la conveniencia
-                no debería estar a 20 minutos en carro — debería estar a pasos
-                de tu casa. Por eso abrimos tiendas dentro de los residenciales
-                donde vives, con los productos que necesitas todos los días y un
-                servicio que se mantiene consistente en cada tienda.
-              </p>
-            </div>
           </div>
         </LandingInner>
       </section>
 
-      {/* Propósito y Valores */}
       <section style={{ backgroundColor: brand.ink }}>
-        <LandingInner className="py-20 md:py-28">
-          <div className="grid gap-12 md:grid-cols-2 md:gap-16">
-            {/* Propósito */}
-            <div>
-              <p
-                className="text-xs font-bold uppercase tracking-[0.18em]"
-                style={{ color: brand.orange }}
-              >
-                Propósito
+        <LandingInner className="py-20 md:py-24">
+          <div className="grid gap-6 md:grid-cols-2">
+            <article className="rounded-3xl bg-white/10 p-7 md:p-8">
+              <h3 className="font-display text-xl font-extrabold uppercase tracking-wide text-white">Propósito</h3>
+              <p className="mt-4 text-base leading-relaxed text-white/85 md:text-lg">
+                Que nadie tenga que ir lejos por lo básico. Existimos para llevar conveniencia real a
+                comunidades residenciales, con un servicio que se siente cercano y una operación que
+                crece junto a los vecinos que nos reciben.
               </p>
-              <p className="mt-4 text-lg leading-relaxed text-white/90 md:text-xl">
-                Que nadie tenga que ir lejos por lo básico. Existimos para
-                llevar conveniencia real a comunidades residenciales, con un
-                servicio que se siente cercano y una operación que crece junto a
-                los vecinos que nos reciben.
-              </p>
-            </div>
-
-            {/* Valores */}
-            <div>
-              <p
-                className="text-xs font-bold uppercase tracking-[0.18em]"
-                style={{ color: brand.orange }}
-              >
-                Valores
-              </p>
-              <div className="mt-4 grid gap-4">
-                {VALUES.map((v) => (
-                  <div key={v.name} className="flex items-start gap-3">
-                    <span
-                      className="mt-1.5 h-2.5 w-2.5 flex-shrink-0 rounded-full"
-                      style={{ backgroundColor: v.color }}
-                    />
-                    <div>
-                      <p className="font-display text-base font-bold text-white">
-                        {v.name}
-                      </p>
-                      <p className="text-sm leading-relaxed text-white/70">
-                        {v.description}
-                      </p>
-                    </div>
-                  </div>
+            </article>
+            <article className="rounded-3xl bg-white/10 p-7 md:p-8">
+              <h3 className="font-display text-xl font-extrabold uppercase tracking-wide text-white">Valores</h3>
+              <div className="mt-4 space-y-3 text-white/85">
+                {VALUES.map((value) => (
+                  <p key={value.name} className="text-base leading-relaxed">
+                    <span className="font-bold text-white">{value.name}:</span> {value.description}
+                  </p>
                 ))}
               </div>
-            </div>
+            </article>
           </div>
         </LandingInner>
         <SectionWave fill={brand.cream} />
