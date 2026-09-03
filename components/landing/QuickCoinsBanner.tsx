@@ -1,8 +1,8 @@
 import { brand, quickCoinsLogoPublicPath, whatsappHref } from "@/lib/theme";
 
 const CREAM = "#FDE9C8";
+const ORANGE = "#F79521";
 const GREEN = brand.green;
-const HEADLINE_GREEN = "#2D5016";
 const JOIN_MESSAGE = "Hola! Quiero unirme a QuickCoins 🪙";
 
 const diamondPattern = {
@@ -10,37 +10,12 @@ const diamondPattern = {
     linear-gradient(135deg, ${CREAM} 25%, transparent 25%),
     linear-gradient(225deg, ${CREAM} 25%, transparent 25%),
     linear-gradient(45deg, ${CREAM} 25%, transparent 25%),
-    linear-gradient(315deg, ${CREAM} 25%, ${GREEN} 25%)
+    linear-gradient(315deg, ${CREAM} 25%, ${ORANGE} 25%)
   `,
   backgroundPosition: "25px 0, 25px 0, 0 0, 0 0",
   backgroundSize: "50px 50px",
   backgroundRepeat: "repeat",
 } as const;
-
-function AlternatingHeadline({ lines }: { lines: readonly string[] }) {
-  let charIndex = 0;
-
-  return (
-    <>
-      {lines.map((line, lineIndex) => (
-        <span key={line} className={lineIndex > 0 ? "block" : undefined}>
-          {line.split("").map((char, i) => {
-            if (char === " ") {
-              return <span key={`${lineIndex}-${i}`}>&nbsp;</span>;
-            }
-            const color = charIndex % 2 === 0 ? CREAM : HEADLINE_GREEN;
-            charIndex += 1;
-            return (
-              <span key={`${lineIndex}-${i}`} style={{ color }}>
-                {char}
-              </span>
-            );
-          })}
-        </span>
-      ))}
-    </>
-  );
-}
 
 export function QuickCoinsBanner() {
   const joinHref = `${whatsappHref()}?text=${encodeURIComponent(JOIN_MESSAGE)}`;
@@ -63,12 +38,21 @@ export function QuickCoinsBanner() {
           </div>
         </div>
 
-        <h2 className="font-display text-4xl font-black uppercase leading-[1.05] md:text-6xl">
-          <AlternatingHeadline lines={["Gana con cada", "pedido"]} />
+        <h2
+          className="font-display text-4xl font-black uppercase leading-[1.05] md:text-6xl"
+          style={{ color: CREAM }}
+        >
+          Gana con cada
+          <br />
+          pedido
         </h2>
 
-        <p className="text-base font-normal text-white">
-          Únete a QuickCoins y cambia tus puntos por descuentos en tu próximo pedido.
+        <p className="text-base font-normal" style={{ color: CREAM }}>
+          Únete a{" "}
+          <span className="font-bold" style={{ color: ORANGE }}>
+            QuickCoins
+          </span>{" "}
+          y cambia tus puntos por descuentos en tu próximo pedido.
         </p>
       </div>
 
@@ -78,7 +62,7 @@ export function QuickCoinsBanner() {
           target="_blank"
           rel="noopener noreferrer"
           className="z-10 ml-0 flex-shrink-0 whitespace-nowrap rounded-full px-7 py-3 text-sm font-bold uppercase shadow-md transition hover:brightness-95 md:ml-auto"
-          style={{ backgroundColor: CREAM, color: brand.orange }}
+          style={{ backgroundColor: ORANGE, color: CREAM }}
         >
           Únete a QuickCoins
         </a>
