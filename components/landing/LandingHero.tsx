@@ -11,16 +11,16 @@ export function LandingHero() {
     >
       <LandingInner className="pb-16 md:pb-24 max-md:!px-4">
         <div className="grid items-center gap-12 md:grid-cols-2 md:gap-16 lg:gap-20">
-          <div className="text-center md:text-left">
+          <div className="min-w-0 text-center md:text-left">
             <h1 className="font-display">
               <span
-                className="block whitespace-nowrap text-3xl font-semibold leading-tight md:text-5xl"
+                className="block max-md:whitespace-nowrap text-3xl font-semibold leading-tight md:text-5xl"
                 style={{ color: brand.orange }}
               >
                 Traemos la conveniencia
               </span>
               <span
-                className="mt-1 block whitespace-nowrap text-5xl font-extrabold uppercase leading-[0.9] tracking-[-0.04em] md:mt-2 md:text-7xl md:tracking-tight lg:text-8xl"
+                className="mt-1 block max-md:whitespace-nowrap text-5xl font-extrabold uppercase leading-[0.9] tracking-[-0.04em] md:mt-2 md:text-6xl md:tracking-tight lg:text-7xl"
                 style={{ color: brand.orange }}
               >
                 A tu residencial
