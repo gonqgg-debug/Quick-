@@ -6,14 +6,36 @@ import { usePathname, useRouter } from "next/navigation";
 import { Logo } from "@/components/brand/Logo";
 import { brand } from "@/lib/theme";
 
-const NAV_LINKS = [
+type NavLink = {
+  href: string;
+  label: string;
+  accent?: "pharma";
+};
+
+const NAV_LINKS: NavLink[] = [
   { href: "/quienes-somos", label: "Quiénes somos" },
   { href: "/expansion", label: "Expansión" },
   { href: "/#donde-estamos", label: "Dónde estamos" },
-] as const;
+  { href: "/pharmaquick", label: "PharmaQuick!", accent: "pharma" },
+];
 
 const NAV_LINK_CLASS =
   "text-[13px] font-bold uppercase tracking-[0.12em] text-white transition hover:text-white hover:underline underline-offset-4";
+
+function NavLabel({ link }: { link: NavLink }) {
+  if (link.accent !== "pharma") return <>{link.label}</>;
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span
+        className="h-2 w-2 shrink-0 rounded-full"
+        style={{ backgroundColor: brand.blue, boxShadow: "0 0 0 2px #ffffff" }}
+        aria-hidden="true"
+      />
+      {link.label}
+    </span>
+  );
+}
 
 export function LandingHeader() {
   const [scrolled, setScrolled] = useState(false);
@@ -97,7 +119,7 @@ export function LandingHeader() {
                       goTo(link.href);
                     }}
                   >
-                    {link.label}
+                    <NavLabel link={link} />
                   </a>
                 </li>
               ))}
@@ -125,7 +147,7 @@ export function LandingHeader() {
 
         <div className="relative flex w-full items-center bg-[#7EB341] py-3">
           <nav
-            className="absolute left-1/2 flex -translate-x-1/2 items-center gap-8"
+            className="absolute left-1/2 flex -translate-x-1/2 items-center gap-5 lg:gap-8"
             aria-label="Secciones"
           >
             {NAV_LINKS.map((link) => (
@@ -138,7 +160,7 @@ export function LandingHeader() {
                   goTo(link.href);
                 }}
               >
-                {link.label}
+                <NavLabel link={link} />
               </a>
             ))}
           </nav>

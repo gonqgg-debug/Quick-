@@ -1,0 +1,121 @@
+.pharmaquick-page {
+  color: #333333;
+  line-height: 1.6;
+  background-color: #ffffff;
+}
+
+.pharmaquick-page .container {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.pharmaquick-page .hero-banner {
+  --s: 14px;
+  --c1: #eaf4fb;
+  --c2: #1f82c5;
+  --g: radial-gradient(30% 50% at 30% 100%, #0000 66%, var(--c1) 67% 98%, #0000);
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-height: 240px;
+  padding: 48px 24px 0;
+  background-color: #1f82c5;
+  overflow: visible;
+}
+
+.pharmaquick-page .hero-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    var(--g),
+    var(--g) calc(5 * var(--s)) calc(3 * var(--s)),
+    repeating-linear-gradient(90deg, var(--c1) 0 10%, var(--c2) 0 50%);
+  background-size: calc(10 * var(--s)) calc(6 * var(--s));
+}
+
+.pharmaquick-page .hero-title-card {
+  position: relative;
+  z-index: 1;
+  width: min(1100px, 100%);
+  margin-bottom: -88px;
+  padding: 56px 56px;
+  text-align: center;
+  background-color: #eaf4fb;
+  border-radius: 40px;
+}
+
+.pharmaquick-page .hero-title {
+  font-family: var(--font-brand-display), system-ui, sans-serif;
+  font-size: 72px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #1f82c5;
+}
+
+.pharmaquick-page .hero-subtitle {
+  margin-top: 18px;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #1f82c5;
+}
+
+.pharmaquick-page .about-section {
+  padding: 128px 0 88px;
+  background-color: #1f82c5;
+}
+
+.pharmaquick-page .content-block {
+  margin-bottom: 40px;
+}
+
+.pharmaquick-page .content-block:last-child {
+  margin-bottom: 0;
+}
+
+.pharmaquick-page .content-block h2 {
+  font-size: 36px;
+  color: #eaf4fb;
+  margin-bottom: 20px;
+  font-weight: 700;
+}
+
+.pharmaquick-page .content-block p {
+  font-size: 18px;
+  color: #ffffff;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 768px) {
+  .pharmaquick-page .hero-banner {
+    min-height: 180px;
+    padding: 36px 16px 0;
+  }
+
+  .pharmaquick-page .hero-title-card {
+    margin-bottom: -56px;
+    padding: 32px 22px;
+    border-radius: 28px;
+  }
+
+  .pharmaquick-page .hero-title {
+    font-size: 36px;
+  }
+
+  .pharmaquick-page .hero-subtitle {
+    font-size: 16px;
+  }
+
+  .pharmaquick-page .about-section {
+    padding-top: 88px;
+  }
+
+  .pharmaquick-page .content-block h2 {
+    font-size: 26px;
+  }
+}

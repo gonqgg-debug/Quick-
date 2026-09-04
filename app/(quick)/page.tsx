@@ -2,12 +2,9 @@ import fs from "fs";
 import path from "path";
 import Image from "next/image";
 import { LandingCatalogPreview } from "@/components/landing/LandingCatalogPreview";
-import { LandingFooter } from "@/components/landing/LandingFooter";
-import { LandingHeader } from "@/components/landing/LandingHeader";
 import { LandingHero } from "@/components/landing/LandingHero";
 import { QuickCoinsBanner } from "@/components/landing/QuickCoinsBanner";
 import { LandingInner, SectionWave, SoftCircles } from "@/components/landing/LandingSection";
-import { WhatsAppFloat } from "@/components/landing/WhatsAppFloat";
 import { brand } from "@/lib/theme";
 
 function hasPublicImage(filename: string): boolean {
@@ -60,7 +57,6 @@ export default function Home() {
 
   return (
     <main style={{ color: brand.ink }}>
-      <LandingHeader />
       <LandingHero />
       <QuickCoinsBanner />
       <LandingCatalogPreview />
@@ -123,8 +119,6 @@ export default function Home() {
         <SectionWave fill={brand.ink} />
       </section>
 
-      <LandingFooter />
-      <WhatsAppFloat />
     </main>
   );
 }

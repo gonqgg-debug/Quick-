@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
 import { ExpansionForm } from "@/components/landing/ExpansionForm";
-import { LandingFooter } from "@/components/landing/LandingFooter";
-import { LandingHeader } from "@/components/landing/LandingHeader";
-import { WhatsAppFloat } from "@/components/landing/WhatsAppFloat";
 import "./expansion.css";
 
 export const metadata: Metadata = {
@@ -14,7 +11,6 @@ export const metadata: Metadata = {
 export default function ExpansionPage() {
   return (
     <>
-      <LandingHeader />
       <main className="expansion-page">
         <header className="hero-banner">
           <div className="hero-title-card">
@@ -48,8 +44,6 @@ export default function ExpansionPage() {
           </div>
         </section>
       </main>
-      <LandingFooter />
-      <WhatsAppFloat />
     </>
   );
 }

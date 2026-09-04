@@ -1,7 +1,4 @@
 import type { Metadata } from "next";
-import { LandingFooter } from "@/components/landing/LandingFooter";
-import { LandingHeader } from "@/components/landing/LandingHeader";
-import { WhatsAppFloat } from "@/components/landing/WhatsAppFloat";
 import "./quienes-somos.css";
 
 export const metadata: Metadata = {
@@ -31,7 +28,6 @@ const FAQ_ITEMS = [
 export default function QuienesSomosPage() {
   return (
     <>
-      <LandingHeader />
       <main className="quienes-somos-page">
         <header className="hero-banner">
           <div className="hero-title-card">
@@ -131,8 +127,6 @@ export default function QuienesSomosPage() {
           </div>
         </section>
       </main>
-      <LandingFooter />
-      <WhatsAppFloat />
     </>
   );
 }
