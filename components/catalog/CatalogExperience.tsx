@@ -720,10 +720,12 @@ export function CatalogExperience({
         {selectedCategory ? (
           <div className="mt-6">
             {isPharmaCategory(selectedCategory) ? (
-              <div className="mb-4 overflow-hidden rounded-3xl text-white" style={{ backgroundColor: brand.blue }}>
+              <div className="mb-4 overflow-hidden rounded-3xl" style={{ backgroundColor: "#EAF4FB" }}>
                 <div className="px-5 py-6">
-                  <Logo variant="pharma" onDark className="h-20 w-auto max-w-full sm:h-24" />
-                  <p className="mt-3 text-base text-white/90">Farmacia y cuidado personal</p>
+                  <Logo variant="pharma" className="h-12 w-auto max-w-full sm:h-14" />
+                  <p className="mt-3 text-base" style={{ color: brand.blue }}>
+                    Farmacia y cuidado personal
+                  </p>
                 </div>
               </div>
             ) : null}

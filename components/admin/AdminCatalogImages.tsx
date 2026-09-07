@@ -7,11 +7,17 @@ import type { CatalogImageQueueItem, CatalogImageStats } from "@/lib/product-ima
 import { brand } from "@/lib/theme";
 
 const TEST_WEB_LIMIT = 8;
+const PAGE_SIZE = 48;
+const LETTERS = ["#", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")] as const;
 
 export function AdminCatalogImages() {
   const router = useRouter();
   const [stats, setStats] = useState<CatalogImageStats | null>(null);
   const [queue, setQueue] = useState<CatalogImageQueueItem[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [letter, setLetter] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
@@ -20,8 +26,15 @@ export function AdminCatalogImages() {
   const [moreOptionsItem, setMoreOptionsItem] = useState<CatalogImageQueueItem | null>(null);
   const scanStop = useRef(false);
 
-  const load = useCallback(async () => {
-    const response = await fetch("/api/admin/catalogo/imagenes", { credentials: "include" });
+  const load = useCallback(async (nextPage = page, nextLetter = letter) => {
+    const params = new URLSearchParams({
+      page: String(nextPage),
+      pageSize: String(PAGE_SIZE),
+    });
+    if (nextLetter) {
+      params.set("letter", nextLetter);
+    }
+    const response = await fetch(`/api/admin/catalogo/imagenes?${params}`, { credentials: "include" });
     if (response.status === 401) {
       router.replace("/admin/login");
       return;
@@ -30,10 +43,19 @@ export function AdminCatalogImages() {
       const body = (await response.json().catch(() => null)) as { error?: string } | null;
       throw new Error(body?.error || "No pudimos cargar la cola");
     }
-    const body = (await response.json()) as { stats: CatalogImageStats; queue: CatalogImageQueueItem[] };
+    const body = (await response.json()) as {
+      stats: CatalogImageStats;
+      queue: CatalogImageQueueItem[];
+      total: number;
+      page: number;
+      totalPages: number;
+    };
     setStats(body.stats);
     setQueue(body.queue);
-  }, [router]);
+    setTotal(body.total);
+    setPage(body.page);
+    setTotalPages(body.totalPages);
+  }, [letter, page, router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -220,6 +242,8 @@ export function AdminCatalogImages() {
     }
   }
 
+  const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const to = Math.min(page * PAGE_SIZE, total);
   const canBatch = Boolean(stats && (stats.awaitingOff > 0 || stats.awaitingWeb > 0));
   const pendingSearch = stats ? stats.awaitingOff + stats.awaitingWeb : 0;
   const canWebTest = Boolean(stats && stats.awaitingWeb > 0);
@@ -333,12 +357,60 @@ export function AdminCatalogImages() {
         </p>
       ) : null}
 
+      <div className="mt-6 flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => {
+            setLetter(null);
+            setPage(1);
+            void load(1, null).catch((loadError) => {
+              setError(loadError instanceof Error ? loadError.message : "Error al cargar");
+            });
+          }}
+          className="rounded-full px-3 text-xs font-bold"
+          style={{
+            minHeight: 32,
+            backgroundColor: letter === null ? brand.orange : "#F3F4F6",
+            color: letter === null ? "#FFFFFF" : brand.ink,
+          }}
+        >
+          Todas
+        </button>
+        {LETTERS.map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => {
+              setLetter(item);
+              setPage(1);
+              void load(1, item).catch((loadError) => {
+                setError(loadError instanceof Error ? loadError.message : "Error al cargar");
+              });
+            }}
+            className="rounded-full px-2.5 text-xs font-bold"
+            style={{
+              minHeight: 32,
+              backgroundColor: letter === item ? brand.orange : "#F3F4F6",
+              color: letter === item ? "#FFFFFF" : brand.ink,
+            }}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
+
       {loading ? (
         <div className="mt-6 h-48 animate-pulse rounded-[24px] bg-gray-100" />
       ) : queue.length === 0 ? (
         <div className="mt-6 rounded-[28px] px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
-          <p className="font-display text-xl font-bold">No hay productos pendientes de foto</p>
-          <p className="mt-2 text-sm text-brand-muted">Cuando importes más catálogo, aquí se llena la cola.</p>
+          <p className="font-display text-xl font-bold">
+            {letter ? `No hay pendientes en ${letter}` : "No hay productos pendientes de foto"}
+          </p>
+          <p className="mt-2 text-sm text-brand-muted">
+            {letter
+              ? "Prueba otra letra o “Todas” para seguir avanzando."
+              : "Cuando importes más catálogo, aquí se llena la cola."}
+          </p>
         </div>
       ) : (
         <ul className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -430,6 +502,47 @@ export function AdminCatalogImages() {
           ))}
         </ul>
       )}
+
+      {!loading && total > 0 ? (
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-brand-muted">
+            {from.toLocaleString("es-DO")}–{to.toLocaleString("es-DO")} de {total.toLocaleString("es-DO")}
+            {letter ? ` · letra ${letter}` : ""} · página {page} de {totalPages}
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => {
+                const next = page - 1;
+                setPage(next);
+                void load(next, letter).catch((loadError) => {
+                  setError(loadError instanceof Error ? loadError.message : "Error al cargar");
+                });
+              }}
+              className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
+              style={{ minHeight: 40, backgroundColor: "#F3F4F6" }}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => {
+                const next = page + 1;
+                setPage(next);
+                void load(next, letter).catch((loadError) => {
+                  setError(loadError instanceof Error ? loadError.message : "Error al cargar");
+                });
+              }}
+              className="rounded-full px-4 text-sm font-bold text-white disabled:opacity-40"
+              style={{ minHeight: 40, backgroundColor: brand.green }}
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {moreOptionsItem && typeof document !== "undefined"
         ? createPortal(

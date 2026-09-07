@@ -91,21 +91,40 @@ export async function getCatalogImageStats(): Promise<CatalogImageStats> {
   };
 }
 
-export async function listCatalogImageQueue(limit = 40): Promise<CatalogImageQueueItem[]> {
+export async function listCatalogImageQueue(options?: {
+  limit?: number;
+  offset?: number;
+  letter?: string | null;
+}): Promise<{ items: CatalogImageQueueItem[]; total: number }> {
   const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase
+  const limit = Math.min(Math.max(options?.limit ?? 40, 1), 100);
+  const offset = Math.max(options?.offset ?? 0, 0);
+  const letter = options?.letter?.trim().toUpperCase() ?? "";
+
+  let query = supabase
     .from("products")
     .select(
-      "id, nombre, marca, categoria, codigo_barras, foto_url, product_image_suggestions(id, image_url, source, status, created_at)"
+      "id, nombre, marca, categoria, codigo_barras, foto_url, product_image_suggestions(id, image_url, source, status, created_at)",
+      { count: "exact" }
     )
     .eq("foto_confirmada", false)
     .order("nombre", { ascending: true })
-    .limit(limit);
+    .range(offset, offset + limit - 1);
+
+  if (letter === "#") {
+    query = query.lt("nombre", "A");
+  } else if (/^[A-Z]$/.test(letter)) {
+    query = query.ilike("nombre", `${letter}%`);
+  }
+
+  const { data, error, count } = await query;
   if (error) {
     throw error;
   }
 
-  return (data ?? []).map((row) => {
+  return {
+    total: count ?? 0,
+    items: (data ?? []).map((row) => {
     const suggestions = Array.isArray(row.product_image_suggestions) ? row.product_image_suggestions : [];
     const pending = suggestions.find((item) => item.status === "pending") ?? null;
     return {
@@ -123,7 +142,8 @@ export async function listCatalogImageQueue(limit = 40): Promise<CatalogImageQue
           }
         : null,
     };
-  });
+    }),
+  };
 }
 
 export type ImageSuggestDetail = {

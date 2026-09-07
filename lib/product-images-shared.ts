@@ -8,6 +8,14 @@ export type CatalogImageStats = {
   withoutBarcode: number;
 };
 
+export type CatalogImageQueuePage = {
+  items: CatalogImageQueueItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  letter: string | null;
+};
+
 export type CatalogImageQueueItem = {
   id: string;
   nombre: string;
