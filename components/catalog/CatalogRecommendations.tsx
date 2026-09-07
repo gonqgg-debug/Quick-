@@ -11,6 +11,7 @@ type CatalogRecommendationsProps = {
   recommendations: CatalogRecommendations;
   cart: Record<string, number>;
   onQuantityChange: (productId: string, cantidad: number) => void;
+  onSelectProduct: (product: Product) => void;
   onRepeatLastOrder: () => void;
 };
 
@@ -24,6 +25,7 @@ export function CatalogRecommendations({
   recommendations,
   cart,
   onQuantityChange,
+  onSelectProduct,
   onRepeatLastOrder,
 }: CatalogRecommendationsProps) {
   const { bestSellers, lastOrder, favorites } = recommendations;
@@ -43,6 +45,7 @@ export function CatalogRecommendations({
           products={bestSellers}
           cart={cart}
           onQuantityChange={onQuantityChange}
+          onSelectProduct={onSelectProduct}
         />
       ) : null}
 
@@ -51,6 +54,7 @@ export function CatalogRecommendations({
           lastOrder={lastOrder}
           cart={cart}
           onQuantityChange={onQuantityChange}
+          onSelectProduct={onSelectProduct}
           onRepeat={onRepeatLastOrder}
         />
       ) : null}
@@ -62,6 +66,7 @@ export function CatalogRecommendations({
           products={favorites}
           cart={cart}
           onQuantityChange={onQuantityChange}
+          onSelectProduct={onSelectProduct}
         />
       ) : null}
     </div>
@@ -74,18 +79,25 @@ function ProductRail({
   products,
   cart,
   onQuantityChange,
+  onSelectProduct,
 }: {
   title: string;
   subtitle: string;
   products: Product[];
   cart: Record<string, number>;
   onQuantityChange: (productId: string, cantidad: number) => void;
+  onSelectProduct: (product: Product) => void;
 }) {
   return (
     <section>
       <h2 className="font-display text-2xl font-bold text-brand-ink">{title}</h2>
       <p className="mt-0.5 text-sm text-brand-muted">{subtitle}</p>
-      <ProductCarouselTrack products={products} cart={cart} onQuantityChange={onQuantityChange} />
+      <ProductCarouselTrack
+        products={products}
+        cart={cart}
+        onQuantityChange={onQuantityChange}
+        onSelectProduct={onSelectProduct}
+      />
     </section>
   );
 }
@@ -94,10 +106,12 @@ function ProductCarouselTrack({
   products,
   cart,
   onQuantityChange,
+  onSelectProduct,
 }: {
   products: Product[];
   cart: Record<string, number>;
   onQuantityChange: (productId: string, cantidad: number) => void;
+  onSelectProduct: (product: Product) => void;
 }) {
   if (products.length === 0) {
     return null;
@@ -110,20 +124,28 @@ function ProductCarouselTrack({
       style={{ touchAction: "pan-x pan-y", overscrollBehaviorX: "contain" }}
     >
       {products.map((product) => (
-        <article key={product.id} role="listitem" className={RAIL_CARD}>
-          <RailPhoto product={product} />
-          <div className="px-2.5 pb-2.5 pt-2">
-            <h3 className="line-clamp-2 min-h-[2.5rem] text-[13px] font-bold leading-tight text-brand-ink">
-              {product.nombre}
-            </h3>
-            <p className="mt-1 font-display text-sm font-bold" style={{ color: brand.orange }}>
-              {formatPrice(product.precio)}
-            </p>
-            <div className="mt-2">
-              <MiniStepper
-                value={cart[product.id] ?? 0}
-                onChange={(cantidad) => onQuantityChange(product.id, cantidad)}
-              />
+        <article key={product.id} role="listitem" className={`relative ${RAIL_CARD}`}>
+          <button
+            type="button"
+            onClick={() => onSelectProduct(product)}
+            className="absolute inset-0 z-10"
+            aria-label={`Ver ${product.nombre}`}
+          />
+          <div className="pointer-events-none relative z-20">
+            <RailPhoto product={product} />
+            <div className="px-2.5 pb-2.5 pt-2">
+              <h3 className="line-clamp-2 min-h-[2.5rem] text-[13px] font-bold leading-tight text-brand-ink">
+                {product.nombre}
+              </h3>
+              <p className="mt-1 font-display text-sm font-bold" style={{ color: brand.orange }}>
+                {formatPrice(product.precio)}
+              </p>
+              <div className="pointer-events-auto mt-2">
+                <MiniStepper
+                  value={cart[product.id] ?? 0}
+                  onChange={(cantidad) => onQuantityChange(product.id, cantidad)}
+                />
+              </div>
             </div>
           </div>
         </article>
@@ -136,11 +158,13 @@ function RepeatLastOrderCard({
   lastOrder,
   cart,
   onQuantityChange,
+  onSelectProduct,
   onRepeat,
 }: {
   lastOrder: RepeatLastOrder;
   cart: Record<string, number>;
   onQuantityChange: (productId: string, cantidad: number) => void;
+  onSelectProduct: (product: Product) => void;
   onRepeat: () => void;
 }) {
   return (
@@ -149,7 +173,12 @@ function RepeatLastOrderCard({
       <p className="mt-0.5 text-sm text-brand-muted">
         Tu pedido más reciente · {formatCustomerOrderDate(lastOrder.createdAt)}
       </p>
-      <ProductCarouselTrack products={lastOrder.products} cart={cart} onQuantityChange={onQuantityChange} />
+      <ProductCarouselTrack
+        products={lastOrder.products}
+        cart={cart}
+        onQuantityChange={onQuantityChange}
+        onSelectProduct={onSelectProduct}
+      />
       <button
         type="button"
         onClick={onRepeat}

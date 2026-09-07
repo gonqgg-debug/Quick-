@@ -11,23 +11,23 @@ import type { Product } from "@/lib/types";
 type CatalogProductListProps = {
   products: Product[];
   cart: Record<string, number>;
-  highlightedProductId: string | null;
   showCategory: boolean;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
   onQuantityChange: (productId: string, cantidad: number) => void;
+  onSelectProduct: (product: Product) => void;
 };
 
 export function CatalogProductList({
   products,
   cart,
-  highlightedProductId,
   showCategory,
   hasMore,
   loadingMore,
   onLoadMore,
   onQuantityChange,
+  onSelectProduct,
 }: CatalogProductListProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -93,9 +93,9 @@ export function CatalogProductList({
                 <CatalogProductCard
                   product={product}
                   cantidad={cart[product.id] ?? 0}
-                  highlighted={highlightedProductId === product.id}
                   showCategory={showCategory}
                   onQuantityChange={onQuantityChange}
+                  onSelectProduct={onSelectProduct}
                 />
               </div>
             );
@@ -140,15 +140,15 @@ function CatalogPageSpinner() {
 const CatalogProductCard = memo(function CatalogProductCard({
   product,
   cantidad,
-  highlighted,
   showCategory,
   onQuantityChange,
+  onSelectProduct,
 }: {
   product: Product;
   cantidad: number;
-  highlighted: boolean;
   showCategory: boolean;
   onQuantityChange: (productId: string, cantidad: number) => void;
+  onSelectProduct: (product: Product) => void;
 }) {
   const handleQuantity = useCallback(
     (next: number) => {
@@ -160,15 +160,16 @@ const CatalogProductCard = memo(function CatalogProductCard({
   return (
     <article
       id={productAnchor(product.id)}
-      className="scroll-mt-36 overflow-hidden rounded-3xl border bg-white shadow-[0_8px_24px_rgba(26,26,26,0.06)] transition-[box-shadow,border-color] duration-300"
-      style={{
-        borderColor: highlighted ? brand.orange : "rgba(26,26,26,0.06)",
-        boxShadow: highlighted
-          ? `0 0 0 3px ${brand.orange}55, 0 8px 24px rgba(26,26,26,0.06)`
-          : "0 8px 24px rgba(26,26,26,0.06)",
-      }}
+      className="relative overflow-hidden rounded-3xl border bg-white shadow-[0_8px_24px_rgba(26,26,26,0.06)]"
+      style={{ borderColor: "rgba(26,26,26,0.06)" }}
     >
-      <div className="flex gap-3 p-3">
+      <button
+        type="button"
+        onClick={() => onSelectProduct(product)}
+        className="absolute inset-0 z-10"
+        aria-label={`Ver ${product.nombre}`}
+      />
+      <div className="pointer-events-none relative z-20 flex gap-3 p-3">
         <CatalogProductPhoto
           product={product}
           className="h-[7.25rem] w-[7.25rem]"
@@ -197,7 +198,9 @@ const CatalogProductCard = memo(function CatalogProductCard({
             <p className="font-display text-lg font-bold" style={{ color: brand.orange }}>
               {formatPrice(product.precio)}
             </p>
-            <QuantityStepper value={cantidad} onChange={handleQuantity} />
+            <div className="pointer-events-auto">
+              <QuantityStepper value={cantidad} onChange={handleQuantity} />
+            </div>
           </div>
         </div>
       </div>

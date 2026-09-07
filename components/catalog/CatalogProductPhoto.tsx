@@ -27,11 +27,13 @@ export function CatalogProductPhoto({
   className,
   sizes,
   roundedClassName = "rounded-2xl",
+  objectFit = "cover",
 }: {
   product: Product;
   className: string;
   sizes: string;
   roundedClassName?: string;
+  objectFit?: "cover" | "contain";
 }) {
   if (!product.foto_url) {
     return (
@@ -54,7 +56,7 @@ export function CatalogProductPhoto({
         sizes={sizes}
         loading="lazy"
         draggable={false}
-        className="pointer-events-none object-cover [-webkit-user-drag:none]"
+        className={`pointer-events-none [-webkit-user-drag:none] ${objectFit === "contain" ? "object-contain" : "object-cover"}`}
         unoptimized={!canOptimizeImage(product.foto_url)}
       />
     </span>

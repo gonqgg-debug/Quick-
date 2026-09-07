@@ -9,6 +9,7 @@ import { MyOrders, orderMetodoPago, orderToCart } from "@/components/catalog/MyO
 import { MyProfile } from "@/components/catalog/MyProfile";
 import { CatalogRecommendations } from "@/components/catalog/CatalogRecommendations";
 import { CatalogSearch, ProductRequestEmpty } from "@/components/catalog/CatalogSearch";
+import { ProductDetailSheet } from "@/components/catalog/ProductDetailSheet";
 import { ProductRequestSheet } from "@/components/catalog/ProductRequestSheet";
 import { PromoBanner } from "@/components/catalog/PromoBanner";
 import { useCatalogProductPages } from "@/components/catalog/useCatalogProductPages";
@@ -16,7 +17,7 @@ import { Badge } from "@/components/brand/Badge";
 import { CartIcon } from "@/components/brand/CartIcon";
 import { Logo } from "@/components/brand/Logo";
 import { CATALOG_PROMO_BANNERS } from "@/lib/catalog-promo";
-import { SEARCH_DEBOUNCE_MS, productAnchor } from "@/lib/catalog-search";
+import { SEARCH_DEBOUNCE_MS } from "@/lib/catalog-search";
 import { fetchCatalogProductsByIds } from "@/lib/catalog-products-client";
 import type { CatalogCategoryChip } from "@/lib/catalog-products-shared";
 import { MY_ORDERS_HASH, MY_PROFILE_HASH, type CustomerOrder } from "@/lib/customer-orders-shared";
@@ -136,7 +137,7 @@ export function CatalogExperience({
   const [productCache, setProductCache] = useState<Record<string, Product>>(() =>
     collectSeedProducts(seedProducts, recommendations)
   );
-  const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestPrefill, setRequestPrefill] = useState("");
   const [direccion, setDireccion] = useState(
@@ -188,16 +189,26 @@ export function CatalogExperience({
 
   const productById = useMemo(() => new Map(Object.entries(productCache)), [productCache]);
 
-  const visibleProducts = useMemo(() => {
-    if (!highlightedProductId) {
-      return pageProducts;
+  const relatedSeed = useMemo(() => {
+    if (!selectedProduct) {
+      return [];
     }
-    if (pageProducts.some((product) => product.id === highlightedProductId)) {
-      return pageProducts;
-    }
-    const extra = productCache[highlightedProductId];
-    return extra ? [extra, ...pageProducts] : pageProducts;
-  }, [highlightedProductId, pageProducts, productCache]);
+    return Object.values(productCache).filter(
+      (item) => item.id !== selectedProduct.id && item.categoria === selectedProduct.categoria
+    );
+  }, [productCache, selectedProduct]);
+
+  const openProduct = useCallback(
+    (product: Product) => {
+      rememberProducts([product]);
+      setSelectedProduct(product);
+    },
+    [rememberProducts]
+  );
+
+  const closeProduct = useCallback(() => {
+    setSelectedProduct(null);
+  }, []);
 
   const lines = useMemo(() => {
     return Object.entries(cart)
@@ -264,21 +275,6 @@ export function CatalogExperience({
     }
     window.scrollTo({ top: 0 });
   }, [selectedCategory, debouncedQuery, step, view]);
-
-  useEffect(() => {
-    if (!highlightedProductId || listLoading) {
-      return;
-    }
-    const id = productAnchor(highlightedProductId);
-    const scrollTimer = window.setTimeout(() => {
-      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 120);
-    const clearTimer = window.setTimeout(() => setHighlightedProductId(null), 2000);
-    return () => {
-      window.clearTimeout(scrollTimer);
-      window.clearTimeout(clearTimer);
-    };
-  }, [highlightedProductId, listLoading, visibleProducts]);
 
   useEffect(() => {
     if (!hydrated) {
@@ -613,10 +609,8 @@ export function CatalogExperience({
               sessionId={sessionId}
               onQueryChange={setQuery}
               onSelectProduct={(product) => {
-                rememberProducts([product]);
                 setQuery("");
-                setSelectedCategory(product.categoria);
-                setHighlightedProductId(product.id);
+                openProduct(product);
               }}
               onRequestProduct={(term) => openProductRequest(term)}
             />
@@ -685,6 +679,7 @@ export function CatalogExperience({
             recommendations={recommendations}
             cart={cart}
             onQuantityChange={setQuantity}
+            onSelectProduct={openProduct}
             onRepeatLastOrder={repeatLastOrder}
           />
         ) : null}
@@ -737,9 +732,9 @@ export function CatalogExperience({
         ) : null}
 
         <div className={selectedCategory ? "mt-2" : "mt-6"}>
-          {listLoading && visibleProducts.length === 0 ? (
+          {listLoading && pageProducts.length === 0 ? (
             <CatalogProductSkeletons />
-          ) : visibleProducts.length === 0 ? (
+          ) : pageProducts.length === 0 ? (
             listError ? (
               <p
                 className="rounded-2xl px-4 py-3 text-sm font-semibold"
@@ -757,14 +752,14 @@ export function CatalogExperience({
             <>
               <CatalogProductList
                 key={`${selectedCategory ?? "todos"}:${debouncedQuery}`}
-                products={visibleProducts}
+                products={pageProducts}
                 cart={cart}
-                highlightedProductId={highlightedProductId}
                 showCategory={!selectedCategory}
                 hasMore={hasMore}
                 loadingMore={loadingMore}
                 onLoadMore={loadMore}
                 onQuantityChange={setQuantity}
+                onSelectProduct={openProduct}
               />
               {listError ? (
                 <p
@@ -791,7 +786,7 @@ export function CatalogExperience({
       </div>
       )}
 
-      {itemCount > 0 && !cartOpen && view === "shop" ? (
+      {itemCount > 0 && !cartOpen && !selectedProduct && view === "shop" ? (
         <button
           type="button"
           onClick={() => setCartOpen(true)}
@@ -819,6 +814,20 @@ export function CatalogExperience({
             setCartOpen(false);
             setStep("checkout");
           }}
+        />
+      ) : null}
+
+      {selectedProduct ? (
+        <ProductDetailSheet
+          key={selectedProduct.id}
+          product={selectedProduct}
+          sessionId={sessionId}
+          cartQuantity={cart[selectedProduct.id] ?? 0}
+          relatedSeed={relatedSeed}
+          onClose={closeProduct}
+          onQuantityChange={setQuantity}
+          onSelectRelated={openProduct}
+          onRelatedLoaded={rememberProducts}
         />
       ) : null}
 
