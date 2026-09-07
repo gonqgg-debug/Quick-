@@ -56,6 +56,12 @@ export function LandingFooter() {
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/50">En el mapa</p>
             <p className="mt-3 text-sm font-semibold text-white">Residencial Jardines 3</p>
             <p className="text-sm text-white/70">Pueblo Bávaro</p>
+            <ul className="mt-3 space-y-1 text-sm text-white/70">
+              <li>Jardines 4 <span className="text-white/45">(Próximamente)</span></li>
+              <li>Los Robles <span className="text-white/45">(Próximamente)</span></li>
+              <li>City Place <span className="text-white/45">(Próximamente)</span></li>
+              <li>Green One Villas &amp; Resort <span className="text-white/45">(Próximamente)</span></li>
+            </ul>
           </div>
         </div>
         <p className="mt-10 text-center text-sm text-white/40">© {year} Quick! Mini Market</p>

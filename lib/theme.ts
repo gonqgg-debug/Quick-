@@ -54,7 +54,7 @@ export function categoryEmoji(categoria: string): string {
 
 export const logoPublicPath = "/brand/logo.svg";
 export const logoContourPublicPath = "/brand/logo-contour.png";
-export const pharmaLogoPublicPath = "/brand/pharma-logo.svg";
+export const pharmaLogoPublicPath = "/brand/pharma-logo.png";
 export const quickCoinsLogoPublicPath = "/brand/quickcoins-logo.png";
 
 export const defaultWhatsappNumber = "18092264986";
