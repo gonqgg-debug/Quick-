@@ -169,7 +169,7 @@ const CatalogProductCard = memo(function CatalogProductCard({
         className="absolute inset-0 z-10"
         aria-label={`Ver ${product.nombre}`}
       />
-      <div className="pointer-events-none relative z-20 flex gap-3 p-3">
+      <div className="pointer-events-none relative flex gap-3 p-3">
         <CatalogProductPhoto
           product={product}
           className="h-[7.25rem] w-[7.25rem]"

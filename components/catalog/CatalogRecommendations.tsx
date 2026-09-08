@@ -21,7 +21,7 @@ type CatalogRecommendationsProps = {
 };
 
 const RAIL_TRACK =
-  "-mx-4 mt-3 flex h-auto gap-3 overflow-x-auto overflow-y-clip overscroll-x-contain overscroll-y-auto scroll-pl-4 scroll-pr-4 px-4 pb-1 snap-x snap-mandatory select-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [touch-action:pan-x_pan-y] [&::-webkit-scrollbar]:hidden";
+  "relative z-0 -mx-4 mt-3 flex h-auto gap-3 overflow-x-auto overflow-y-clip overscroll-x-contain scroll-pl-4 scroll-pr-4 px-4 pb-1 snap-x snap-mandatory select-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [touch-action:pan-x] [&::-webkit-scrollbar]:hidden";
 
 const RAIL_CARD =
   "w-[42%] shrink-0 snap-start overflow-clip rounded-[22px] border border-black/[0.06] bg-white";
@@ -45,7 +45,7 @@ export function CatalogRecommendations({
   }
 
   return (
-    <div className="mt-7 space-y-7">
+    <div className="relative z-0 isolate mt-7 space-y-7">
       {showRepeat && lastOrder ? (
         <RepeatLastOrderCard
           lastOrder={lastOrder}
@@ -169,7 +169,7 @@ function ProductCarouselTrack({
             className="absolute inset-0 z-10"
             aria-label={`Ver ${product.nombre}`}
           />
-          <div className="pointer-events-none relative z-20">
+          <div className="pointer-events-none relative">
             <RailPhoto product={product} />
             <div className="px-2.5 pb-2.5 pt-2">
               <h3 className="line-clamp-2 min-h-[2.5rem] text-[13px] font-bold leading-tight text-brand-ink">

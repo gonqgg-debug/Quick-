@@ -614,7 +614,7 @@ export function CatalogExperience({
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="sticky top-0 z-20 border-b border-black/5 bg-white/95 backdrop-blur-md">
+      <div className="sticky top-0 z-40 border-b border-black/5 bg-white">
         <div className="mx-auto max-w-lg px-4 pb-3 pt-4">
           <div className="flex items-center justify-between gap-3">
             <button type="button" onClick={goToShop} className="min-w-0 text-left" aria-label="Ir al catálogo">
@@ -724,7 +724,7 @@ export function CatalogExperience({
           )}
         </div>
       ) : (
-      <div className="mx-auto max-w-lg px-4 pb-32 pt-4">
+      <div className="relative z-0 mx-auto max-w-lg px-4 pb-32 pt-4">
         {showVitrine ? (
           <>
             <PromoBanner banners={CATALOG_PROMO_BANNERS} />
