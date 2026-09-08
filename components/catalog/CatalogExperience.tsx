@@ -7,7 +7,11 @@ import { CustomerRegisterForm } from "@/components/catalog/CustomerRegisterForm"
 import { DeliveryAddressFields } from "@/components/catalog/DeliveryAddressFields";
 import { MyOrders, orderMetodoPago, orderToCart } from "@/components/catalog/MyOrders";
 import { MyProfile } from "@/components/catalog/MyProfile";
-import { CatalogRecommendations } from "@/components/catalog/CatalogRecommendations";
+import { CatalogCategoryGrid } from "@/components/catalog/CatalogCategoryGrid";
+import {
+  CatalogRecommendations,
+  type CatalogViewAllTarget,
+} from "@/components/catalog/CatalogRecommendations";
 import { CatalogSearch, ProductRequestEmpty } from "@/components/catalog/CatalogSearch";
 import { ProductDetailSheet } from "@/components/catalog/ProductDetailSheet";
 import { ProductRequestSheet } from "@/components/catalog/ProductRequestSheet";
@@ -16,10 +20,14 @@ import { useCatalogProductPages } from "@/components/catalog/useCatalogProductPa
 import { Badge } from "@/components/brand/Badge";
 import { CartIcon } from "@/components/brand/CartIcon";
 import { Logo } from "@/components/brand/Logo";
+import {
+  getCatalogCollection,
+  type CatalogCollectionRail,
+} from "@/lib/catalog-collections-shared";
 import { CATALOG_PROMO_BANNERS } from "@/lib/catalog-promo";
 import { SEARCH_DEBOUNCE_MS } from "@/lib/catalog-search";
 import { fetchCatalogProductsByIds } from "@/lib/catalog-products-client";
-import type { CatalogCategoryChip } from "@/lib/catalog-products-shared";
+import type { CatalogCategoryChip, CatalogProductSort } from "@/lib/catalog-products-shared";
 import { MY_ORDERS_HASH, MY_PROFILE_HASH, type CustomerOrder } from "@/lib/customer-orders-shared";
 import type { CatalogRecommendations as CatalogRecommendationsData } from "@/lib/catalog-recommendations";
 import {
@@ -43,6 +51,7 @@ type CatalogExperienceProps = {
   editOrder?: OrderDraft | null;
   customer?: CatalogCustomer | null;
   recommendations?: CatalogRecommendationsData;
+  collections?: CatalogCollectionRail[];
 };
 
 type Step = "register" | "catalog" | "checkout" | "success";
@@ -84,7 +93,8 @@ function cartFromDraft(editOrder: OrderDraft | null | undefined): CartMap {
 
 function collectSeedProducts(
   seedProducts: Product[] | undefined,
-  recommendations: CatalogRecommendationsData
+  recommendations: CatalogRecommendationsData,
+  collections: CatalogCollectionRail[]
 ): Record<string, Product> {
   const next: Record<string, Product> = {};
   const sources = [
@@ -92,6 +102,7 @@ function collectSeedProducts(
     ...recommendations.bestSellers,
     ...(recommendations.lastOrder?.products ?? []),
     ...recommendations.favorites,
+    ...collections.flatMap((collection) => collection.products),
   ];
   for (const product of sources) {
     next[product.id] = product;
@@ -119,6 +130,7 @@ export function CatalogExperience({
   editOrder = null,
   customer: initialCustomer = null,
   recommendations = EMPTY_RECOMMENDATIONS,
+  collections = [],
 }: CatalogExperienceProps) {
   const [customer, setCustomer] = useState<CatalogCustomer | null>(initialCustomer);
   const [step, setStep] = useState<Step>(initialCustomer ? "catalog" : "register");
@@ -133,9 +145,11 @@ export function CatalogExperience({
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [browseAll, setBrowseAll] = useState(false);
+  const [browseCollection, setBrowseCollection] = useState<string | null>(null);
   const [categories, setCategories] = useState<CatalogCategoryChip[]>(initialCategories);
   const [productCache, setProductCache] = useState<Record<string, Product>>(() =>
-    collectSeedProducts(seedProducts, recommendations)
+    collectSeedProducts(seedProducts, recommendations, collections)
   );
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [requestOpen, setRequestOpen] = useState(false);
@@ -171,6 +185,16 @@ export function CatalogExperience({
     });
   }, []);
 
+  const showVitrine = !query.trim() && !selectedCategory && !browseAll && !browseCollection;
+  const browsing = Boolean(debouncedQuery || selectedCategory || browseAll || browseCollection);
+  const awaitingSearch = Boolean(query.trim()) && !browsing;
+  const activeCollection = getCatalogCollection(browseCollection);
+  const listSort: CatalogProductSort = debouncedQuery
+    ? "alpha"
+    : browseCollection === "nuevos"
+      ? "recent"
+      : "popular";
+
   const {
     products: pageProducts,
     hasMore,
@@ -181,8 +205,10 @@ export function CatalogExperience({
   } = useCatalogProductPages({
     sessionId,
     categoria: selectedCategory,
+    collection: selectedCategory ? null : browseCollection,
     q: debouncedQuery,
-    enabled: step !== "register",
+    sort: listSort,
+    enabled: step !== "register" && browsing,
     onProducts: rememberProducts,
     onCategories: setCategories,
   });
@@ -274,7 +300,7 @@ export function CatalogExperience({
       return;
     }
     window.scrollTo({ top: 0 });
-  }, [selectedCategory, debouncedQuery, step, view]);
+  }, [selectedCategory, browseAll, browseCollection, debouncedQuery, step, view]);
 
   useEffect(() => {
     if (!hydrated) {
@@ -440,7 +466,44 @@ export function CatalogExperience({
     goToHashView("profile", MY_PROFILE_HASH);
   }
 
+  function goToHome() {
+    setQuery("");
+    setSelectedCategory(null);
+    setBrowseAll(false);
+    setBrowseCollection(null);
+  }
+
+  function openCategory(categoria: string) {
+    setQuery("");
+    setBrowseAll(false);
+    setBrowseCollection(null);
+    setSelectedCategory(categoria);
+  }
+
+  function openBrowseAll() {
+    setQuery("");
+    setSelectedCategory(null);
+    setBrowseCollection(null);
+    setBrowseAll(true);
+  }
+
+  function openCollection(id: string) {
+    setQuery("");
+    setSelectedCategory(null);
+    setBrowseAll(false);
+    setBrowseCollection(id);
+  }
+
+  function handleViewAll(target: CatalogViewAllTarget) {
+    if (target.type === "all") {
+      openBrowseAll();
+      return;
+    }
+    openCollection(target.id);
+  }
+
   function goToShop() {
+    goToHome();
     setView("shop");
     if (window.location.hash === `#${MY_ORDERS_HASH}` || window.location.hash === `#${MY_PROFILE_HASH}`) {
       window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
@@ -655,123 +718,164 @@ export function CatalogExperience({
         </div>
       ) : (
       <div className="mx-auto max-w-lg px-4 pb-32 pt-4">
-        <PromoBanner banners={CATALOG_PROMO_BANNERS} />
-        <p className="mt-4 text-sm leading-relaxed text-brand-muted">
-          {isEditing
-            ? "Ya cargamos tu pedido. Cambia lo que necesites y guarda los cambios."
-            : "Elige lo que necesitas. Te lo preparamos y te confirmamos por WhatsApp."}
-        </p>
+        {showVitrine ? (
+          <>
+            <PromoBanner banners={CATALOG_PROMO_BANNERS} />
+            <p className="mt-4 text-sm leading-relaxed text-brand-muted">
+              {isEditing
+                ? "Ya cargamos tu pedido. Cambia lo que necesites y guarda los cambios."
+                : "Elige lo que necesitas. Te lo preparamos y te confirmamos por WhatsApp."}
+            </p>
 
-        {reorderNotice ? (
-          <p
-            className="mt-3 rounded-2xl px-4 py-3 text-sm font-semibold"
-            style={{
-              backgroundColor: reorderNotice.startsWith("No pudimos") ? "#FEE2E2" : "#EAF6D8",
-              color: reorderNotice.startsWith("No pudimos") ? brand.error : "#3F7A12",
-            }}
-          >
-            {reorderNotice}
-          </p>
-        ) : null}
+            {reorderNotice ? (
+              <p
+                className="mt-3 rounded-2xl px-4 py-3 text-sm font-semibold"
+                style={{
+                  backgroundColor: reorderNotice.startsWith("No pudimos") ? "#FEE2E2" : "#EAF6D8",
+                  color: reorderNotice.startsWith("No pudimos") ? brand.error : "#3F7A12",
+                }}
+              >
+                {reorderNotice}
+              </p>
+            ) : null}
 
-        {!query.trim() ? (
-          <CatalogRecommendations
-            recommendations={recommendations}
-            cart={cart}
-            onQuantityChange={setQuantity}
-            onSelectProduct={openProduct}
-            onRepeatLastOrder={repeatLastOrder}
-          />
-        ) : null}
+            <CatalogCategoryGrid categories={categories} onSelect={openCategory} />
 
-        <nav
-          className="-mx-4 mt-10 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          aria-label="Categorías"
-        >
-          <CategoryChip
-            label="Todos"
-            emoji={categoryEmoji("todos")}
-            color={brand.green}
-            selected={selectedCategory === null}
-            onSelect={() => setSelectedCategory(null)}
-          />
-          {categories.map((chip, index) => {
-            const color = brandChipColor(index);
-            return (
+            <CatalogRecommendations
+              recommendations={recommendations}
+              collections={collections}
+              cart={cart}
+              onQuantityChange={setQuantity}
+              onSelectProduct={openProduct}
+              onRepeatLastOrder={repeatLastOrder}
+              onViewAll={handleViewAll}
+            />
+
+            <p className="mt-10 pb-2 text-center">
+              <button
+                type="button"
+                onClick={openBrowseAll}
+                className="text-sm font-bold underline-offset-2 hover:underline"
+                style={{ color: brand.blue }}
+              >
+                Ver todo el catálogo
+              </button>
+            </p>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={goToHome}
+              className="text-sm font-bold"
+              style={{ color: brand.blue }}
+            >
+              ← Inicio
+            </button>
+
+            <nav
+              className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              aria-label="Categorías"
+            >
               <CategoryChip
-                key={chip.name}
-                label={chip.name}
-                emoji={categoryEmoji(chip.name)}
-                color={color}
-                selected={selectedCategory === chip.name}
-                onSelect={() =>
-                  setSelectedCategory((current) => (current === chip.name ? null : chip.name))
-                }
+                label="Todos"
+                emoji={categoryEmoji("todos")}
+                color={brand.green}
+                selected={!selectedCategory && !browseCollection}
+                onSelect={openBrowseAll}
               />
-            );
-          })}
-        </nav>
+              {categories.map((chip, index) => {
+                const color = brandChipColor(index);
+                return (
+                  <CategoryChip
+                    key={chip.name}
+                    label={chip.name}
+                    emoji={categoryEmoji(chip.name)}
+                    color={color}
+                    selected={selectedCategory === chip.name}
+                    onSelect={() =>
+                      selectedCategory === chip.name ? goToHome() : openCategory(chip.name)
+                    }
+                  />
+                );
+              })}
+            </nav>
 
-        {selectedCategory ? (
-          <div className="mt-6">
-            {isPharmaCategory(selectedCategory) ? (
-              <div className="mb-4 overflow-hidden rounded-3xl" style={{ backgroundColor: "#EAF4FB" }}>
-                <div className="px-5 py-6">
-                  <Logo variant="pharma" className="h-12 w-auto max-w-full sm:h-14" />
-                  <p className="mt-3 text-base" style={{ color: brand.blue }}>
-                    Farmacia y cuidado personal
-                  </p>
+            {selectedCategory || activeCollection || browseAll ? (
+              <div className="mt-6">
+                {selectedCategory && isPharmaCategory(selectedCategory) ? (
+                  <div className="mb-4 overflow-hidden rounded-3xl" style={{ backgroundColor: "#EAF4FB" }}>
+                    <div className="px-5 py-6">
+                      <Logo variant="pharma" className="h-12 w-auto max-w-full sm:h-14" />
+                      <p className="mt-3 text-base" style={{ color: brand.blue }}>
+                        Farmacia y cuidado personal
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+                <div className="mb-3 flex items-center gap-2">
+                  <h2 className="font-display text-2xl font-bold text-brand-ink">
+                    {selectedCategory ??
+                      activeCollection?.title ??
+                      (browseAll ? "Todo el catálogo" : query.trim() || "Resultados")}
+                  </h2>
+                  {selectedCategory && isPharmaCategory(selectedCategory) ? (
+                    <Badge variant="blue">PharmaQuick!</Badge>
+                  ) : null}
                 </div>
+                {activeCollection && !selectedCategory ? (
+                  <p className="-mt-2 mb-3 text-sm text-brand-muted">{activeCollection.subtitle}</p>
+                ) : null}
+              </div>
+            ) : query.trim() ? (
+              <div className="mt-6 mb-3">
+                <h2 className="font-display text-2xl font-bold text-brand-ink">Resultados</h2>
               </div>
             ) : null}
-            <div className="mb-3 flex items-center gap-2">
-              <h2 className="font-display text-2xl font-bold text-brand-ink">{selectedCategory}</h2>
-              {isPharmaCategory(selectedCategory) ? <Badge variant="blue">PharmaQuick!</Badge> : null}
-            </div>
-          </div>
-        ) : null}
 
-        <div className={selectedCategory ? "mt-2" : "mt-6"}>
-          {listLoading && pageProducts.length === 0 ? (
-            <CatalogProductSkeletons />
-          ) : pageProducts.length === 0 ? (
-            listError ? (
-              <p
-                className="rounded-2xl px-4 py-3 text-sm font-semibold"
-                style={{ backgroundColor: "#FEE2E2", color: brand.error }}
-              >
-                {listError}
-              </p>
-            ) : (
-              <ProductRequestEmpty
-                query={query || selectedCategory || "productos"}
-                onRequest={() => openProductRequest(query)}
-              />
-            )
-          ) : (
-            <>
-              <CatalogProductList
-                key={`${selectedCategory ?? "todos"}:${debouncedQuery}`}
-                products={pageProducts}
-                cart={cart}
-                showCategory={!selectedCategory}
-                hasMore={hasMore}
-                loadingMore={loadingMore}
-                onLoadMore={loadMore}
-                onQuantityChange={setQuantity}
-                onSelectProduct={openProduct}
-              />
-              {listError ? (
-                <p
-                  className="mt-3 rounded-2xl px-4 py-3 text-sm font-semibold"
-                  style={{ backgroundColor: "#FEE2E2", color: brand.error }}
-                >
-                  {listError}
-                </p>
-              ) : null}
-            </>
-          )}
-        </div>
+            <div className="mt-2">
+              {awaitingSearch || (listLoading && pageProducts.length === 0) ? (
+                <CatalogProductSkeletons />
+              ) : pageProducts.length === 0 ? (
+                listError ? (
+                  <p
+                    className="rounded-2xl px-4 py-3 text-sm font-semibold"
+                    style={{ backgroundColor: "#FEE2E2", color: brand.error }}
+                  >
+                    {listError}
+                  </p>
+                ) : (
+                  <ProductRequestEmpty
+                    query={query || selectedCategory || activeCollection?.title || "productos"}
+                    onRequest={() => openProductRequest(query)}
+                  />
+                )
+              ) : (
+                <>
+                  <CatalogProductList
+                    key={`${selectedCategory ?? browseCollection ?? (browseAll ? "todos" : "search")}:${debouncedQuery}:${listSort}`}
+                    products={pageProducts}
+                    cart={cart}
+                    showCategory={!selectedCategory}
+                    hasMore={hasMore}
+                    loadingMore={loadingMore}
+                    onLoadMore={loadMore}
+                    onQuantityChange={setQuantity}
+                    onSelectProduct={openProduct}
+                  />
+                  {listError ? (
+                    <p
+                      className="mt-3 rounded-2xl px-4 py-3 text-sm font-semibold"
+                      style={{ backgroundColor: "#FEE2E2", color: brand.error }}
+                    >
+                      {listError}
+                    </p>
+                  ) : null}
+                </>
+              )}
+            </div>
+          </>
+        )}
 
         <p className="mt-10 pb-4 text-center">
           <button

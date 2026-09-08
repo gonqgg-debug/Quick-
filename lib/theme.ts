@@ -40,7 +40,7 @@ const CATEGORY_EMOJI: Record<string, string> = {
   "carnes y embutidos": "🥓",
 };
 
-function normalizeCategoryKey(categoria: string): string {
+export function normalizeCategoryKey(categoria: string): string {
   return categoria
     .trim()
     .toLowerCase()

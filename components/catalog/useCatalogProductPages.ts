@@ -2,20 +2,24 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchCatalogProductsPage } from "@/lib/catalog-products-client";
-import type { CatalogCategoryChip } from "@/lib/catalog-products-shared";
+import type { CatalogCategoryChip, CatalogProductSort } from "@/lib/catalog-products-shared";
 import type { Product } from "@/lib/types";
 
 export function useCatalogProductPages({
   sessionId,
   categoria,
+  collection,
   q,
+  sort,
   enabled,
   onProducts,
   onCategories,
 }: {
   sessionId: string;
   categoria: string | null;
+  collection?: string | null;
   q: string;
+  sort?: CatalogProductSort | null;
   enabled: boolean;
   onProducts?: (products: Product[]) => void;
   onCategories?: (categories: CatalogCategoryChip[]) => void;
@@ -62,7 +66,9 @@ export function useCatalogProductPages({
         const page = await fetchCatalogProductsPage({
           sessionId,
           categoria,
+          collection,
           q,
+          sort,
           signal: controller.signal,
         });
         if (generation !== generationRef.current) {
@@ -91,7 +97,7 @@ export function useCatalogProductPages({
     return () => {
       controller.abort();
     };
-  }, [sessionId, categoria, q, enabled]);
+  }, [sessionId, categoria, collection, q, sort, enabled]);
 
   const loadMore = useCallback(() => {
     if (
@@ -115,7 +121,9 @@ export function useCatalogProductPages({
           sessionId,
           cursor,
           categoria,
+          collection,
           q,
+          sort,
         });
         if (generation !== generationRef.current) {
           return;
@@ -139,7 +147,7 @@ export function useCatalogProductPages({
         }
       }
     })();
-  }, [sessionId, categoria, q, enabled]);
+  }, [sessionId, categoria, collection, q, sort, enabled]);
 
   return { products, hasMore, loading, loadingMore, error, loadMore };
 }

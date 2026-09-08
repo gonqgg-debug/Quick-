@@ -10,6 +10,7 @@ import {
 import {
   CATALOG_PRODUCT_IDS_MAX,
   CATALOG_PRODUCT_PAGE_SIZE,
+  parseCatalogProductSort,
 } from "@/lib/catalog-products-shared";
 import { jsonError } from "@/lib/order-request";
 
@@ -67,13 +68,17 @@ export async function GET(request: NextRequest) {
 
     const cursor = params.get("cursor");
     const categoria = params.get("categoria");
-    const includeCategories = !cursor && !categoria && !q;
+    const collection = params.get("collection")?.trim() ?? "";
+    const sort = parseCatalogProductSort(params.get("sort"));
+    const includeCategories = !cursor && !categoria && !q && !collection;
     const [page, categories] = await Promise.all([
       listActiveProductsPage({
         cursor,
         limit: parseLimit(params.get("limit")),
         categoria,
+        collection,
         q,
+        sort,
       }),
       includeCategories ? listActiveCatalogCategories() : Promise.resolve(undefined),
     ]);

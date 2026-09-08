@@ -1,18 +1,23 @@
 "use client";
 
 import { CatalogProductPhoto } from "@/components/catalog/CatalogProductPhoto";
+import type { CatalogCollectionRail } from "@/lib/catalog-collections-shared";
+import type { CatalogRecommendations, RepeatLastOrder } from "@/lib/catalog-recommendations";
 import { formatCustomerOrderDate } from "@/lib/customer-orders-shared";
 import { formatPrice } from "@/lib/money";
 import { brand } from "@/lib/theme";
-import type { CatalogRecommendations, RepeatLastOrder } from "@/lib/catalog-recommendations";
 import type { Product } from "@/lib/types";
+
+export type CatalogViewAllTarget = { type: "all" } | { type: "collection"; id: string };
 
 type CatalogRecommendationsProps = {
   recommendations: CatalogRecommendations;
+  collections?: CatalogCollectionRail[];
   cart: Record<string, number>;
   onQuantityChange: (productId: string, cantidad: number) => void;
   onSelectProduct: (product: Product) => void;
   onRepeatLastOrder: () => void;
+  onViewAll?: (target: CatalogViewAllTarget) => void;
 };
 
 const RAIL_TRACK =
@@ -23,32 +28,24 @@ const RAIL_CARD =
 
 export function CatalogRecommendations({
   recommendations,
+  collections = [],
   cart,
   onQuantityChange,
   onSelectProduct,
   onRepeatLastOrder,
+  onViewAll,
 }: CatalogRecommendationsProps) {
   const { bestSellers, lastOrder, favorites } = recommendations;
   const showRepeat = Boolean(lastOrder?.items.length);
   const showFavorites = favorites.length > 0;
+  const visibleCollections = collections.filter((collection) => collection.products.length > 0);
 
-  if (bestSellers.length === 0 && !showRepeat && !showFavorites) {
+  if (bestSellers.length === 0 && !showRepeat && !showFavorites && visibleCollections.length === 0) {
     return null;
   }
 
   return (
-    <div className="mt-5 space-y-7">
-      {bestSellers.length > 0 ? (
-        <ProductRail
-          title="Lo más pedido en Quick!"
-          subtitle="Los favoritos de todos en el residencial"
-          products={bestSellers}
-          cart={cart}
-          onQuantityChange={onQuantityChange}
-          onSelectProduct={onSelectProduct}
-        />
-      ) : null}
-
+    <div className="mt-7 space-y-7">
       {showRepeat && lastOrder ? (
         <RepeatLastOrderCard
           lastOrder={lastOrder}
@@ -69,6 +66,31 @@ export function CatalogRecommendations({
           onSelectProduct={onSelectProduct}
         />
       ) : null}
+
+      {bestSellers.length > 0 ? (
+        <ProductRail
+          title="Lo más pedido en Quick!"
+          subtitle="Los favoritos de todos en el residencial"
+          products={bestSellers}
+          cart={cart}
+          onQuantityChange={onQuantityChange}
+          onSelectProduct={onSelectProduct}
+          onViewAll={onViewAll ? () => onViewAll({ type: "all" }) : undefined}
+        />
+      ) : null}
+
+      {visibleCollections.map((collection) => (
+        <ProductRail
+          key={collection.id}
+          title={collection.title}
+          subtitle={collection.subtitle}
+          products={collection.products}
+          cart={cart}
+          onQuantityChange={onQuantityChange}
+          onSelectProduct={onSelectProduct}
+          onViewAll={onViewAll ? () => onViewAll({ type: "collection", id: collection.id }) : undefined}
+        />
+      ))}
     </div>
   );
 }
@@ -80,6 +102,7 @@ function ProductRail({
   cart,
   onQuantityChange,
   onSelectProduct,
+  onViewAll,
 }: {
   title: string;
   subtitle: string;
@@ -87,11 +110,26 @@ function ProductRail({
   cart: Record<string, number>;
   onQuantityChange: (productId: string, cantidad: number) => void;
   onSelectProduct: (product: Product) => void;
+  onViewAll?: () => void;
 }) {
   return (
     <section>
-      <h2 className="font-display text-2xl font-bold text-brand-ink">{title}</h2>
-      <p className="mt-0.5 text-sm text-brand-muted">{subtitle}</p>
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="font-display text-2xl font-bold text-brand-ink">{title}</h2>
+          <p className="mt-0.5 text-sm text-brand-muted">{subtitle}</p>
+        </div>
+        {onViewAll ? (
+          <button
+            type="button"
+            onClick={onViewAll}
+            className="shrink-0 pb-0.5 text-sm font-bold"
+            style={{ color: brand.blue }}
+          >
+            Ver todos
+          </button>
+        ) : null}
+      </div>
       <ProductCarouselTrack
         products={products}
         cart={cart}
