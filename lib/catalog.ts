@@ -1,6 +1,7 @@
 import {
+  CATALOG_COLLECTION_RECENT_DAYS,
   getCatalogCollection,
-  listCollectionCategoryNames,
+  productMatchesCollection,
 } from "@/lib/catalog-collections";
 import { getSalesTotalsByOdooCode } from "@/lib/catalog-ranking";
 import {
@@ -243,11 +244,11 @@ export async function listActiveCatalogCategories(): Promise<CatalogCategoryChip
   }
 
   const chips = Array.from(counts.entries()).map(([name, count]) => ({ name, count }));
-  const byName = (left: CatalogCategoryChip, right: CatalogCategoryChip) =>
-    left.name.localeCompare(right.name, "es");
+  const byDemand = (left: CatalogCategoryChip, right: CatalogCategoryChip) =>
+    right.count - left.count || left.name.localeCompare(right.name, "es");
   return [
-    ...chips.filter((chip) => !isPharmaCategory(chip.name)).sort(byName),
-    ...chips.filter((chip) => isPharmaCategory(chip.name)).sort(byName),
+    ...chips.filter((chip) => !isPharmaCategory(chip.name)).sort(byDemand),
+    ...chips.filter((chip) => isPharmaCategory(chip.name)).sort(byDemand),
   ];
 }
 
@@ -275,10 +276,6 @@ export async function getActiveProductsByIds(ids: string[]): Promise<Product[]> 
   return unique.map((id) => byId.get(id)).filter((product): product is Product => Boolean(product));
 }
 
-function emptyCatalogPage(): CatalogProductsPage {
-  return { products: [], hasMore: false, nextCursor: null };
-}
-
 export async function listActiveProductsPage(options: {
   cursor?: string | null;
   limit?: number;
@@ -298,35 +295,25 @@ export async function listActiveProductsPage(options: {
 
   const collection = getCatalogCollection(options.collection);
   const categoria = options.categoria?.trim() ?? "";
-  const collectionCategories =
-    !categoria && collection?.match.kind === "categories"
-      ? await listCollectionCategoryNames(collection.id)
-      : [];
-  if (collection?.match.kind === "categories" && !categoria && collectionCategories.length === 0) {
-    return emptyCatalogPage();
-  }
-
   const sort: CatalogProductSort =
     options.sort ?? (collection?.match.kind === "recency" ? "recent" : "alpha");
 
-  const supabase = getSupabaseAdminClient();
-
-  if (sort === "popular") {
+  if (sort === "popular" || (collection && !categoria)) {
     return listProductsByPopularity({
       offset,
       limit,
       categoria,
-      collectionCategories,
+      collectionId: categoria ? null : collection?.id ?? null,
       q: sanitizeCatalogSearch(options.q ?? ""),
+      sort,
     });
   }
 
+  const supabase = getSupabaseAdminClient();
   let query = supabase.from("products").select(PRODUCT_SELECT).eq("activo", true);
 
   if (categoria) {
     query = query.eq("categoria", categoria);
-  } else if (collectionCategories.length > 0) {
-    query = query.in("categoria", collectionCategories);
   }
 
   const q = sanitizeCatalogSearch(options.q ?? "");
@@ -366,16 +353,15 @@ async function listProductsByPopularity(options: {
   offset: number;
   limit: number;
   categoria: string;
-  collectionCategories: string[];
+  collectionId: string | null;
   q: string;
+  sort?: CatalogProductSort;
 }): Promise<CatalogProductsPage> {
   const supabase = getSupabaseAdminClient();
   let query = supabase.from("products").select(PRODUCT_SELECT).eq("activo", true);
 
   if (options.categoria) {
     query = query.eq("categoria", options.categoria);
-  } else if (options.collectionCategories.length > 0) {
-    query = query.in("categoria", options.collectionCategories);
   }
 
   if (options.q) {
@@ -389,7 +375,25 @@ async function listProductsByPopularity(options: {
     throw error;
   }
 
-  const ranked = [...(data ?? [])].sort((left, right) => {
+  const collection = getCatalogCollection(options.collectionId);
+  let rows = data ?? [];
+  if (collection?.match.kind === "keywords") {
+    rows = rows.filter((row) => productMatchesCollection(row, collection));
+  } else if (collection?.match.kind === "recency") {
+    const cutoff = Date.now() - CATALOG_COLLECTION_RECENT_DAYS * 24 * 60 * 60 * 1000;
+    rows = rows.filter((row) => {
+      const created = new Date(String(row.created_at ?? "")).getTime();
+      return Number.isFinite(created) && created >= cutoff;
+    });
+  }
+
+  const ranked = [...rows].sort((left, right) => {
+    if (options.sort === "recent") {
+      return (
+        new Date(String(right.created_at ?? "")).getTime() -
+        new Date(String(left.created_at ?? "")).getTime()
+      );
+    }
     const leftSold = sales.get(String(left.codigo_odoo ?? "").trim()) ?? 0;
     const rightSold = sales.get(String(right.codigo_odoo ?? "").trim()) ?? 0;
     if (rightSold !== leftSold) {

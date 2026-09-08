@@ -25,20 +25,81 @@ export function isPharmaCategory(categoria: string): boolean {
 const CATEGORY_EMOJI: Record<string, string> = {
   all: "🛒",
   todos: "🛒",
-  almacen: "🥫",
+  almacen: "🛒",
+  "articulos de conveniencia": "🛒",
+  conveniencia: "🛒",
+  abarrotes: "🛒",
+  "aceites y grasas": "🫒",
+  aceites: "🫒",
   bebidas: "🥤",
   "bebidas no alcoholicas": "🥤",
   "bebidas alcoholicas": "🍷",
+  aguas: "💧",
+  jugos: "🧃",
   frutas: "🍎",
+  verduras: "🥬",
   farmacia: "💊",
   "snacks y dulces": "🍪",
+  snacks: "🍪",
+  dulces: "🍬",
   "cereales y desayunos": "🥣",
-  verduras: "🥬",
+  cereales: "🥣",
+  desayunos: "🥣",
   "condimentos y especias": "🧂",
+  condimentos: "🧂",
   lacteos: "🥛",
   "lacteos y derivados": "🧀",
   "carnes y embutidos": "🥓",
+  limpieza: "🧹",
+  "cuidado personal": "🧴",
+  higiene: "🧴",
+  panaderia: "🍞",
+  enlatados: "🥫",
+  conservas: "🥫",
+  congelados: "🧊",
+  granos: "🌾",
+  pastas: "🍝",
+  huevos: "🥚",
+  cafe: "☕",
+  "cafe y te": "☕",
+  cigarrillos: "🚬",
+  tabaco: "🚬",
+  bebes: "🍼",
+  "bebe e infantil": "🍼",
+  mascotas: "🐾",
+  papel: "🧻",
+  desechables: "🧻",
 };
+
+const CATEGORY_EMOJI_RULES: Array<{ test: RegExp; emoji: string }> = [
+  { test: /aceite|grasa/, emoji: "🫒" },
+  { test: /alcohol|cerveza|vino|ron|whisky|licor/, emoji: "🍷" },
+  { test: /agua/, emoji: "💧" },
+  { test: /jugo|nectar/, emoji: "🧃" },
+  { test: /bebida|refresco|soda/, emoji: "🥤" },
+  { test: /fruta/, emoji: "🍎" },
+  { test: /verdura|vegetal|hortaliza/, emoji: "🥬" },
+  { test: /lacteo|leche|queso|yogurt|yogur/, emoji: "🥛" },
+  { test: /cereal|desayuno|avena|granola/, emoji: "🥣" },
+  { test: /snack|pasaboca|chips|cheeto/, emoji: "🍪" },
+  { test: /dulce|galleta|chocolate|caramelo|gomita/, emoji: "🍬" },
+  { test: /condimento|especia|salsa|aderezo/, emoji: "🧂" },
+  { test: /carne|embutido|jamon|salchicha|pollo/, emoji: "🥓" },
+  { test: /pharma|farmacia|medicament|salud/, emoji: "💊" },
+  { test: /limpieza|detergente|cloro|lavaplatos/, emoji: "🧹" },
+  { test: /higiene|shampoo|cuidado personal|dental|desodorante/, emoji: "🧴" },
+  { test: /panader|panes/, emoji: "🍞" },
+  { test: /cafe|te\b|infusion/, emoji: "☕" },
+  { test: /enlatad|conserva/, emoji: "🥫" },
+  { test: /congelad|hielo/, emoji: "🧊" },
+  { test: /cigarr|tabaco/, emoji: "🚬" },
+  { test: /bebe|panal|pañal/, emoji: "🍼" },
+  { test: /mascota|perro|gato/, emoji: "🐾" },
+  { test: /papel|servilleta|toalla|desechable/, emoji: "🧻" },
+  { test: /arroz|grano|pasta|fideo/, emoji: "🍝" },
+  { test: /huevo/, emoji: "🥚" },
+  { test: /convenien|almacen|abarrotes/, emoji: "🛒" },
+];
 
 export function normalizeCategoryKey(categoria: string): string {
   return categoria
@@ -49,7 +110,15 @@ export function normalizeCategoryKey(categoria: string): string {
 }
 
 export function categoryEmoji(categoria: string): string {
-  return CATEGORY_EMOJI[normalizeCategoryKey(categoria)] ?? "🏷️";
+  const key = normalizeCategoryKey(categoria);
+  if (!key) {
+    return "🛒";
+  }
+  if (CATEGORY_EMOJI[key]) {
+    return CATEGORY_EMOJI[key];
+  }
+  const rule = CATEGORY_EMOJI_RULES.find((item) => item.test.test(key));
+  return rule?.emoji ?? "🛒";
 }
 
 export const logoPublicPath = "/brand/logo.svg";

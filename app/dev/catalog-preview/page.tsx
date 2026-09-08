@@ -96,16 +96,16 @@ const products: Product[] = [
     descripcion: "Grano largo",
     precio: 195,
     foto_url: null,
-    categoria: "Almacén",
+    categoria: "Artículos de Conveniencia",
   },
   {
     id: "p-aceite",
-    nombre: "Aceite de soya 1L",
+    nombre: "Aceite Crisol 1 l",
     marca: "Crisol",
     descripcion: "Para cocinar",
-    precio: 160,
+    precio: 250,
     foto_url: null,
-    categoria: "Almacén",
+    categoria: "Aceites y Grasas",
   },
   {
     id: "p-vitamina",
@@ -128,7 +128,8 @@ const products: Product[] = [
 ];
 
 const categories: CatalogCategoryChip[] = [
-  { name: "Almacén", count: 2 },
+  { name: "Aceites y Grasas", count: 1 },
+  { name: "Artículos de Conveniencia", count: 2 },
   { name: "Bebidas", count: 2 },
   { name: "Cereales y desayunos", count: 2 },
   { name: "Frutas", count: 2 },
@@ -157,26 +158,26 @@ const collections: CatalogCollectionRail[] = [
   {
     id: "desayuno",
     title: "Para el desayuno",
-    subtitle: "Lácteos, cereales y lo esencial para arrancar",
-    match: { kind: "categories", categoryKeys: ["lacteos", "cereales y desayunos"] },
+    subtitle: "Café, leche, pan y lo que se pide a primera hora",
+    match: { kind: "keywords", keys: ["leche", "yogurt", "cereal"] },
     categoryNames: ["Lácteos y derivados", "Cereales y desayunos"],
     products: [byId["p-leche"], byId["p-yogurt"], byId["p-cereal"]],
   },
   {
     id: "picar",
     title: "Para picar",
-    subtitle: "Snacks y antojos del residencial",
-    match: { kind: "categories", categoryKeys: ["snacks y dulces"] },
+    subtitle: "Snacks, chips y antojos del residencial",
+    match: { kind: "keywords", keys: ["chips", "galleta"] },
     categoryNames: ["Snacks y dulces"],
     products: [byId["p-chips"], byId["p-galleta"]],
   },
   {
-    id: "nuevos",
-    title: "Recién llegados",
-    subtitle: "Lo último que sumamos al minimarket",
-    match: { kind: "recency" },
-    categoryNames: [],
-    products: [byId["p-nuevo"], byId["p-cereal"]],
+    id: "cocinar",
+    title: "Para cocinar",
+    subtitle: "Aceites, granos y lo básico de la cocina",
+    match: { kind: "keywords", keys: ["aceite", "arroz"] },
+    categoryNames: ["Aceites y Grasas", "Artículos de Conveniencia"],
+    products: [byId["p-aceite"], byId["p-arroz"]],
   },
 ];
 

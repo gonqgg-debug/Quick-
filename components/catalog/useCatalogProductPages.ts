@@ -2,10 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchCatalogProductsPage } from "@/lib/catalog-products-client";
-import {
-  categoryMatchesCollection,
-  getCatalogCollection,
-} from "@/lib/catalog-collections-shared";
+import { getCatalogCollection, productMatchesCollection } from "@/lib/catalog-collections-shared";
 import type { CatalogCategoryChip, CatalogProductSort } from "@/lib/catalog-products-shared";
 import type { Product } from "@/lib/types";
 
@@ -28,7 +25,7 @@ function filterLocalCatalogProducts({
     if (categoria && product.categoria !== categoria) {
       return false;
     }
-    if (!categoria && def?.match.kind === "categories" && !categoryMatchesCollection(product.categoria, def)) {
+    if (!categoria && def && !productMatchesCollection(product, def) && def.match.kind === "keywords") {
       return false;
     }
     if (!needle) {
