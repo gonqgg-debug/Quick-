@@ -35,12 +35,11 @@ export function CatalogRecommendations({
   onRepeatLastOrder,
   onViewAll,
 }: CatalogRecommendationsProps) {
-  const { bestSellers, lastOrder, favorites } = recommendations;
+  const { lastOrder, favorites } = recommendations;
   const showRepeat = Boolean(lastOrder?.items.length);
   const showFavorites = favorites.length > 0;
-  const visibleCollections = collections.filter((collection) => collection.products.length > 0);
 
-  if (bestSellers.length === 0 && !showRepeat && !showFavorites && visibleCollections.length === 0) {
+  if (!showRepeat && !showFavorites && collections.length === 0) {
     return null;
   }
 
@@ -67,19 +66,7 @@ export function CatalogRecommendations({
         />
       ) : null}
 
-      {bestSellers.length > 0 ? (
-        <ProductRail
-          title="Lo más pedido en Quick!"
-          subtitle="Los favoritos de todos en el residencial"
-          products={bestSellers}
-          cart={cart}
-          onQuantityChange={onQuantityChange}
-          onSelectProduct={onSelectProduct}
-          onViewAll={onViewAll ? () => onViewAll({ type: "all" }) : undefined}
-        />
-      ) : null}
-
-      {visibleCollections.map((collection) => (
+      {collections.map((collection) => (
         <ProductRail
           key={collection.id}
           title={collection.title}
@@ -119,7 +106,7 @@ function ProductRail({
           <h2 className="font-display text-2xl font-bold text-brand-ink">{title}</h2>
           <p className="mt-0.5 text-sm text-brand-muted">{subtitle}</p>
         </div>
-        {onViewAll ? (
+        {onViewAll && products.length > 0 ? (
           <button
             type="button"
             onClick={onViewAll}
@@ -135,6 +122,7 @@ function ProductRail({
         cart={cart}
         onQuantityChange={onQuantityChange}
         onSelectProduct={onSelectProduct}
+        emptyMessage="Todavía no hay productos en esta selección."
       />
     </section>
   );
@@ -145,14 +133,23 @@ function ProductCarouselTrack({
   cart,
   onQuantityChange,
   onSelectProduct,
+  emptyMessage,
 }: {
   products: Product[];
   cart: Record<string, number>;
   onQuantityChange: (productId: string, cantidad: number) => void;
   onSelectProduct: (product: Product) => void;
+  emptyMessage?: string;
 }) {
   if (products.length === 0) {
-    return null;
+    if (!emptyMessage) {
+      return null;
+    }
+    return (
+      <p className="mt-3 rounded-2xl bg-black/[0.03] px-4 py-3 text-sm text-brand-muted">
+        {emptyMessage}
+      </p>
+    );
   }
 
   return (

@@ -1,29 +1,18 @@
 import {
-  CATALOG_COLLECTION_RAIL_LIMIT,
-  CATALOG_COLLECTION_RECENT_DAYS,
-  CATALOG_COLLECTIONS,
-  getCatalogCollection,
-  productMatchesCollection,
+  filterCollectionProducts,
   type CatalogCollectionRail,
 } from "@/lib/catalog-collections-shared";
-import { getSalesTotalsByOdooCode } from "@/lib/catalog-ranking";
 import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import type { Product } from "@/lib/types";
 
 export {
-  CATALOG_COLLECTION_RAIL_LIMIT,
-  CATALOG_COLLECTION_RECENT_DAYS,
-  CATALOG_COLLECTIONS,
-  categoryMatchesCollection,
+  filterCollectionProducts,
   getCatalogCollection,
-  productMatchesCollection,
-  type CatalogCollectionDef,
-  type CatalogCollectionMatch,
   type CatalogCollectionRail,
 } from "@/lib/catalog-collections-shared";
 
-const PRODUCT_SELECT = "id, nombre, marca, descripcion, precio, foto_url, categoria, codigo_odoo, created_at";
+const PRODUCT_SELECT = "id, nombre, marca, descripcion, precio, foto_url, categoria";
 
 type ProductRow = {
   id: unknown;
@@ -33,13 +22,34 @@ type ProductRow = {
   precio: unknown;
   foto_url?: unknown;
   categoria: unknown;
-  codigo_odoo?: unknown;
-  created_at?: unknown;
+  activo?: unknown;
 };
 
-function mapProduct(row: ProductRow): Product {
+type CollectionRow = {
+  id: unknown;
+  slug: unknown;
+  nombre: unknown;
+  descripcion: unknown;
+  orden: unknown;
+  home_coleccion_productos?: CollectionProductRow[] | null;
+};
+
+type CollectionProductRow = {
+  orden: unknown;
+  product_id?: unknown;
+  products?: ProductRow | ProductRow[] | null;
+};
+
+function mapProduct(row: ProductRow): Product | null {
+  const id = String(row.id ?? "").trim();
+  if (!id) {
+    return null;
+  }
+  if (row.activo === false) {
+    return null;
+  }
   return {
-    id: String(row.id),
+    id,
     nombre: String(row.nombre ?? ""),
     marca: row.marca ? String(row.marca) : null,
     descripcion: row.descripcion ? String(row.descripcion) : null,
@@ -49,106 +59,187 @@ function mapProduct(row: ProductRow): Product {
   };
 }
 
-function sortByPopularity(rows: ProductRow[], sales: Map<string, number>): ProductRow[] {
-  return [...rows].sort((left, right) => {
-    const leftSold = sales.get(String(left.codigo_odoo ?? "").trim()) ?? 0;
-    const rightSold = sales.get(String(right.codigo_odoo ?? "").trim()) ?? 0;
-    if (rightSold !== leftSold) {
-      return rightSold - leftSold;
-    }
-    return String(left.nombre ?? "").localeCompare(String(right.nombre ?? ""), "es");
-  });
+function unwrapProduct(value: ProductRow | ProductRow[] | null | undefined): ProductRow | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+  return value ?? null;
 }
 
-function uniqueCategories(rows: ProductRow[]): string[] {
-  const names = new Set<string>();
-  for (const row of rows) {
-    const name = String(row.categoria ?? "").trim();
-    if (name) {
-      names.add(name);
-    }
-  }
-  return Array.from(names);
+function sortMembership<T extends { orden: unknown }>(rows: T[]): T[] {
+  return [...rows].sort((left, right) => Number(left.orden ?? 0) - Number(right.orden ?? 0));
 }
 
-function isRecentProduct(row: ProductRow, now = Date.now()): boolean {
-  const created = new Date(String(row.created_at ?? "")).getTime();
-  if (!Number.isFinite(created)) {
-    return false;
-  }
-  return now - created <= CATALOG_COLLECTION_RECENT_DAYS * 24 * 60 * 60 * 1000;
+function mapCollection(row: CollectionRow, products: Product[]): CatalogCollectionRail {
+  return {
+    id: String(row.slug ?? ""),
+    title: String(row.nombre ?? ""),
+    subtitle: String(row.descripcion ?? ""),
+    products,
+  };
 }
 
-export async function listCollectionCategoryNames(collectionId: string): Promise<string[]> {
-  const def = getCatalogCollection(collectionId);
-  if (!def || def.match.kind !== "keywords") {
-    return [];
-  }
-
+async function listCollectionsFallback(): Promise<CatalogCollectionRail[]> {
   const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from("products")
-    .select("nombre, marca, categoria, descripcion")
-    .eq("activo", true);
-  if (error || !data) {
+  const { data: colecciones, error } = await supabase
+    .from("home_colecciones")
+    .select("id, slug, nombre, descripcion, orden")
+    .eq("activa", true)
+    .order("orden", { ascending: true });
+
+  if (error || !colecciones?.length) {
+    if (error) {
+      console.error("[catalog] home_colecciones", error);
+    }
     return [];
   }
 
-  const names = new Set<string>();
-  for (const row of data) {
-    if (productMatchesCollection(row, def)) {
-      const name = String(row.categoria ?? "").trim();
-      if (name) {
-        names.add(name);
+  const collectionIds = colecciones.map((row) => String(row.id));
+  const { data: links, error: linksError } = await supabase
+    .from("home_coleccion_productos")
+    .select("coleccion_id, product_id, orden")
+    .in("coleccion_id", collectionIds)
+    .order("orden", { ascending: true });
+
+  if (linksError) {
+    console.error("[catalog] home_coleccion_productos", linksError);
+    return colecciones.map((row) => mapCollection(row, []));
+  }
+
+  const productIds = Array.from(
+    new Set((links ?? []).map((link) => String(link.product_id ?? "")).filter(Boolean))
+  );
+  const productsById = new Map<string, Product>();
+  if (productIds.length > 0) {
+    const { data: products, error: productsError } = await supabase
+      .from("products")
+      .select(PRODUCT_SELECT)
+      .eq("activo", true)
+      .in("id", productIds);
+    if (productsError) {
+      console.error("[catalog] home collection products", productsError);
+    } else {
+      for (const row of products ?? []) {
+        const product = mapProduct(row);
+        if (product) {
+          productsById.set(product.id, product);
+        }
       }
     }
   }
-  return Array.from(names);
+
+  const linksByCollection = new Map<string, { product_id: string; orden: number }[]>();
+  for (const link of links ?? []) {
+    const collectionId = String(link.coleccion_id ?? "");
+    const productId = String(link.product_id ?? "");
+    if (!collectionId || !productId) {
+      continue;
+    }
+    const current = linksByCollection.get(collectionId) ?? [];
+    current.push({ product_id: productId, orden: Number(link.orden ?? 0) });
+    linksByCollection.set(collectionId, current);
+  }
+
+  return colecciones.map((row) => {
+    const membership = sortMembership(linksByCollection.get(String(row.id)) ?? []);
+    const products = membership
+      .map((item) => productsById.get(item.product_id))
+      .filter((product): product is Product => Boolean(product));
+    return mapCollection(row, products);
+  });
 }
 
 export async function getCatalogCollections(): Promise<CatalogCollectionRail[]> {
   const supabase = getSupabaseAdminClient();
-  const [{ data, error }, sales] = await Promise.all([
-    supabase.from("products").select(PRODUCT_SELECT).eq("activo", true).limit(1000),
-    getSalesTotalsByOdooCode(),
-  ]);
+  const { data, error } = await supabase
+    .from("home_colecciones")
+    .select(
+      `
+      id, slug, nombre, descripcion, orden,
+      home_coleccion_productos (
+        orden,
+        products ( id, nombre, marca, descripcion, precio, foto_url, categoria, activo )
+      )
+    `
+    )
+    .eq("activa", true)
+    .order("orden", { ascending: true })
+    .order("orden", { referencedTable: "home_coleccion_productos", ascending: true });
 
-  if (error || !data?.length) {
+  if (error || !data) {
+    if (error) {
+      console.error("[catalog] home_colecciones nested", error);
+    }
+    return listCollectionsFallback();
+  }
+
+  return (data as CollectionRow[]).map((row) => {
+    const products = sortMembership(row.home_coleccion_productos ?? [])
+      .map((item) => {
+        const productRow = unwrapProduct(item.products);
+        return productRow ? mapProduct(productRow) : null;
+      })
+      .filter((product): product is Product => Boolean(product));
+    return mapCollection(row, products);
+  });
+}
+
+export async function listHomeCollectionProducts(options: {
+  slug: string;
+  q?: string;
+}): Promise<Product[]> {
+  const supabase = getSupabaseAdminClient();
+  const { data: collection, error } = await supabase
+    .from("home_colecciones")
+    .select("id")
+    .eq("slug", options.slug)
+    .eq("activa", true)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+  if (!collection) {
     return [];
   }
 
-  const now = Date.now();
-  return CATALOG_COLLECTIONS.map((def) => {
-    if (def.match.kind === "recency") {
-      const recent = [...data]
-        .filter((row) => isRecentProduct(row, now))
-        .sort(
-          (left, right) =>
-            new Date(String(right.created_at ?? "")).getTime() -
-            new Date(String(left.created_at ?? "")).getTime()
-        );
-      if (recent.length < 3) {
-        return null;
-      }
-      return {
-        ...def,
-        products: recent.slice(0, CATALOG_COLLECTION_RAIL_LIMIT).map(mapProduct),
-        categoryNames: [],
-      } satisfies CatalogCollectionRail;
-    }
+  const { data: links, error: linksError } = await supabase
+    .from("home_coleccion_productos")
+    .select("product_id, orden")
+    .eq("coleccion_id", collection.id)
+    .order("orden", { ascending: true });
 
-    const matched = sortByPopularity(
-      data.filter((row) => productMatchesCollection(row, def)),
-      sales
-    );
-    if (matched.length === 0) {
-      return null;
-    }
+  if (linksError) {
+    throw linksError;
+  }
 
-    return {
-      ...def,
-      products: matched.slice(0, CATALOG_COLLECTION_RAIL_LIMIT).map(mapProduct),
-      categoryNames: uniqueCategories(matched),
-    } satisfies CatalogCollectionRail;
-  }).filter((rail): rail is CatalogCollectionRail => Boolean(rail));
+  const productIds = (links ?? [])
+    .map((link) => String(link.product_id ?? ""))
+    .filter(Boolean);
+  if (productIds.length === 0) {
+    return [];
+  }
+
+  const { data: rows, error: productsError } = await supabase
+    .from("products")
+    .select(PRODUCT_SELECT)
+    .eq("activo", true)
+    .in("id", productIds);
+
+  if (productsError) {
+    throw productsError;
+  }
+
+  const byId = new Map<string, Product>();
+  for (const row of rows ?? []) {
+    const product = mapProduct(row);
+    if (product) {
+      byId.set(product.id, product);
+    }
+  }
+
+  return filterCollectionProducts(
+    productIds.map((id) => byId.get(id)).filter((product): product is Product => Boolean(product)),
+    options.q ?? ""
+  );
 }

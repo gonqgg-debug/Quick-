@@ -1,8 +1,4 @@
-import {
-  CATALOG_COLLECTION_RECENT_DAYS,
-  getCatalogCollection,
-  productMatchesCollection,
-} from "@/lib/catalog-collections";
+import { listHomeCollectionProducts } from "@/lib/catalog-collections";
 import { getSalesTotalsByOdooCode } from "@/lib/catalog-ranking";
 import {
   CATALOG_PRODUCT_IDS_MAX,
@@ -293,18 +289,28 @@ export async function listActiveProductsPage(options: {
     throw new CatalogCursorError();
   }
 
-  const collection = getCatalogCollection(options.collection);
+  const collectionSlug = options.collection?.trim() ?? "";
   const categoria = options.categoria?.trim() ?? "";
-  const sort: CatalogProductSort =
-    options.sort ?? (collection?.match.kind === "recency" ? "recent" : "alpha");
+  const sort: CatalogProductSort = options.sort ?? "alpha";
+  const q = sanitizeCatalogSearch(options.q ?? "");
 
-  if (sort === "popular" || (collection && !categoria)) {
+  if (collectionSlug && !categoria) {
+    const products = await listHomeCollectionProducts({ slug: collectionSlug, q });
+    const page = products.slice(offset, offset + limit);
+    const hasMore = offset + limit < products.length;
+    return {
+      products: page,
+      hasMore,
+      nextCursor: hasMore ? encodeCatalogCursor(offset + limit) : null,
+    };
+  }
+
+  if (sort === "popular") {
     return listProductsByPopularity({
       offset,
       limit,
       categoria,
-      collectionId: categoria ? null : collection?.id ?? null,
-      q: sanitizeCatalogSearch(options.q ?? ""),
+      q,
       sort,
     });
   }
@@ -316,7 +322,6 @@ export async function listActiveProductsPage(options: {
     query = query.eq("categoria", categoria);
   }
 
-  const q = sanitizeCatalogSearch(options.q ?? "");
   if (q) {
     query = query.or(
       `nombre.ilike.%${q}%,marca.ilike.%${q}%,categoria.ilike.%${q}%,descripcion.ilike.%${q}%`
@@ -353,7 +358,6 @@ async function listProductsByPopularity(options: {
   offset: number;
   limit: number;
   categoria: string;
-  collectionId: string | null;
   q: string;
   sort?: CatalogProductSort;
 }): Promise<CatalogProductsPage> {
@@ -375,17 +379,7 @@ async function listProductsByPopularity(options: {
     throw error;
   }
 
-  const collection = getCatalogCollection(options.collectionId);
-  let rows = data ?? [];
-  if (collection?.match.kind === "keywords") {
-    rows = rows.filter((row) => productMatchesCollection(row, collection));
-  } else if (collection?.match.kind === "recency") {
-    const cutoff = Date.now() - CATALOG_COLLECTION_RECENT_DAYS * 24 * 60 * 60 * 1000;
-    rows = rows.filter((row) => {
-      const created = new Date(String(row.created_at ?? "")).getTime();
-      return Number.isFinite(created) && created >= cutoff;
-    });
-  }
+  const rows = data ?? [];
 
   const ranked = [...rows].sort((left, right) => {
     if (options.sort === "recent") {

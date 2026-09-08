@@ -194,12 +194,8 @@ export function CatalogExperience({
   const showVitrine = !query.trim() && !selectedCategory && !browseAll && !browseCollection;
   const browsing = Boolean(debouncedQuery || selectedCategory || browseAll || browseCollection);
   const awaitingSearch = Boolean(query.trim()) && !browsing;
-  const activeCollection = getCatalogCollection(browseCollection);
-  const listSort: CatalogProductSort = debouncedQuery
-    ? "alpha"
-    : browseCollection === "nuevos"
-      ? "recent"
-      : "popular";
+  const activeCollection = getCatalogCollection(browseCollection, collections);
+  const listSort: CatalogProductSort = debouncedQuery ? "alpha" : "popular";
 
   const {
     products: pageProducts,
@@ -212,6 +208,7 @@ export function CatalogExperience({
     sessionId,
     categoria: selectedCategory,
     collection: selectedCategory ? null : browseCollection,
+    collectionProducts: selectedCategory ? undefined : activeCollection?.products,
     q: debouncedQuery,
     sort: listSort,
     localProducts,
@@ -850,6 +847,10 @@ export function CatalogExperience({
                     style={{ backgroundColor: "#FEE2E2", color: brand.error }}
                   >
                     {listError}
+                  </p>
+                ) : activeCollection && !query.trim() ? (
+                  <p className="rounded-2xl bg-black/[0.03] px-4 py-3 text-sm text-brand-muted">
+                    Todavía no hay productos en esta selección.
                   </p>
                 ) : (
                   <ProductRequestEmpty
