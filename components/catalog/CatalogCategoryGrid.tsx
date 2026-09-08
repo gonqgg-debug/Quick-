@@ -72,7 +72,7 @@ function CategoryTile({
         {categoryEmoji(name)}
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-sm font-bold leading-tight text-brand-ink">{name}</span>
+        <span className="block text-sm font-bold leading-tight text-brand-ink">{name}</span>
         <span className="mt-0.5 block text-xs font-semibold" style={{ color: featured ? brand.blue : brand.muted }}>
           {featured ? "PharmaQuick!" : `${count} productos`}
         </span>

@@ -52,6 +52,7 @@ type CatalogExperienceProps = {
   customer?: CatalogCustomer | null;
   recommendations?: CatalogRecommendationsData;
   collections?: CatalogCollectionRail[];
+  localProducts?: Product[];
 };
 
 type Step = "register" | "catalog" | "checkout" | "success";
@@ -131,6 +132,7 @@ export function CatalogExperience({
   customer: initialCustomer = null,
   recommendations = EMPTY_RECOMMENDATIONS,
   collections = [],
+  localProducts,
 }: CatalogExperienceProps) {
   const [customer, setCustomer] = useState<CatalogCustomer | null>(initialCustomer);
   const [step, setStep] = useState<Step>(initialCustomer ? "catalog" : "register");
@@ -149,7 +151,11 @@ export function CatalogExperience({
   const [browseCollection, setBrowseCollection] = useState<string | null>(null);
   const [categories, setCategories] = useState<CatalogCategoryChip[]>(initialCategories);
   const [productCache, setProductCache] = useState<Record<string, Product>>(() =>
-    collectSeedProducts(seedProducts, recommendations, collections)
+    collectSeedProducts(
+      [...(seedProducts ?? []), ...(localProducts ?? [])],
+      recommendations,
+      collections
+    )
   );
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [requestOpen, setRequestOpen] = useState(false);
@@ -208,6 +214,7 @@ export function CatalogExperience({
     collection: selectedCategory ? null : browseCollection,
     q: debouncedQuery,
     sort: listSort,
+    localProducts,
     enabled: step !== "register" && browsing,
     onProducts: rememberProducts,
     onCategories: setCategories,
