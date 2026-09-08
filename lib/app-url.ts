@@ -13,6 +13,10 @@ export function publicOrderUrl(sessionId: string): string {
   return `${appBaseUrl()}/order/${sessionId}`;
 }
 
+export function publicOrderProductUrl(sessionId: string, productId: string): string {
+  return `${publicOrderUrl(sessionId)}#product-${productId}`;
+}
+
 export function publicMyOrdersUrl(sessionId: string): string {
   return `${publicOrderUrl(sessionId)}#mis-pedidos`;
 }

@@ -1,5 +1,6 @@
 import { publicMyOrdersUrl, publicOrderUrl } from "@/lib/app-url";
 import { createCatalogSession, ensureActiveCatalogSession } from "@/lib/catalog";
+import { getCustomerForChat } from "@/lib/customers";
 import { parseFeedbackButton, recordFeedbackComment, recordFeedbackRating } from "@/lib/order-feedback";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import {
@@ -9,6 +10,15 @@ import {
   type IncomingWhatsAppMedia,
 } from "@/lib/whatsapp-media";
 import { isMarketingOptOutText, MARKETING_OPT_OUT_REPLY } from "@/lib/marketing-opt-out";
+import {
+  classifyWhatsAppIntent,
+  handleAnotarProducto,
+  MIN_AI_CONFIDENCE,
+  parseAnotarQuery,
+  parseOpenProductId,
+  sendCatalogSearchResults,
+  sendProductDeepLink,
+} from "@/lib/whatsapp-ai";
 import {
   formatShortOrderId,
   getActiveOrder,
@@ -556,6 +566,35 @@ async function handleIncomingMessage(message: IncomingMessage): Promise<void> {
     return;
   }
 
+  const openProductId = parseOpenProductId(message.buttonId);
+  if (openProductId) {
+    try {
+      await sendProductDeepLink({
+        phoneNumber: message.from,
+        chatId: chat.id,
+        productId: openProductId,
+      });
+    } catch (error) {
+      console.error("[whatsapp-ai] error al abrir producto", error);
+    }
+    return;
+  }
+
+  const anotarQuery = parseAnotarQuery(message.buttonId);
+  if (anotarQuery) {
+    try {
+      await handleAnotarProducto({
+        phoneNumber: message.from,
+        chatId: chat.id,
+        query: anotarQuery,
+        originalText: message.text,
+      });
+    } catch (error) {
+      console.error("[whatsapp-ai] error al anotar producto", error);
+    }
+    return;
+  }
+
   try {
     const handledMissing = await handleMissingReply(message.from, chat.id, message);
     if (handledMissing) {
@@ -565,15 +604,102 @@ async function handleIncomingMessage(message: IncomingMessage): Promise<void> {
     console.error("[whatsapp] error al notificar respuesta de faltante", error);
   }
 
-  const unrecognized = Boolean(message.text) && !GREETING_PATTERN.test(message.text);
-  if (chat.created || GREETING_PATTERN.test(message.text) || unrecognized || !message.text) {
+  if (!message.text || GREETING_PATTERN.test(message.text)) {
     try {
       const activeOrder = await getActiveOrder(chat.id);
       await sendClientMenu(message.from, activeOrder?.id ?? null);
     } catch (error) {
       console.error("[whatsapp] error al enviar el menú interactivo", error);
     }
+    return;
   }
+
+  try {
+    await replyWithAiOrMenu(message.from, chat.id, message.text);
+  } catch (error) {
+    console.error("[whatsapp-ai] error al responder con IA", error);
+    try {
+      const activeOrder = await getActiveOrder(chat.id);
+      await sendClientMenu(message.from, activeOrder?.id ?? null);
+    } catch (menuError) {
+      console.error("[whatsapp] error al enviar el menú interactivo", menuError);
+    }
+  }
+}
+
+async function replyWithAiOrMenu(phoneNumber: string, chatId: string, text: string): Promise<void> {
+  const [activeOrder, customer] = await Promise.all([
+    getActiveOrder(chatId),
+    getCustomerForChat(chatId).catch(() => null),
+  ]);
+
+  const classified = await classifyWhatsAppIntent({
+    text,
+    customerName: customer ? `${customer.nombre} ${customer.apellido}`.trim() : null,
+    activeOrderEstado: activeOrder?.estado ?? null,
+  });
+
+  if (!classified || classified.confidence < MIN_AI_CONFIDENCE || classified.intent === "otro") {
+    console.log("[whatsapp-ai] fallback:menu", {
+      chatId,
+      intent: classified?.intent ?? null,
+      confidence: classified?.confidence ?? null,
+    });
+    await sendClientMenu(phoneNumber, activeOrder?.id ?? null);
+    return;
+  }
+
+  console.log("[whatsapp-ai] intent", {
+    chatId,
+    intent: classified.intent,
+    confidence: classified.confidence,
+    query: classified.query,
+  });
+
+  if (classified.intent === "saludo") {
+    await sendClientMenu(phoneNumber, activeOrder?.id ?? null);
+    return;
+  }
+
+  if (classified.intent === "ayuda_humana") {
+    await requestHumanHelp(phoneNumber, chatId);
+    return;
+  }
+
+  if (classified.intent === "nueva_orden") {
+    if (activeOrder) {
+      await sendClientMenu(phoneNumber, activeOrder.id);
+      return;
+    }
+    await handleNewOrder(phoneNumber, chatId);
+    return;
+  }
+
+  if (classified.intent === "ver_pedido" || classified.intent === "estatus") {
+    await handleViewOrder(phoneNumber, chatId);
+    return;
+  }
+
+  if (classified.intent === "modificar") {
+    await handleModifyOrder(phoneNumber, chatId);
+    return;
+  }
+
+  if (classified.intent === "cancelar") {
+    if (!activeOrder) {
+      await sendTextMessage(phoneNumber, "No tienes un pedido activo para cancelar.");
+      return;
+    }
+    await sendCancelConfirmation(phoneNumber, activeOrder.id);
+    return;
+  }
+
+  const query = classified.query?.trim() || text.trim();
+  await sendCatalogSearchResults({
+    phoneNumber,
+    chatId,
+    query,
+  });
 }
 
 export async function processWhatsAppWebhook(payload: unknown): Promise<void> {

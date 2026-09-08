@@ -25,7 +25,7 @@ import {
   type CatalogCollectionRail,
 } from "@/lib/catalog-collections-shared";
 import { CATALOG_PROMO_BANNERS } from "@/lib/catalog-promo";
-import { SEARCH_DEBOUNCE_MS } from "@/lib/catalog-search";
+import { productAnchor, SEARCH_DEBOUNCE_MS } from "@/lib/catalog-search";
 import { fetchCatalogProductsByIds } from "@/lib/catalog-products-client";
 import type { CatalogCategoryChip, CatalogProductSort } from "@/lib/catalog-products-shared";
 import { MY_ORDERS_HASH, MY_PROFILE_HASH, type CustomerOrder } from "@/lib/customer-orders-shared";
@@ -58,6 +58,15 @@ type CatalogExperienceProps = {
 type Step = "register" | "catalog" | "checkout" | "success";
 type CatalogView = "shop" | "orders" | "profile";
 type CartMap = Record<string, number>;
+
+function productIdFromHash(hash: string): string | null {
+  const raw = hash.startsWith("#") ? hash.slice(1) : hash;
+  const prefix = productAnchor("");
+  if (!raw.startsWith(prefix) || raw.length <= prefix.length) {
+    return null;
+  }
+  return raw.slice(prefix.length).trim() || null;
+}
 type CartLine = { product: Product; cantidad: number; subtotal: number };
 
 function cartStorageKey(sessionId: string) {
@@ -158,6 +167,7 @@ export function CatalogExperience({
     )
   );
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [pendingProductHashId, setPendingProductHashId] = useState<string | null>(null);
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestPrefill, setRequestPrefill] = useState("");
   const [direccion, setDireccion] = useState(
@@ -241,6 +251,10 @@ export function CatalogExperience({
 
   const closeProduct = useCallback(() => {
     setSelectedProduct(null);
+    setPendingProductHashId(null);
+    if (typeof window !== "undefined" && productIdFromHash(window.location.hash)) {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    }
   }, []);
 
   const lines = useMemo(() => {
@@ -334,6 +348,13 @@ export function CatalogExperience({
 
     function applyHash() {
       const hash = window.location.hash;
+      const productId = productIdFromHash(hash);
+      if (productId) {
+        setView("shop");
+        setPendingProductHashId(productId);
+        return;
+      }
+      setPendingProductHashId(null);
       const nextView: CatalogView =
         hash === `#${MY_ORDERS_HASH}` ? "orders" : hash === `#${MY_PROFILE_HASH}` ? "profile" : "shop";
       setView(nextView);
@@ -351,6 +372,34 @@ export function CatalogExperience({
       window.removeEventListener("popstate", applyHash);
     };
   }, [step]);
+
+  useEffect(() => {
+    if (step !== "catalog" || !pendingProductHashId) {
+      return;
+    }
+    const cached = productCache[pendingProductHashId];
+    if (cached) {
+      openProduct(cached);
+      return;
+    }
+    let cancelled = false;
+    void fetchCatalogProductsByIds({ sessionId, ids: [pendingProductHashId] })
+      .then((products) => {
+        if (cancelled) {
+          return;
+        }
+        const product = products[0];
+        if (product) {
+          openProduct(product);
+        }
+      })
+      .catch(() => {
+        /* el cliente puede seguir en el catálogo */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openProduct, pendingProductHashId, productCache, sessionId, step]);
 
   const setQuantity = useCallback((productId: string, cantidad: number) => {
     setCart((current) => {

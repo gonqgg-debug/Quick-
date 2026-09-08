@@ -242,7 +242,11 @@ export async function logIncomingMessage(
   }
 }
 
-export async function sendTextMessage(phoneNumber: string, text: string): Promise<WhatsAppSendResult> {
+export async function sendTextMessage(
+  phoneNumber: string,
+  text: string,
+  logPrefix?: string
+): Promise<WhatsAppSendResult> {
   if (isTestChatPhone(phoneNumber)) {
     return skippedTestWhatsApp();
   }
@@ -258,7 +262,7 @@ export async function sendTextMessage(phoneNumber: string, text: string): Promis
     },
   });
 
-  await logOutgoingMessage(phoneNumber, text);
+  await logOutgoingMessage(phoneNumber, `${logPrefix ?? ""}${text}`);
   return result;
 }
 
@@ -370,7 +374,7 @@ const HUMAN_HELP_BUTTON = {
   title: "Hablar con alguien",
 } as const;
 
-type MenuChoice = { id: string; title: string };
+type MenuChoice = { id: string; title: string; description?: string };
 
 function withHumanHelp(buttons: MenuChoice[]): MenuChoice[] {
   if (buttons.some((button) => button.id === HUMAN_HELP_BUTTON.id)) {
@@ -382,7 +386,8 @@ function withHumanHelp(buttons: MenuChoice[]): MenuChoice[] {
 async function sendButtonMenu(
   phoneNumber: string,
   bodyText: string,
-  buttons: MenuChoice[]
+  buttons: MenuChoice[],
+  logPrefix?: string
 ): Promise<WhatsAppSendResult> {
   if (isTestChatPhone(phoneNumber)) {
     return skippedTestWhatsApp();
@@ -407,16 +412,17 @@ async function sendButtonMenu(
 
   await logOutgoingMessage(
     phoneNumber,
-    `${bodyText}\n${buttons.map((button) => `[${button.title}]`).join(" ")}`
+    `${logPrefix ?? ""}${bodyText}\n${buttons.map((button) => `[${button.title}]`).join(" ")}`
   );
   return result;
 }
 
-async function sendListMenu(
+export async function sendInteractiveList(
   phoneNumber: string,
   bodyText: string,
   rows: MenuChoice[],
-  listButton = "Ver opciones"
+  listButton = "Ver opciones",
+  logPrefix?: string
 ): Promise<WhatsAppSendResult> {
   if (isTestChatPhone(phoneNumber)) {
     return skippedTestWhatsApp();
@@ -435,10 +441,14 @@ async function sendListMenu(
         sections: [
           {
             title: "Opciones",
-            rows: rows.map((row) => ({
-              id: row.id,
-              title: row.title,
-            })),
+            rows: rows.map((row) => {
+              const description = row.description?.trim();
+              return {
+                id: row.id,
+                title: row.title,
+                ...(description ? { description } : {}),
+              };
+            }),
           },
         ],
       },
@@ -447,21 +457,31 @@ async function sendListMenu(
 
   await logOutgoingMessage(
     phoneNumber,
-    `${bodyText}\n${rows.map((row) => `[${row.title}]`).join(" ")}`
+    `${logPrefix ?? ""}${bodyText}\n${rows.map((row) => `[${row.title}]`).join(" ")}`
   );
   return result;
 }
 
-async function sendChoiceMenu(
+async function sendListMenu(
   phoneNumber: string,
   bodyText: string,
-  buttons: MenuChoice[]
+  rows: MenuChoice[],
+  listButton = "Ver opciones"
+): Promise<WhatsAppSendResult> {
+  return sendInteractiveList(phoneNumber, bodyText, rows, listButton);
+}
+
+export async function sendChoiceMenu(
+  phoneNumber: string,
+  bodyText: string,
+  buttons: MenuChoice[],
+  logPrefix?: string
 ): Promise<WhatsAppSendResult> {
   const choices = withHumanHelp(buttons);
   if (choices.length <= 3) {
-    return sendButtonMenu(phoneNumber, bodyText, choices);
+    return sendButtonMenu(phoneNumber, bodyText, choices, logPrefix);
   }
-  return sendListMenu(phoneNumber, bodyText, choices);
+  return sendInteractiveList(phoneNumber, bodyText, choices, "Ver opciones", logPrefix);
 }
 
 export async function sendFeedbackSurvey(

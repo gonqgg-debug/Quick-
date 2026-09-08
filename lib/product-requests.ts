@@ -128,6 +128,83 @@ export async function createProductRequestFromSession(input: {
   return { ok: true, id: String(data.id) };
 }
 
+function normalizeRequestedProduct(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+export async function createProductRequestFromChat(input: {
+  chatId: string;
+  productoSolicitado: unknown;
+  nota?: unknown;
+}): Promise<
+  | { ok: true; id: string; deduped: boolean }
+  | { ok: false; message: string }
+> {
+  const producto = trimText(input.productoSolicitado, PRODUCT_MAX);
+  const nota = trimText(input.nota, NOTE_MAX) || null;
+  const chatId = input.chatId.trim();
+
+  if (!chatId) {
+    return { ok: false, message: "Falta el chat." };
+  }
+  if (producto.length < 2) {
+    return { ok: false, message: "Escribe el producto que buscas." };
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const { data: chat, error: chatError } = await supabase
+    .from("chats")
+    .select("id, phone_number")
+    .eq("id", chatId)
+    .maybeSingle();
+
+  if (chatError || !chat) {
+    return { ok: false, message: "No pudimos identificar tu WhatsApp." };
+  }
+
+  const phone = normalizePhoneNumber(String(chat.phone_number ?? ""));
+  if (!phone) {
+    return { ok: false, message: "No pudimos identificar tu WhatsApp." };
+  }
+
+  const customer = await getCustomerForChat(chatId);
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: pending } = await supabase
+    .from("product_requests")
+    .select("id, producto_solicitado")
+    .eq("phone_number", phone)
+    .eq("estado", "pendiente")
+    .gte("created_at", since)
+    .limit(50);
+
+  const normalized = normalizeRequestedProduct(producto);
+  const existing = (pending ?? []).find(
+    (row) => normalizeRequestedProduct(String(row.producto_solicitado ?? "")) === normalized
+  );
+  if (existing?.id) {
+    return { ok: true, id: String(existing.id), deduped: true };
+  }
+
+  const { data, error } = await supabase
+    .from("product_requests")
+    .insert({
+      customer_id: customer?.id ?? null,
+      phone_number: phone,
+      producto_solicitado: producto,
+      nota,
+      estado: "pendiente",
+    })
+    .select("id")
+    .single();
+
+  if (error || !data?.id) {
+    console.error("[whatsapp] product request insert", error);
+    return { ok: false, message: "No pudimos enviar la solicitud. Inténtalo de nuevo." };
+  }
+
+  return { ok: true, id: String(data.id), deduped: false };
+}
+
 export async function countPendingProductRequests(): Promise<number> {
   const supabase = getSupabaseAdminClient();
   const { count, error } = await supabase
