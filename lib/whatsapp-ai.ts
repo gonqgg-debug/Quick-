@@ -172,15 +172,17 @@ export async function sendCatalogSearchResults(input: {
     return;
   }
 
-  await sendProductMatchList(input.phoneNumber, sessionId, products);
+  await sendProductMatchList(input.phoneNumber, sessionId, products, query);
 }
 
 async function sendProductMatchList(
   phoneNumber: string,
   sessionId: string,
-  products: Product[]
+  products: Product[],
+  query: string
 ): Promise<WhatsAppSendResult> {
-  const rows = products.slice(0, 8).map((product) => ({
+  const shown = products.slice(0, 8);
+  const rows = shown.map((product) => ({
     id: `${OPEN_PRODUCT_PREFIX}${product.id}`,
     title: clip(product.nombre, LIST_TITLE_MAX),
     description: clip(
@@ -189,8 +191,16 @@ async function sendProductMatchList(
     ),
   }));
 
+  const label = query.trim().slice(0, 40);
+  const preview = shown
+    .slice(0, 4)
+    .map((product) => `• ${product.nombre} — ${formatPrice(product.precio)}`)
+    .join("\n");
+  const extra = shown.length > 4 ? `\n• …y ${shown.length - 4} más en la lista` : "";
+
   const body = [
-    "En el catálogo aparece esto. El equipo confirma al preparar el pedido.",
+    `En el catálogo aparece esto para «${label}». El equipo confirma al preparar el pedido.`,
+    `${preview}${extra}`,
     catalogTakeoverFooter(sessionId),
   ].join("\n\n");
 
@@ -203,7 +213,7 @@ async function sendCatalogMissPrompt(
   query: string
 ): Promise<WhatsAppSendResult> {
   const body = [
-    "No lo veo en el catálogo ahora.",
+    `No lo veo en el catálogo ahora para «${query.trim().slice(0, 40)}».`,
     catalogTakeoverFooter(sessionId),
   ].join("\n\n");
 
