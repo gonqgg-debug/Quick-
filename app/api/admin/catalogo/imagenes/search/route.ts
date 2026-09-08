@@ -12,9 +12,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = (await request.json()) as { query?: unknown };
+    const body = (await request.json()) as { query?: unknown; barcode?: unknown };
     const query = typeof body.query === "string" ? body.query : "";
-    const images = await searchCatalogImageCandidates(query);
+    const barcode = typeof body.barcode === "string" ? body.barcode : null;
+    const images = await searchCatalogImageCandidates(query, { barcode });
     return NextResponse.json({ images });
   } catch (error) {
     const message = error instanceof Error ? error.message : "No pudimos buscar imágenes";

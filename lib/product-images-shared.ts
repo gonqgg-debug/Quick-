@@ -1,9 +1,12 @@
+export type CatalogImageSource = "open_food_facts" | "web" | "upload" | "nacional";
+
 export type CatalogImageStats = {
   total: number;
   confirmed: number;
   withBarcode: number;
   pendingReview: number;
   awaitingOff: number;
+  awaitingNacional: number;
   awaitingWeb: number;
   withoutBarcode: number;
 };
@@ -26,6 +29,6 @@ export type CatalogImageQueueItem = {
   suggestion: {
     id: string;
     imageUrl: string;
-    source: "open_food_facts" | "web" | "upload";
+    source: CatalogImageSource;
   } | null;
 };

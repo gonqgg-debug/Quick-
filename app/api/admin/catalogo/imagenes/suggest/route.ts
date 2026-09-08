@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
-import { getCatalogImageStats, suggestOpenFoodFactsBatch, suggestWebImagesBatch } from "@/lib/product-images";
+import {
+  getCatalogImageStats,
+  suggestNacionalImagesBatch,
+  suggestOpenFoodFactsBatch,
+  suggestWebImagesBatch,
+} from "@/lib/product-images";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -11,7 +16,7 @@ export async function POST(request: NextRequest) {
     return auth;
   }
 
-  let layer: "off" | "web" | "auto" = "auto";
+  let layer: "off" | "nacional" | "web" | "auto" = "auto";
   let limit: number | undefined;
   let productId: string | undefined;
   try {
@@ -20,7 +25,7 @@ export async function POST(request: NextRequest) {
       limit?: unknown;
       productId?: unknown;
     };
-    if (body.layer === "off" || body.layer === "web" || body.layer === "auto") {
+    if (body.layer === "off" || body.layer === "nacional" || body.layer === "web" || body.layer === "auto") {
       layer = body.layer;
     }
     if (typeof body.limit === "number" && Number.isFinite(body.limit)) {
@@ -35,15 +40,27 @@ export async function POST(request: NextRequest) {
 
   try {
     if (productId) {
-      const result = await suggestWebImagesBatch({ productId, limit: 1 });
-      return NextResponse.json({ layer: "web", ...result });
+      const nacional = await suggestNacionalImagesBatch({ productId, limit: 1 });
+      if (nacional.found > 0 || nacional.scanned === 0) {
+        return NextResponse.json({ layer: "nacional", ...nacional });
+      }
+      try {
+        const web = await suggestWebImagesBatch({ productId, limit: 1 });
+        return NextResponse.json({ layer: "web", ...web });
+      } catch {
+        return NextResponse.json({ layer: "nacional", ...nacional });
+      }
     }
     if (layer === "auto") {
       const stats = await getCatalogImageStats();
-      layer = stats.awaitingOff > 0 ? "off" : "web";
+      layer = stats.awaitingNacional > 0 ? "nacional" : stats.awaitingOff > 0 ? "off" : "web";
     }
     const result =
-      layer === "off" ? await suggestOpenFoodFactsBatch() : await suggestWebImagesBatch({ limit: limit ?? 3 });
+      layer === "off"
+        ? await suggestOpenFoodFactsBatch()
+        : layer === "nacional"
+          ? await suggestNacionalImagesBatch({ limit: limit ?? 8 })
+          : await suggestWebImagesBatch({ limit: limit ?? 3 });
     return NextResponse.json({ layer, ...result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "No pudimos buscar sugerencias";

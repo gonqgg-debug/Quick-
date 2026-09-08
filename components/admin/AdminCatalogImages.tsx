@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import type { CatalogImageQueueItem, CatalogImageStats } from "@/lib/product-images-shared";
+import type { CatalogImageQueueItem, CatalogImageSource, CatalogImageStats } from "@/lib/product-images-shared";
 import { brand } from "@/lib/theme";
 
 const TEST_WEB_LIMIT = 8;
@@ -80,7 +80,7 @@ export function AdminCatalogImages() {
     };
   }, [load]);
 
-  async function postSuggest(payload: { layer?: "off" | "web" | "auto"; limit?: number; productId?: string }) {
+  async function postSuggest(payload: { layer?: "off" | "nacional" | "web" | "auto"; limit?: number; productId?: string }) {
     const response = await fetch("/api/admin/catalogo/imagenes/suggest", {
       method: "POST",
       credentials: "include",
@@ -106,7 +106,7 @@ export function AdminCatalogImages() {
     return body ?? {};
   }
 
-  async function runBatch(kind: "auto" | "web-test") {
+  async function runBatch(kind: "auto" | "nacional-test") {
     setScanning(true);
     setError(null);
     scanStop.current = false;
@@ -114,12 +114,12 @@ export function AdminCatalogImages() {
     let scannedTotal = 0;
     let missedTotal = 0;
     try {
-      if (kind === "web-test") {
+      if (kind === "nacional-test") {
         const detailLines: string[] = [];
         while (scannedTotal < TEST_WEB_LIMIT && !scanStop.current) {
           const body = await postSuggest({
-            layer: "web",
-            limit: Math.min(3, TEST_WEB_LIMIT - scannedTotal),
+            layer: "nacional",
+            limit: Math.min(8, TEST_WEB_LIMIT - scannedTotal),
           });
           scannedTotal += body.scanned ?? 0;
           foundTotal += body.found ?? 0;
@@ -128,7 +128,7 @@ export function AdminCatalogImages() {
             detailLines.push(`${row.found ? "sí" : "no"} — ${row.nombre}`);
           }
           setScanNote(
-            `Prueba web: ${scannedTotal}/${TEST_WEB_LIMIT}. ${foundTotal} sugerencias, ${missedTotal} sin buena foto. Quedan ${body.remaining ?? 0}.`
+            `Prueba Nacional: ${scannedTotal}/${TEST_WEB_LIMIT}. ${foundTotal} sugerencias, ${missedTotal} sin match. Quedan ${body.remaining ?? 0}.`
           );
           await load();
           if ((body.scanned ?? 0) === 0) {
@@ -137,7 +137,7 @@ export function AdminCatalogImages() {
         }
         if (detailLines.length > 0) {
           setScanNote(
-            `Prueba web: ${scannedTotal} productos. ${foundTotal} sugerencias, ${missedTotal} sin buena foto. ${detailLines.join(" · ")}`
+            `Prueba Nacional: ${scannedTotal} productos. ${foundTotal} sugerencias, ${missedTotal} sin match. ${detailLines.join(" · ")}`
           );
         }
         return;
@@ -150,7 +150,7 @@ export function AdminCatalogImages() {
         scannedTotal += body.scanned ?? 0;
         foundTotal += body.found ?? 0;
         missedTotal += body.missed ?? 0;
-        const layerLabel = body.layer === "web" ? "web" : "OFF";
+        const layerLabel = body.layer === "nacional" ? "Nacional" : body.layer === "web" ? "web" : "OFF";
         setScanNote(
           `${layerLabel}: revisados ${scannedTotal}. Sugerencias ${foundTotal}, sin match ${missedTotal}. Quedan ${body.remaining ?? 0}.`
         );
@@ -205,7 +205,7 @@ export function AdminCatalogImages() {
       if (!response.ok) {
         throw new Error("No pudimos descartar la sugerencia");
       }
-      setScanNote("Buscando otra opción en la web…");
+      setScanNote("Buscando otra opción en Nacional…");
       await postSuggest({ productId });
       await load();
       setScanNote(null);
@@ -244,22 +244,24 @@ export function AdminCatalogImages() {
 
   const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const to = Math.min(page * PAGE_SIZE, total);
-  const canBatch = Boolean(stats && (stats.awaitingOff > 0 || stats.awaitingWeb > 0));
-  const pendingSearch = stats ? stats.awaitingOff + stats.awaitingWeb : 0;
-  const canWebTest = Boolean(stats && stats.awaitingWeb > 0);
+  const canBatch = Boolean(
+    stats && (stats.awaitingNacional > 0 || stats.awaitingOff > 0 || stats.awaitingWeb > 0)
+  );
+  const pendingSearch = stats ? stats.awaitingNacional + stats.awaitingOff + stats.awaitingWeb : 0;
+  const canNacionalTest = Boolean(stats && stats.awaitingNacional > 0);
   const progress = stats && stats.total > 0 ? Math.round((stats.confirmed / stats.total) * 100) : 0;
   const allHaveSuggestions = Boolean(stats && pendingSearch === 0 && stats.pendingReview > 0);
-  const webDisabledReason = scanning
+  const nacionalDisabledReason = scanning
     ? undefined
     : !stats
       ? undefined
-      : canWebTest
+      : canNacionalTest
         ? undefined
         : allHaveSuggestions
           ? "No hay productos pendientes de buscar — todos los productos disponibles ya tienen una sugerencia esperando revisión."
-          : stats.awaitingOff > 0
-            ? `No hay productos pendientes de Capa 2 (web). “Buscar sugerencias” todavía puede consultar Open Food Facts (${stats.awaitingOff} pendientes).`
-            : "No hay productos pendientes de buscar en la web.";
+          : stats.awaitingOff > 0 || stats.awaitingWeb > 0
+            ? `No hay productos pendientes de Nacional. “Buscar sugerencias” todavía puede consultar Open Food Facts (${stats.awaitingOff}) o la web (${stats.awaitingWeb}).`
+            : "No hay productos pendientes de buscar en Nacional.";
   const batchDisabledReason = scanning
     ? undefined
     : !stats
@@ -277,30 +279,30 @@ export function AdminCatalogImages() {
         <div>
           <h1 className="font-display text-2xl font-bold">Imágenes</h1>
           <p className="mt-1 max-w-xl text-sm text-brand-muted">
-            Capa 1: Open Food Facts por código de barras. Capa 2: búsqueda web + IA. Nada se publica hasta “Usar esta”
-            o una subida manual.
+            Capa 1: fotos de Supermercados Nacional (código de barras o nombre). Capa 2: Open Food Facts. Capa 3: web +
+            IA. Nada se publica hasta “Usar esta” o una subida manual.
           </p>
           <p className="mt-2 max-w-xl text-sm text-brand-muted">
-            <span className="font-semibold text-brand-ink">Probar 8 en web</span> es una muestra chica de Capa 2 (hasta{" "}
-            {TEST_WEB_LIMIT} productos). <span className="font-semibold text-brand-ink">Buscar sugerencias</span> recorre
-            todo lo pendiente: primero Open Food Facts y después la web. Si la sugerencia automática está cerca pero no
-            es la variante exacta, usa <span className="font-semibold text-brand-ink">Buscar más opciones</span> en la
-            tarjeta.
+            <span className="font-semibold text-brand-ink">Probar 8 en Nacional</span> es una muestra chica de Capa 1
+            (hasta {TEST_WEB_LIMIT} productos). <span className="font-semibold text-brand-ink">Buscar sugerencias</span>{" "}
+            recorre todo lo pendiente: primero Nacional, después Open Food Facts y al final la web. Si la sugerencia
+            automática está cerca pero no es la variante exacta, usa{" "}
+            <span className="font-semibold text-brand-ink">Buscar más opciones</span> en la tarjeta.
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className="flex flex-wrap justify-end gap-2">
-            <span title={webDisabledReason} className="inline-flex">
+            <span title={nacionalDisabledReason} className="inline-flex">
               <button
                 type="button"
-                disabled={scanning || !canWebTest}
-                onClick={() => void runBatch("web-test")}
+                disabled={scanning || !canNacionalTest}
+                onClick={() => void runBatch("nacional-test")}
                 className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
                 style={{ backgroundColor: "#F3F4F6", minHeight: 44 }}
               >
                 {scanning
                   ? "Buscando..."
-                  : `Probar ${TEST_WEB_LIMIT} en web (${stats ? stats.awaitingWeb : 0} pendientes)`}
+                  : `Probar ${TEST_WEB_LIMIT} en Nacional (${stats ? stats.awaitingNacional : 0} pendientes)`}
               </button>
             </span>
             <span title={batchDisabledReason} className="inline-flex">
@@ -315,8 +317,8 @@ export function AdminCatalogImages() {
               </button>
             </span>
           </div>
-          {webDisabledReason || batchDisabledReason ? (
-            <p className="max-w-sm text-right text-xs text-brand-muted">{batchDisabledReason || webDisabledReason}</p>
+          {nacionalDisabledReason || batchDisabledReason ? (
+            <p className="max-w-sm text-right text-xs text-brand-muted">{batchDisabledReason || nacionalDisabledReason}</p>
           ) : null}
         </div>
       </div>
@@ -337,12 +339,13 @@ export function AdminCatalogImages() {
               style={{ width: `${progress}%`, backgroundColor: brand.green }}
             />
           </div>
-          <ul className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          <ul className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             <StatChip
               value={`${stats.confirmed.toLocaleString("es-DO")}/${stats.total.toLocaleString("es-DO")}`}
               label="Con foto confirmada"
             />
             <StatChip value={stats.pendingReview} label="En cola" />
+            <StatChip value={stats.awaitingNacional} label="Pendientes Nacional" />
             <StatChip value={stats.awaitingOff} label="Pendientes OFF" />
             <StatChip value={stats.awaitingWeb} label="Pendientes web" />
             <StatChip value={stats.withoutBarcode} label="Sin código de barras" />
@@ -438,13 +441,13 @@ export function AdminCatalogImages() {
                 </p>
                 {item.suggestion ? (
                   <p className="mt-1 text-xs font-semibold" style={{ color: brand.green }}>
-                    {item.suggestion.source === "web" ? "Sugerida por búsqueda web" : "Sugerida por Open Food Facts"}
+                    {suggestionSourceLabel(item.suggestion.source)}
                   </p>
                 ) : (
                   <p className="mt-1 text-xs text-brand-muted">
                     {item.codigoBarras
-                      ? "Sin foto de Open Food Facts. Usa “Buscar sugerencias” para intentar la web."
-                      : "Sin código de barras: la Capa 2 busca por nombre y marca."}
+                      ? "Sin foto todavía. “Buscar sugerencias” prueba Nacional, Open Food Facts y la web."
+                      : "Sin código de barras: Nacional y la web buscan por nombre y marca."}
                   </p>
                 )}
                 <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-3">
@@ -606,7 +609,7 @@ function MoreOptionsModal({
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q }),
+        body: JSON.stringify({ query: q, barcode: item.codigoBarras }),
       });
       const body = (await response.json().catch(() => null)) as {
         images?: Array<{ url: string; title: string }>;
@@ -625,7 +628,7 @@ function MoreOptionsModal({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [item.codigoBarras]);
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -687,7 +690,8 @@ function MoreOptionsModal({
           </h2>
           <p className="mt-1 text-sm text-brand-muted">{productMeta(item.marca, item.categoria)}</p>
           <p className="mt-3 text-sm text-brand-muted">
-            Tú eliges la foto. Afina la búsqueda si hace falta el tamaño o la variante exacta.
+            Primero Nacional, después la web. Tú eliges la foto. Afina la búsqueda si hace falta el tamaño o la
+            variante exacta.
           </p>
 
           <form
@@ -801,6 +805,19 @@ function StatChip({ value, label }: { value: string | number; label: string }) {
       <p className="mt-1.5 text-xs font-semibold text-brand-muted">{label}</p>
     </li>
   );
+}
+
+function suggestionSourceLabel(source: CatalogImageSource): string {
+  if (source === "nacional") {
+    return "Sugerida por Nacional";
+  }
+  if (source === "web") {
+    return "Sugerida por búsqueda web";
+  }
+  if (source === "upload") {
+    return "Subida manual";
+  }
+  return "Sugerida por Open Food Facts";
 }
 
 function productMeta(marca: string | null, categoria: string): string {
