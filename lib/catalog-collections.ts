@@ -1,8 +1,9 @@
 import {
   CATALOG_COLLECTION_RAIL_LIMIT,
+  CATALOG_COLLECTION_RECENT_DAYS,
   CATALOG_COLLECTIONS,
-  categoryMatchesCollection,
   getCatalogCollection,
+  productMatchesCollection,
   type CatalogCollectionRail,
 } from "@/lib/catalog-collections-shared";
 import { getSalesTotalsByOdooCode } from "@/lib/catalog-ranking";
@@ -12,9 +13,11 @@ import type { Product } from "@/lib/types";
 
 export {
   CATALOG_COLLECTION_RAIL_LIMIT,
+  CATALOG_COLLECTION_RECENT_DAYS,
   CATALOG_COLLECTIONS,
   categoryMatchesCollection,
   getCatalogCollection,
+  productMatchesCollection,
   type CatalogCollectionDef,
   type CatalogCollectionMatch,
   type CatalogCollectionRail,
@@ -46,28 +49,6 @@ function mapProduct(row: ProductRow): Product {
   };
 }
 
-export async function listCollectionCategoryNames(collectionId: string): Promise<string[]> {
-  const def = getCatalogCollection(collectionId);
-  if (!def || def.match.kind !== "categories") {
-    return [];
-  }
-
-  const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase.from("products").select("categoria").eq("activo", true);
-  if (error || !data) {
-    return [];
-  }
-
-  const names = new Set<string>();
-  for (const row of data) {
-    const name = String(row.categoria ?? "").trim();
-    if (name && categoryMatchesCollection(name, def)) {
-      names.add(name);
-    }
-  }
-  return Array.from(names);
-}
-
 function sortByPopularity(rows: ProductRow[], sales: Map<string, number>): ProductRow[] {
   return [...rows].sort((left, right) => {
     const leftSold = sales.get(String(left.codigo_odoo ?? "").trim()) ?? 0;
@@ -79,60 +60,95 @@ function sortByPopularity(rows: ProductRow[], sales: Map<string, number>): Produ
   });
 }
 
+function uniqueCategories(rows: ProductRow[]): string[] {
+  const names = new Set<string>();
+  for (const row of rows) {
+    const name = String(row.categoria ?? "").trim();
+    if (name) {
+      names.add(name);
+    }
+  }
+  return Array.from(names);
+}
+
+function isRecentProduct(row: ProductRow, now = Date.now()): boolean {
+  const created = new Date(String(row.created_at ?? "")).getTime();
+  if (!Number.isFinite(created)) {
+    return false;
+  }
+  return now - created <= CATALOG_COLLECTION_RECENT_DAYS * 24 * 60 * 60 * 1000;
+}
+
+export async function listCollectionCategoryNames(collectionId: string): Promise<string[]> {
+  const def = getCatalogCollection(collectionId);
+  if (!def || def.match.kind !== "keywords") {
+    return [];
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select("nombre, marca, categoria, descripcion")
+    .eq("activo", true);
+  if (error || !data) {
+    return [];
+  }
+
+  const names = new Set<string>();
+  for (const row of data) {
+    if (productMatchesCollection(row, def)) {
+      const name = String(row.categoria ?? "").trim();
+      if (name) {
+        names.add(name);
+      }
+    }
+  }
+  return Array.from(names);
+}
+
 export async function getCatalogCollections(): Promise<CatalogCollectionRail[]> {
   const supabase = getSupabaseAdminClient();
-  const [sales, categoryNamesById] = await Promise.all([
+  const [{ data, error }, sales] = await Promise.all([
+    supabase.from("products").select(PRODUCT_SELECT).eq("activo", true).limit(1000),
     getSalesTotalsByOdooCode(),
-    Promise.all(
-      CATALOG_COLLECTIONS.filter((collection) => collection.match.kind === "categories").map(
-        async (collection) => [collection.id, await listCollectionCategoryNames(collection.id)] as const
-      )
-    ),
   ]);
-  const categoryMap = new Map(categoryNamesById);
 
-  const rails = await Promise.all(
-    CATALOG_COLLECTIONS.map(async (def) => {
-      if (def.match.kind === "recency") {
-        const { data, error } = await supabase
-          .from("products")
-          .select(PRODUCT_SELECT)
-          .eq("activo", true)
-          .order("created_at", { ascending: false })
-          .order("id", { ascending: true })
-          .limit(CATALOG_COLLECTION_RAIL_LIMIT);
-        if (error || !data?.length) {
-          return null;
-        }
-        return {
-          ...def,
-          products: data.map(mapProduct),
-          categoryNames: [],
-        } satisfies CatalogCollectionRail;
-      }
+  if (error || !data?.length) {
+    return [];
+  }
 
-      const categoryNames = categoryMap.get(def.id) ?? [];
-      if (categoryNames.length === 0) {
+  const now = Date.now();
+  return CATALOG_COLLECTIONS.map((def) => {
+    if (def.match.kind === "recency") {
+      const recent = [...data]
+        .filter((row) => isRecentProduct(row, now))
+        .sort(
+          (left, right) =>
+            new Date(String(right.created_at ?? "")).getTime() -
+            new Date(String(left.created_at ?? "")).getTime()
+        );
+      if (recent.length < 3) {
         return null;
       }
-
-      const { data, error } = await supabase
-        .from("products")
-        .select(PRODUCT_SELECT)
-        .eq("activo", true)
-        .in("categoria", categoryNames)
-        .limit(80);
-      if (error || !data?.length) {
-        return null;
-      }
-
       return {
         ...def,
-        products: sortByPopularity(data, sales).slice(0, CATALOG_COLLECTION_RAIL_LIMIT).map(mapProduct),
-        categoryNames,
+        products: recent.slice(0, CATALOG_COLLECTION_RAIL_LIMIT).map(mapProduct),
+        categoryNames: [],
       } satisfies CatalogCollectionRail;
-    })
-  );
+    }
 
-  return rails.filter((rail): rail is CatalogCollectionRail => Boolean(rail));
+    const matched = sortByPopularity(
+      data.filter((row) => productMatchesCollection(row, def)),
+      sales
+    );
+    if (matched.length === 0) {
+      return null;
+    }
+
+    return {
+      ...def,
+      products: matched.slice(0, CATALOG_COLLECTION_RAIL_LIMIT).map(mapProduct),
+      categoryNames: uniqueCategories(matched),
+    } satisfies CatalogCollectionRail;
+  }).filter((rail): rail is CatalogCollectionRail => Boolean(rail));
 }
