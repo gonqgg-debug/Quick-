@@ -1,8 +1,14 @@
 import {
+  getCatalogCollection,
+  listCollectionCategoryNames,
+} from "@/lib/catalog-collections";
+import { getSalesTotalsByOdooCode } from "@/lib/catalog-ranking";
+import {
   CATALOG_PRODUCT_IDS_MAX,
   CATALOG_PRODUCT_PAGE_MAX,
   CATALOG_PRODUCT_PAGE_SIZE,
   type CatalogCategoryChip,
+  type CatalogProductSort,
   type CatalogProductsPage,
 } from "@/lib/catalog-products-shared";
 import { rankSearchSuggestions, SEARCH_SUGGESTION_LIMIT, SEARCH_SUGGESTION_MIN_CHARS } from "@/lib/catalog-search";
@@ -14,10 +20,11 @@ import type { MetodoPago, OrderDraft, OrderSession, Product } from "@/lib/types"
 export {
   CATALOG_PRODUCT_PAGE_SIZE,
   type CatalogCategoryChip,
+  type CatalogProductSort,
   type CatalogProductsPage,
 } from "@/lib/catalog-products-shared";
 
-const PRODUCT_SELECT = "id, nombre, marca, descripcion, precio, foto_url, categoria";
+const PRODUCT_SELECT = "id, nombre, marca, descripcion, precio, foto_url, categoria, codigo_odoo, created_at";
 
 type ProductRow = {
   id: unknown;
@@ -27,6 +34,8 @@ type ProductRow = {
   precio: unknown;
   foto_url?: unknown;
   categoria: unknown;
+  codigo_odoo?: unknown;
+  created_at?: unknown;
 };
 
 function mapCatalogProduct(row: ProductRow): Product {
@@ -266,11 +275,17 @@ export async function getActiveProductsByIds(ids: string[]): Promise<Product[]> 
   return unique.map((id) => byId.get(id)).filter((product): product is Product => Boolean(product));
 }
 
+function emptyCatalogPage(): CatalogProductsPage {
+  return { products: [], hasMore: false, nextCursor: null };
+}
+
 export async function listActiveProductsPage(options: {
   cursor?: string | null;
   limit?: number;
   categoria?: string | null;
+  collection?: string | null;
   q?: string | null;
+  sort?: CatalogProductSort | null;
 }): Promise<CatalogProductsPage> {
   const requested = options.limit ?? CATALOG_PRODUCT_PAGE_SIZE;
   const limit = Number.isInteger(requested)
@@ -281,12 +296,37 @@ export async function listActiveProductsPage(options: {
     throw new CatalogCursorError();
   }
 
+  const collection = getCatalogCollection(options.collection);
+  const categoria = options.categoria?.trim() ?? "";
+  const collectionCategories =
+    !categoria && collection?.match.kind === "categories"
+      ? await listCollectionCategoryNames(collection.id)
+      : [];
+  if (collection?.match.kind === "categories" && !categoria && collectionCategories.length === 0) {
+    return emptyCatalogPage();
+  }
+
+  const sort: CatalogProductSort =
+    options.sort ?? (collection?.match.kind === "recency" ? "recent" : "alpha");
+
   const supabase = getSupabaseAdminClient();
+
+  if (sort === "popular") {
+    return listProductsByPopularity({
+      offset,
+      limit,
+      categoria,
+      collectionCategories,
+      q: sanitizeCatalogSearch(options.q ?? ""),
+    });
+  }
+
   let query = supabase.from("products").select(PRODUCT_SELECT).eq("activo", true);
 
-  const categoria = options.categoria?.trim() ?? "";
   if (categoria) {
     query = query.eq("categoria", categoria);
+  } else if (collectionCategories.length > 0) {
+    query = query.in("categoria", collectionCategories);
   }
 
   const q = sanitizeCatalogSearch(options.q ?? "");
@@ -296,11 +336,16 @@ export async function listActiveProductsPage(options: {
     );
   }
 
-  const { data, error } = await query
-    .order("categoria", { ascending: true })
-    .order("nombre", { ascending: true })
-    .order("id", { ascending: true })
-    .range(offset, offset + limit);
+  if (sort === "recent") {
+    query = query.order("created_at", { ascending: false }).order("id", { ascending: true });
+  } else {
+    query = query
+      .order("categoria", { ascending: true })
+      .order("nombre", { ascending: true })
+      .order("id", { ascending: true });
+  }
+
+  const { data, error } = await query.range(offset, offset + limit);
 
   if (error) {
     throw error;
@@ -314,6 +359,52 @@ export async function listActiveProductsPage(options: {
     products: page.map((row) => mapCatalogProduct(row)),
     hasMore,
     nextCursor: hasMore ? encodeCatalogCursor(offset + limit) : null,
+  };
+}
+
+async function listProductsByPopularity(options: {
+  offset: number;
+  limit: number;
+  categoria: string;
+  collectionCategories: string[];
+  q: string;
+}): Promise<CatalogProductsPage> {
+  const supabase = getSupabaseAdminClient();
+  let query = supabase.from("products").select(PRODUCT_SELECT).eq("activo", true);
+
+  if (options.categoria) {
+    query = query.eq("categoria", options.categoria);
+  } else if (options.collectionCategories.length > 0) {
+    query = query.in("categoria", options.collectionCategories);
+  }
+
+  if (options.q) {
+    query = query.or(
+      `nombre.ilike.%${options.q}%,marca.ilike.%${options.q}%,categoria.ilike.%${options.q}%,descripcion.ilike.%${options.q}%`
+    );
+  }
+
+  const [{ data, error }, sales] = await Promise.all([query.limit(1000), getSalesTotalsByOdooCode()]);
+  if (error) {
+    throw error;
+  }
+
+  const ranked = [...(data ?? [])].sort((left, right) => {
+    const leftSold = sales.get(String(left.codigo_odoo ?? "").trim()) ?? 0;
+    const rightSold = sales.get(String(right.codigo_odoo ?? "").trim()) ?? 0;
+    if (rightSold !== leftSold) {
+      return rightSold - leftSold;
+    }
+    return String(left.nombre ?? "").localeCompare(String(right.nombre ?? ""), "es");
+  });
+
+  const pageRows = ranked.slice(options.offset, options.offset + options.limit);
+  const hasMore = options.offset + options.limit < ranked.length;
+
+  return {
+    products: pageRows.map((row) => mapCatalogProduct(row)),
+    hasMore,
+    nextCursor: hasMore ? encodeCatalogCursor(options.offset + options.limit) : null,
   };
 }
 

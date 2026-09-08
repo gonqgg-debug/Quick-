@@ -7,6 +7,10 @@ import {
   listActiveCatalogCategories,
 } from "@/lib/catalog";
 import {
+  getCatalogCollections,
+  type CatalogCollectionRail,
+} from "@/lib/catalog-collections";
+import {
   getCatalogRecommendations,
   type CatalogRecommendations,
 } from "@/lib/catalog-recommendations";
@@ -33,18 +37,21 @@ export default async function OrderCatalogPage({ params }: OrderCatalogPageProps
     lastOrder: null,
     favorites: [],
   };
+  let collections: CatalogCollectionRail[] = [];
   let unavailable = false;
 
   try {
     session = await getActiveOrderSession(params.sessionId);
     if (session) {
       customer = await getCustomerForChat(session.chat_id);
-      const [catalogCategories, catalogRecommendations] = await Promise.all([
+      const [catalogCategories, catalogRecommendations, catalogCollections] = await Promise.all([
         listActiveCatalogCategories(),
         getCatalogRecommendations(customer?.id ?? null),
+        getCatalogCollections(),
       ]);
       categories = catalogCategories;
       recommendations = catalogRecommendations;
+      collections = catalogCollections;
       if (session.edit_order_id) {
         editOrder = await getOrderDraft(session.edit_order_id);
         if (editOrder) {
@@ -86,6 +93,7 @@ export default async function OrderCatalogPage({ params }: OrderCatalogPageProps
       editOrder={editOrder}
       customer={customer}
       recommendations={recommendations}
+      collections={collections}
     />
   );
 }

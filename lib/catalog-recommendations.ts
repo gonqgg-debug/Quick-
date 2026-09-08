@@ -1,3 +1,4 @@
+import { getSalesTotalsByOdooCode } from "@/lib/catalog-ranking";
 import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import type { Product } from "@/lib/types";
@@ -46,24 +47,7 @@ function mapProduct(row: {
 }
 
 export async function getBestSellers(): Promise<Product[]> {
-  const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from("sales_history_import")
-    .select("codigo_odoo, cantidad_vendida");
-
-  if (error || !data?.length) {
-    return [];
-  }
-
-  const totals = new Map<string, number>();
-  for (const row of data) {
-    const code = String(row.codigo_odoo ?? "").trim();
-    if (!code) {
-      continue;
-    }
-    totals.set(code, (totals.get(code) ?? 0) + toMoney(row.cantidad_vendida));
-  }
-
+  const totals = await getSalesTotalsByOdooCode();
   const ranked = Array.from(totals.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, BEST_SELLER_LIMIT * 2);
@@ -71,6 +55,7 @@ export async function getBestSellers(): Promise<Product[]> {
     return [];
   }
 
+  const supabase = getSupabaseAdminClient();
   const { data: products, error: productError } = await supabase
     .from("products")
     .select("id, nombre, marca, descripcion, precio, foto_url, categoria, codigo_odoo")

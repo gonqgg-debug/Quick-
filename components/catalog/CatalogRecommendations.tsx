@@ -1,54 +1,51 @@
 "use client";
 
 import { CatalogProductPhoto } from "@/components/catalog/CatalogProductPhoto";
+import type { CatalogCollectionRail } from "@/lib/catalog-collections-shared";
+import type { CatalogRecommendations, RepeatLastOrder } from "@/lib/catalog-recommendations";
 import { formatCustomerOrderDate } from "@/lib/customer-orders-shared";
 import { formatPrice } from "@/lib/money";
 import { brand } from "@/lib/theme";
-import type { CatalogRecommendations, RepeatLastOrder } from "@/lib/catalog-recommendations";
 import type { Product } from "@/lib/types";
+
+export type CatalogViewAllTarget = { type: "all" } | { type: "collection"; id: string };
 
 type CatalogRecommendationsProps = {
   recommendations: CatalogRecommendations;
+  collections?: CatalogCollectionRail[];
   cart: Record<string, number>;
   onQuantityChange: (productId: string, cantidad: number) => void;
   onSelectProduct: (product: Product) => void;
   onRepeatLastOrder: () => void;
+  onViewAll?: (target: CatalogViewAllTarget) => void;
 };
 
 const RAIL_TRACK =
-  "-mx-4 mt-3 flex h-auto gap-3 overflow-x-auto overflow-y-clip overscroll-x-contain overscroll-y-auto scroll-pl-4 scroll-pr-4 px-4 pb-1 snap-x snap-mandatory select-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [touch-action:pan-x_pan-y] [&::-webkit-scrollbar]:hidden";
+  "relative z-0 -mx-4 mt-3 flex h-auto gap-3 overflow-x-auto overflow-y-clip overscroll-x-contain scroll-pl-4 scroll-pr-4 px-4 pb-1 snap-x snap-mandatory select-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [touch-action:pan-x] [&::-webkit-scrollbar]:hidden";
 
 const RAIL_CARD =
   "w-[42%] shrink-0 snap-start overflow-clip rounded-[22px] border border-black/[0.06] bg-white";
 
 export function CatalogRecommendations({
   recommendations,
+  collections = [],
   cart,
   onQuantityChange,
   onSelectProduct,
   onRepeatLastOrder,
+  onViewAll,
 }: CatalogRecommendationsProps) {
   const { bestSellers, lastOrder, favorites } = recommendations;
   const showRepeat = Boolean(lastOrder?.items.length);
   const showFavorites = favorites.length > 0;
+  const visibleCollections = collections.filter((collection) => collection.products.length > 0);
 
-  if (bestSellers.length === 0 && !showRepeat && !showFavorites) {
+  if (bestSellers.length === 0 && !showRepeat && !showFavorites && visibleCollections.length === 0) {
     return null;
   }
 
   return (
-    <div className="mt-5 space-y-7">
-      {bestSellers.length > 0 ? (
-        <ProductRail
-          title="Lo más pedido en Quick!"
-          subtitle="Los favoritos de todos en el residencial"
-          products={bestSellers}
-          cart={cart}
-          onQuantityChange={onQuantityChange}
-          onSelectProduct={onSelectProduct}
-        />
-      ) : null}
-
+    <div className="relative z-0 isolate mt-7 space-y-7">
       {showRepeat && lastOrder ? (
         <RepeatLastOrderCard
           lastOrder={lastOrder}
@@ -69,6 +66,31 @@ export function CatalogRecommendations({
           onSelectProduct={onSelectProduct}
         />
       ) : null}
+
+      {bestSellers.length > 0 ? (
+        <ProductRail
+          title="Lo más pedido en Quick!"
+          subtitle="Los favoritos de todos en el residencial"
+          products={bestSellers}
+          cart={cart}
+          onQuantityChange={onQuantityChange}
+          onSelectProduct={onSelectProduct}
+          onViewAll={onViewAll ? () => onViewAll({ type: "all" }) : undefined}
+        />
+      ) : null}
+
+      {visibleCollections.map((collection) => (
+        <ProductRail
+          key={collection.id}
+          title={collection.title}
+          subtitle={collection.subtitle}
+          products={collection.products}
+          cart={cart}
+          onQuantityChange={onQuantityChange}
+          onSelectProduct={onSelectProduct}
+          onViewAll={onViewAll ? () => onViewAll({ type: "collection", id: collection.id }) : undefined}
+        />
+      ))}
     </div>
   );
 }
@@ -80,6 +102,7 @@ function ProductRail({
   cart,
   onQuantityChange,
   onSelectProduct,
+  onViewAll,
 }: {
   title: string;
   subtitle: string;
@@ -87,11 +110,26 @@ function ProductRail({
   cart: Record<string, number>;
   onQuantityChange: (productId: string, cantidad: number) => void;
   onSelectProduct: (product: Product) => void;
+  onViewAll?: () => void;
 }) {
   return (
     <section>
-      <h2 className="font-display text-2xl font-bold text-brand-ink">{title}</h2>
-      <p className="mt-0.5 text-sm text-brand-muted">{subtitle}</p>
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="font-display text-2xl font-bold text-brand-ink">{title}</h2>
+          <p className="mt-0.5 text-sm text-brand-muted">{subtitle}</p>
+        </div>
+        {onViewAll ? (
+          <button
+            type="button"
+            onClick={onViewAll}
+            className="shrink-0 pb-0.5 text-sm font-bold"
+            style={{ color: brand.blue }}
+          >
+            Ver todos
+          </button>
+        ) : null}
+      </div>
       <ProductCarouselTrack
         products={products}
         cart={cart}
@@ -131,7 +169,7 @@ function ProductCarouselTrack({
             className="absolute inset-0 z-10"
             aria-label={`Ver ${product.nombre}`}
           />
-          <div className="pointer-events-none relative z-20">
+          <div className="pointer-events-none relative">
             <RailPhoto product={product} />
             <div className="px-2.5 pb-2.5 pt-2">
               <h3 className="line-clamp-2 min-h-[2.5rem] text-[13px] font-bold leading-tight text-brand-ink">

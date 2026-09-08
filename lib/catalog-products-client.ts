@@ -1,4 +1,8 @@
-import type { CatalogCategoryChip, CatalogProductsPage } from "@/lib/catalog-products-shared";
+import type {
+  CatalogCategoryChip,
+  CatalogProductSort,
+  CatalogProductsPage,
+} from "@/lib/catalog-products-shared";
 import { CATALOG_PRODUCT_PAGE_SIZE } from "@/lib/catalog-products-shared";
 import type { Product } from "@/lib/types";
 
@@ -6,7 +10,9 @@ export async function fetchCatalogProductsPage(options: {
   sessionId: string;
   cursor?: string | null;
   categoria?: string | null;
+  collection?: string | null;
   q?: string | null;
+  sort?: CatalogProductSort | null;
   limit?: number;
   signal?: AbortSignal;
 }): Promise<CatalogProductsPage> {
@@ -17,6 +23,12 @@ export async function fetchCatalogProductsPage(options: {
   }
   if (options.categoria) {
     params.set("categoria", options.categoria);
+  }
+  if (options.collection) {
+    params.set("collection", options.collection);
+  }
+  if (options.sort) {
+    params.set("sort", options.sort);
   }
   const q = options.q?.trim() ?? "";
   if (q) {
