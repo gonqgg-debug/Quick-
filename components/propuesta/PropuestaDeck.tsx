@@ -536,9 +536,13 @@ export function PropuestaDeck() {
             />
           ))}
         </div>
-        <button type="button" className="propuesta-print-btn" onClick={() => window.print()}>
-          Exportar PDF
-        </button>
+        <a
+          className="propuesta-print-btn"
+          href="/propuesta.pdf"
+          download="Quick-Mini-Market-Propuesta-Comercial.pdf"
+        >
+          Descargar PDF
+        </a>
       </div>
     </div>
   );
