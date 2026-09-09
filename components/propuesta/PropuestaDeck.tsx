@@ -182,10 +182,11 @@ export function PropuestaDeck() {
     }
     setExporting(true);
     try {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       await downloadPropuestaPdf();
     } catch (error) {
       console.error(error);
-      window.alert("No se pudo generar el PDF. Recarga e inténtalo de nuevo.");
+      window.alert("No se pudo abrir el diálogo de PDF. Prueba Archivo → Imprimir y elige Guardar como PDF.");
     } finally {
       setExporting(false);
     }
@@ -358,16 +359,12 @@ export function PropuestaDeck() {
               <figure className="propuesta-polaroid absolute left-2 top-8 w-[72%] -rotate-6">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/images/tienda-fachada.jpeg" alt="Quick! Mini Market en Jardines 3" />
-                <figcaption>
-                  <Logo className="mx-auto h-8 max-w-[140px]" />
-                </figcaption>
+                <figcaption>Quick! Mini Market</figcaption>
               </figure>
               <figure className="propuesta-polaroid absolute bottom-10 right-3 w-[72%] rotate-[7deg]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/images/pharmaquick-storefront.jpeg" alt="Fachada de PharmaQuick!" />
-                <figcaption>
-                  <Logo variant="pharma" className="mx-auto h-7 max-w-[180px]" />
-                </figcaption>
+                <figcaption>PharmaQuick!</figcaption>
               </figure>
             </div>
           </div>
@@ -432,7 +429,7 @@ export function PropuestaDeck() {
                 El vecino baja a una cadena; no a un negocio que cambia de dueño y de calidad.
               </p>
             </div>
-            <div className="grid gap-3 md:grid-cols-4">
+            <div className="propuesta-service-grid">
               {SERVICE_VALUES.map((item) => (
                 <article key={item.title} className="propuesta-glass rounded-[22px] px-4 py-4">
                   <span className="propuesta-dot-mark" style={{ backgroundColor: brand.green }} />
@@ -502,7 +499,7 @@ export function PropuestaDeck() {
                 No es mandar una lista por chat. Es abrir el catálogo completo desde WhatsApp — con
                 fotos, precios y confirmación por el mismo chat.
               </p>
-              <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <div className="propuesta-tech-cards">
                 {TECH_BLOCKS.map((block) => (
                   <article key={block.title} className="rounded-[22px] bg-white px-4 py-4 shadow-[0_10px_28px_rgba(26,26,26,0.08)]">
                     <span className="propuesta-dot-mark" style={{ backgroundColor: brand.green }} />
@@ -686,7 +683,7 @@ export function PropuestaDeck() {
                 </h2>
               </div>
             </div>
-            <div className="grid min-h-0 flex-1 grid-cols-2 gap-4 p-6 md:grid-cols-4 md:p-8">
+            <div className="propuesta-gains-grid min-h-0 flex-1 p-6 md:p-8">
               {GAIN_ITEMS.map((item) => (
                 <article key={item.title} className="rounded-[24px] bg-white px-5 py-5 shadow-[0_12px_32px_rgba(26,26,26,0.08)]">
                   <span className="propuesta-dot-mark" style={{ backgroundColor: brand.green }} />
@@ -758,9 +755,14 @@ export function PropuestaDeck() {
           ))}
         </div>
         <button type="button" className="propuesta-print-btn" disabled={exporting} onClick={() => void onDownloadPdf()}>
-          {exporting ? "Generando PDF…" : "Descargar PDF"}
+          {exporting ? "Abriendo PDF…" : "Descargar PDF"}
         </button>
       </div>
+      {exporting ? (
+        <p className="propuesta-print-hint">
+          En el diálogo, elige <strong>Guardar como PDF</strong> y márgenes <strong>Ninguno</strong>.
+        </p>
+      ) : null}
     </div>
   );
 }

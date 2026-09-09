@@ -12,8 +12,6 @@
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.112.3",
     "@tanstack/react-virtual": "^3.13.12",
-    "html2canvas": "^1.4.1",
-    "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",
     "next": "14.2.35",
     "react": "^18",

@@ -236,6 +236,20 @@ html.propuesta-html body {
   object-position: center 40%;
 }
 
+.propuesta-service-grid,
+.propuesta-gains-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.propuesta-tech-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+
 .propuesta-chrome {
   position: fixed;
   right: 20px;
@@ -574,6 +588,23 @@ html.propuesta-html.is-exporting .leaflet-control-attribution {
   box-shadow: 0 0 0 2px #1f82c5;
 }
 
+.propuesta-print-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 78px;
+  z-index: 50;
+  transform: translateX(-50%);
+  max-width: min(92vw, 520px);
+  padding: 10px 16px;
+  border-radius: 9999px;
+  background: rgba(26, 26, 26, 0.9);
+  color: #fff6e8;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: 0 10px 24px rgba(26, 26, 26, 0.28);
+}
+
 @media print {
   @page {
     size: 13.333in 7.5in;
@@ -584,26 +615,35 @@ html.propuesta-html.is-exporting .leaflet-control-attribution {
   html.propuesta-html body,
   .propuesta-root,
   .propuesta-deck {
+    width: 13.333in !important;
     height: auto !important;
     overflow: visible !important;
     background: #ffffff !important;
     scroll-snap-type: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
-  .propuesta-chrome {
+  .propuesta-chrome,
+  .propuesta-print-hint {
     display: none !important;
   }
 
   .propuesta-slide {
-    width: 13.333in;
-    height: 7.5in;
-    min-height: 7.5in;
-    max-height: 7.5in;
-    overflow: hidden;
+    width: 13.333in !important;
+    height: 7.5in !important;
+    min-height: 7.5in !important;
+    max-height: 7.5in !important;
+    overflow: hidden !important;
     page-break-after: always;
     break-after: page;
     page-break-inside: avoid;
     break-inside: avoid;
+  }
+
+  .propuesta-slide:last-child {
+    page-break-after: auto;
+    break-after: auto;
   }
 
   .propuesta-slide-inner {
@@ -611,12 +651,34 @@ html.propuesta-html.is-exporting .leaflet-control-attribution {
   }
 
   .propuesta-slide-inner.is-flush {
-    padding: 0;
+    padding: 0 !important;
+  }
+
+  .propuesta-cover,
+  .propuesta-problem,
+  .propuesta-idea {
+    grid-template-columns: 1.05fr 0.95fr !important;
+  }
+
+  .propuesta-bento {
+    grid-template-columns: 1.2fr 0.9fr !important;
+  }
+
+  .propuesta-tech {
+    grid-template-columns: minmax(0, 1.15fr) auto !important;
+  }
+
+  .propuesta-seek {
+    grid-template-columns: 0.92fr 1.08fr !important;
+  }
+
+  .propuesta-close {
+    grid-template-columns: 0.82fr 1.18fr !important;
   }
 
   .propuesta-map-wrap {
-    height: 5.15in;
-    grid-template-columns: minmax(0, 1fr) 240px;
+    height: 5.15in !important;
+    grid-template-columns: minmax(0, 1fr) 240px !important;
   }
 
   .propuesta-map,
@@ -624,9 +686,44 @@ html.propuesta-html.is-exporting .leaflet-control-attribution {
     height: 5.15in !important;
   }
 
+  .propuesta-legend {
+    display: flex !important;
+  }
+
+  .propuesta-service-grid,
+  .propuesta-gains-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  .propuesta-tech-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  #slide-4 .propuesta-veil {
+    background: rgba(26, 26, 26, 0.64) !important;
+  }
+
+  .propuesta-gains-hero {
+    height: 56% !important;
+  }
+
   .propuesta-map .leaflet-control-zoom,
-  .propuesta-map .leaflet-control-attribution {
+  .propuesta-map .leaflet-control-attribution,
+  .propuesta-map .leaflet-control-container {
     display: none !important;
+  }
+
+  .leaflet-pane,
+  .leaflet-tile,
+  .leaflet-marker-icon,
+  .leaflet-overlay-pane svg {
+    visibility: visible !important;
+  }
+
+  img,
+  svg {
+    max-width: none !important;
+    break-inside: avoid;
   }
 
   * {
@@ -635,7 +732,7 @@ html.propuesta-html.is-exporting .leaflet-control-attribution {
   }
 }
 
-@media (max-width: 900px) {
+@media screen and (max-width: 900px) {
   .propuesta-slide-inner {
     padding: 20px 20px 64px;
   }
@@ -663,6 +760,12 @@ html.propuesta-html.is-exporting .leaflet-control-attribution {
   .propuesta-seek,
   .propuesta-close {
     grid-template-columns: 1fr;
+  }
+
+  .propuesta-service-grid,
+  .propuesta-gains-grid,
+  .propuesta-tech-cards {
+    grid-template-columns: 1fr 1fr;
   }
 
   .propuesta-stamp {
