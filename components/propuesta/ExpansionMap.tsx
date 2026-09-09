@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { EXPANSION_SITES, siteLogoSrc, type ExpansionSite } from "@/lib/expansion-sites";
+import { EXPANSION_SITES, MAP_LANDMARKS, siteLogoSrc, type ExpansionSite } from "@/lib/expansion-sites";
 import "leaflet/dist/leaflet.css";
 
 function escapeHtml(value: string): string {
@@ -17,13 +17,13 @@ function pinHtml(site: ExpansionSite): string {
   const statusClass = site.status === "projected" ? " is-projected" : "";
   const offsetClass = site.pinOffset === "left" ? " is-left" : site.pinOffset === "right" ? " is-right" : "";
   const logo = siteLogoSrc(site.brand);
-  const label = site.opening ?? (site.status === "open" ? "Abierta" : "Proyectada");
+  const label = site.opening ? "Nov 2026" : site.status === "open" ? "Abierta" : "Próx.";
   return `
     <div class="propuesta-pin-stack${offsetClass}">
       <div class="propuesta-pin-logo${brandClass}">
         <img src="${logo}" alt="${escapeHtml(site.brand === "pharmaquick" ? "PharmaQuick!" : "Quick!")}" />
       </div>
-      <div class="propuesta-pin-name">${escapeHtml(site.name)} · ${escapeHtml(label)}</div>
+      <div class="propuesta-pin-name">${escapeHtml(site.shortName)} · ${escapeHtml(label)}</div>
       <span class="propuesta-pin-point${brandClass}${statusClass}"></span>
     </div>
   `;
@@ -54,13 +54,22 @@ export function ExpansionMap() {
         attributionControl: true,
       });
 
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-        attribution: "&copy; OpenStreetMap &copy; CARTO",
-        subdomains: "abcd",
-        maxZoom: 18,
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap",
+        maxZoom: 19,
       }).addTo(map);
 
       const bounds: import("leaflet").LatLngTuple[] = [];
+      for (const landmark of MAP_LANDMARKS) {
+        bounds.push([landmark.lat, landmark.lng]);
+        const icon = L.divIcon({
+          className: "propuesta-pin",
+          html: `<div class="propuesta-landmark">${escapeHtml(landmark.name)}</div>`,
+          iconSize: [88, 22],
+          iconAnchor: [44, 11],
+        });
+        L.marker([landmark.lat, landmark.lng], { icon, zIndexOffset: -50 }).addTo(map);
+      }
       for (const site of EXPANSION_SITES) {
         bounds.push([site.lat, site.lng]);
         const icon = L.divIcon({

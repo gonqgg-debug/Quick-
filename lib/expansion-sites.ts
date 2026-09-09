@@ -11,9 +11,15 @@ export type ExpansionSite = {
   lng: number;
   area: string;
   note: string;
+  shortName: string;
   opening?: string;
   pinOffset?: PinOffset;
 };
+
+export const MAP_LANDMARKS = [
+  { id: "hard-rock", name: "Hard Rock", lat: 18.7334438, lng: -68.4826329 },
+  { id: "iberostar", name: "Iberostar", lat: 18.7172992, lng: -68.4523194 },
+] as const;
 
 /**
  * Landmark-relative pins for the growth map.
@@ -31,6 +37,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     lng: -68.4365,
     area: "Pueblo Bávaro",
     note: "Tienda piloto, en operación",
+    shortName: "Jardines 3",
     pinOffset: "left",
   },
   {
@@ -42,6 +49,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     lng: -68.4342,
     area: "Pueblo Bávaro",
     note: "Junto a Jardines 3",
+    shortName: "Jardines 4",
     pinOffset: "right",
   },
   {
@@ -55,6 +63,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     lng: -68.4905,
     area: "Macao / Arena Gorda",
     note: "A la altura del Hard Rock, lado interior de la carretera",
+    shortName: "Los Robles",
   },
   {
     id: "green-one",
@@ -67,6 +76,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     lng: -68.46,
     area: "Arena Gorda / Bávaro",
     note: "Enfrente del Iberostar Bávaro",
+    shortName: "Green One",
   },
   {
     id: "city-place",
@@ -77,6 +87,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     lng: -68.404,
     area: "Downtown Punta Cana",
     note: "Desarrollo residencial y comercial",
+    shortName: "City Place",
   },
   {
     id: "pharma-crisfer",
@@ -87,6 +98,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     lng: -68.4235,
     area: "Pueblo Bávaro / Verón",
     note: "PharmaQuick! · apertura noviembre 2026",
+    shortName: "PharmaQuick!",
     opening: "Noviembre 2026",
   },
 ];
