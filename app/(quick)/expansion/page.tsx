@@ -27,6 +27,11 @@ export default function ExpansionPage() {
               espacios dentro de residenciales y propuestas que encajen con nuestro plan de
               crecimiento a largo plazo.
             </p>
+            <p>
+              <a className="propuesta-link" href="/propuesta">
+                Ver propuesta comercial
+              </a>
+            </p>
           </div>
         </section>
 
