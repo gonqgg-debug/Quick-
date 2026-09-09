@@ -209,7 +209,7 @@ export function PropuestaDeck() {
       <div className="propuesta-deck">
         <SlideFrame id="slide-0" className="propuesta-scallop">
           <div className="relative z-10 mx-auto flex h-full max-w-5xl flex-col items-center justify-center text-center">
-            <div className="w-full rounded-[40px] bg-[#FFF6E8] px-10 py-12 shadow-[0_24px_50px_rgba(26,26,26,0.18)] md:px-16 md:py-14">
+            <div className="w-full rounded-[40px] bg-[#FFF6E8] px-10 py-12 shadow-[0_24px_50px_rgba(26,26,26,0.18)] print:shadow-none md:px-16 md:py-14">
               <Logo className="mx-auto h-16 max-w-[260px]" />
               <p className="mt-8 text-2xl font-semibold md:text-3xl" style={{ color: brand.orange }}>
                 Traemos la conveniencia
@@ -411,7 +411,7 @@ export function PropuestaDeck() {
         <SlideFrame id="slide-6" innerClassName="is-flush" style={{ backgroundColor: "#EAF4FB" }}>
           <div className="propuesta-fill propuesta-split">
             <div className="flex min-h-0 flex-col justify-center px-10 py-10 md:px-14">
-              <div className="w-fit rounded-2xl bg-white px-4 py-3 shadow-[0_10px_24px_rgba(31,130,197,0.12)]">
+              <div className="w-fit rounded-2xl bg-white px-4 py-3 shadow-[0_10px_24px_rgba(31,130,197,0.12)] print:shadow-none">
                 <Logo variant="pharma" className="h-10 max-w-[240px]" />
               </div>
               <Kicker color={brand.blue}>Próximamente en Noviembre 2026</Kicker>

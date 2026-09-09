@@ -323,8 +323,18 @@ html.propuesta-html.is-exporting {
 }
 
 html.propuesta-html.is-exporting .leaflet-control-zoom,
-html.propuesta-html.is-exporting .leaflet-control-attribution {
+html.propuesta-html.is-exporting .leaflet-control-attribution,
+html.propuesta-html.is-exporting .leaflet-shadow-pane {
   display: none !important;
+}
+
+html.propuesta-html.is-exporting *,
+html.propuesta-html.is-exporting *::before,
+html.propuesta-html.is-exporting *::after {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+  -webkit-filter: none !important;
 }
 
 .propuesta-dots {
@@ -770,7 +780,8 @@ html.propuesta-html.is-exporting .leaflet-control-attribution {
 
   .propuesta-map .leaflet-control-zoom,
   .propuesta-map .leaflet-control-attribution,
-  .propuesta-map .leaflet-control-container {
+  .propuesta-map .leaflet-control-container,
+  .leaflet-shadow-pane {
     display: none !important;
   }
 
@@ -799,20 +810,15 @@ html.propuesta-html.is-exporting .leaflet-control-attribution {
   html.propuesta-html,
   html.propuesta-html body,
   .propuesta-slide,
-  .propuesta-slide-inner,
   .propuesta-scallop,
   .propuesta-scallop::before,
   .propuesta-tile,
   .propuesta-stat,
-  .propuesta-card,
-  .propuesta-fill,
   .propuesta-slide-photo,
   .propuesta-split-photo,
   .propuesta-pin-point,
   .propuesta-pin-name,
-  .propuesta-pin-logo,
   .propuesta-landmark,
-  .propuesta-legend,
   .propuesta-legend-swatch,
   .propuesta-slide a,
   .propuesta-slide button {
@@ -837,7 +843,7 @@ html.propuesta-html.is-exporting .leaflet-control-attribution {
   .propuesta-map,
   .propuesta-legend,
   .propuesta-card {
-    border: 1px solid rgba(26, 26, 26, 0.08);
+    border: 1px solid #ead9bf;
   }
 }
 
