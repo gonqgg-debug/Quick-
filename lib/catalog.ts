@@ -175,6 +175,7 @@ export async function getOrderDraft(orderId: string): Promise<OrderDraft | null>
       id,
       direccion,
       metodo_pago,
+      pago_con,
       order_items (
         product_id,
         cantidad,
@@ -192,6 +193,8 @@ export async function getOrderDraft(orderId: string): Promise<OrderDraft | null>
   const metodo = String(order.metodo_pago ?? "");
   const metodoPago: MetodoPago | null =
     metodo === "efectivo" || metodo === "tarjeta" ? metodo : null;
+  const pagoConRaw = toMoney(order.pago_con);
+  const pagoCon = metodoPago === "efectivo" && pagoConRaw > 0 ? pagoConRaw : null;
 
   const rawItems = Array.isArray(order.order_items) ? order.order_items : [];
   const items = rawItems
@@ -206,6 +209,7 @@ export async function getOrderDraft(orderId: string): Promise<OrderDraft | null>
     orderId: order.id as string,
     direccion: String(order.direccion ?? ""),
     metodoPago,
+    pagoCon,
     items,
   };
 }

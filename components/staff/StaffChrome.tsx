@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
+import { playStaffAlert, readStaffSoundMuted, unlockStaffAlerts } from "@/lib/staff-alerts";
 import { brand } from "@/lib/theme";
 
 type StaffSection = "orders" | "chats";
@@ -49,10 +50,19 @@ export function StaffChrome({
   const shell = wide ? "mx-auto max-w-6xl px-3" : "mx-auto max-w-3xl px-3";
   const searchOpen = Boolean(search?.open);
   const [pendingCount, setPendingCount] = useState(notificationCount);
+  const seenPending = useRef<number | null>(null);
 
   useEffect(() => {
     setPendingCount(notificationCount);
   }, [notificationCount]);
+
+  useEffect(() => {
+    const unlock = () => {
+      void unlockStaffAlerts();
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    return () => window.removeEventListener("pointerdown", unlock);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,13 +73,21 @@ export function StaffChrome({
       }
       const body = (await response.json()) as { pendingMessageCount?: number };
       if (!cancelled && typeof body.pendingMessageCount === "number") {
+        if (
+          seenPending.current !== null &&
+          body.pendingMessageCount > seenPending.current &&
+          !readStaffSoundMuted()
+        ) {
+          void playStaffAlert("new");
+        }
+        seenPending.current = body.pendingMessageCount;
         setPendingCount(body.pendingMessageCount);
       }
     }
     void loadPending();
     const timer = window.setInterval(() => {
       void loadPending();
-    }, 20000);
+    }, 8000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
@@ -99,6 +117,14 @@ export function StaffChrome({
                           style={{ color: isActive ? brand.green : brand.muted }}
                         >
                           {tab.label}
+                          {tab.id === "chats" && pendingCount > 0 ? (
+                            <span
+                              className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+                              style={{ backgroundColor: brand.orange }}
+                            >
+                              {pendingCount > 9 ? "9+" : pendingCount}
+                            </span>
+                          ) : null}
                           {isActive ? (
                             <span
                               className="absolute inset-x-2 bottom-[6px] h-[2px] rounded-full"
@@ -197,12 +223,12 @@ function UtilityIcons({
           <SearchIcon />
         </button>
       ) : null}
-      <button
-        type="button"
-        onClick={onNotificationsClick}
+      <Link
+        href="/staff/chats"
         className="relative flex h-11 w-9 items-center justify-center"
         style={{ color: brand.muted }}
         aria-label={pendingCount > 0 ? `Notificaciones, ${pendingCount} pendientes` : "Notificaciones"}
+        onClick={onNotificationsClick}
       >
         <BellIcon />
         {pendingCount > 0 ? (
@@ -213,7 +239,7 @@ function UtilityIcons({
             {pendingCount > 9 ? "9+" : pendingCount}
           </span>
         ) : null}
-      </button>
+      </Link>
       <AccountMenu onLogout={onLogout} />
     </div>
   );

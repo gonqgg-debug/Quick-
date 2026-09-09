@@ -191,7 +191,7 @@ export async function GET() {
   const { count: pendingMessageCount, error: pendingError } = await supabase
     .from("chats")
     .select("id", { count: "exact", head: true })
-    .eq("mensaje_pendiente", true);
+    .or("mensaje_pendiente.eq.true,esperando_humano.eq.true");
 
   if (pendingError) {
     console.error("[staff] no se pudo contar mensajes pendientes", pendingError);

@@ -1,3 +1,4 @@
+import { paymentMethodLabel } from "@/lib/cash-payment";
 import { itemStatusLabel } from "@/lib/order-display";
 import { brand } from "@/lib/theme";
 import type { OrderItemEstado } from "@/lib/types";
@@ -13,6 +14,8 @@ export type OrderSnapshotItem = {
 type OrderSnapshotProps = {
   direccion: string;
   metodoPago: string;
+  pagoCon?: number | null;
+  totalEstimado?: number | null;
   clienteTelefono: string;
   items: OrderSnapshotItem[];
   missingAction?: {
@@ -21,15 +24,11 @@ type OrderSnapshotProps = {
   };
 };
 
-function paymentLabel(metodo: string): string {
-  if (metodo === "efectivo") return "Efectivo";
-  if (metodo === "tarjeta") return "Tarjeta";
-  return metodo || "—";
-}
-
 export function OrderSnapshot({
   direccion,
   metodoPago,
+  pagoCon = null,
+  totalEstimado = null,
   clienteTelefono,
   items,
   missingAction,
@@ -39,7 +38,7 @@ export function OrderSnapshot({
       <div className="space-y-2 rounded-2xl px-4 py-4" style={{ backgroundColor: "#F8FAF7" }}>
         <InfoRow icon={<PinIcon />}>{direccion || "—"}</InfoRow>
         <InfoRow icon={metodoPago === "efectivo" ? <CashIcon /> : <CardIcon />}>
-          {paymentLabel(metodoPago)}
+          {paymentMethodLabel(metodoPago, pagoCon, totalEstimado ?? 0)}
         </InfoRow>
         <InfoRow icon={<PhoneIcon />}>{clienteTelefono || "—"}</InfoRow>
       </div>
@@ -70,7 +69,7 @@ export function OrderSnapshot({
                     }}
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-base disabled:opacity-50"
                     style={{ backgroundColor: "#FFF4E5" }}
-                    aria-label={`Marcar ${item.nombre} como faltante`}
+                    aria-label={`Quitar ${item.nombre} del pedido`}
                   >
                     ⚠️
                   </button>

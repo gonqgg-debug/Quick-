@@ -6,6 +6,7 @@ import {
   jsonError,
   parseItems,
   priceCatalogItems,
+  resolvePagoCon,
 } from "@/lib/order-request";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import type { OrderEstado } from "@/lib/types";
@@ -18,6 +19,7 @@ type OrderBody = {
   items?: unknown;
   direccion?: unknown;
   metodoPago?: unknown;
+  pagoCon?: unknown;
   addressId?: unknown;
   nuevaDireccion?: unknown;
 };
@@ -128,6 +130,11 @@ export async function PATCH(
     return jsonError(priced.message, priced.status);
   }
 
+  const pagoCon = resolvePagoCon(body.metodoPago, body.pagoCon, priced.totalEstimado);
+  if (!pagoCon.ok) {
+    return jsonError(pagoCon.message, 400);
+  }
+
   const { error: deleteError } = await supabase.from("order_items").delete().eq("order_id", order.id);
 
   if (deleteError) {
@@ -170,6 +177,7 @@ export async function PATCH(
   if (body.metodoPago !== String(order.metodo_pago ?? "")) {
     orderPatch.metodo_pago = body.metodoPago;
   }
+  orderPatch.pago_con = pagoCon.pagoCon;
 
   const { error: updateError } = await supabase.from("orders").update(orderPatch).eq("id", order.id);
 

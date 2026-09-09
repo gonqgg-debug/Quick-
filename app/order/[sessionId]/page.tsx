@@ -15,6 +15,7 @@ import {
   type CatalogRecommendations,
 } from "@/lib/catalog-recommendations";
 import { getCustomerForChat } from "@/lib/customers";
+import { getKitchenDemand } from "@/lib/kitchen-demand";
 import type { CatalogCategoryChip } from "@/lib/catalog-products-shared";
 import type { OrderDraft, Product } from "@/lib/types";
 
@@ -38,20 +39,23 @@ export default async function OrderCatalogPage({ params }: OrderCatalogPageProps
     favorites: [],
   };
   let collections: CatalogCollectionRail[] = [];
+  let highDemand = false;
   let unavailable = false;
 
   try {
     session = await getActiveOrderSession(params.sessionId);
     if (session) {
       customer = await getCustomerForChat(session.chat_id);
-      const [catalogCategories, catalogRecommendations, catalogCollections] = await Promise.all([
+      const [catalogCategories, catalogRecommendations, catalogCollections, demand] = await Promise.all([
         listActiveCatalogCategories(),
         getCatalogRecommendations(customer?.id ?? null),
         getCatalogCollections(),
+        getKitchenDemand(),
       ]);
       categories = catalogCategories;
       recommendations = catalogRecommendations;
       collections = catalogCollections;
+      highDemand = demand.highDemand;
       if (session.edit_order_id) {
         editOrder = await getOrderDraft(session.edit_order_id);
         if (editOrder) {
@@ -94,6 +98,7 @@ export default async function OrderCatalogPage({ params }: OrderCatalogPageProps
       customer={customer}
       recommendations={recommendations}
       collections={collections}
+      highDemand={highDemand}
     />
   );
 }

@@ -43,6 +43,7 @@ export type CreateOrderPayload = {
   items: CreateOrderItem[];
   direccion: string;
   metodoPago: MetodoPago;
+  pagoCon?: number | null;
   addressId?: string | null;
   nuevaDireccion?: StructuredAddressFields | null;
 };
@@ -61,5 +62,6 @@ export type OrderDraft = {
   orderId: string;
   direccion: string;
   metodoPago: MetodoPago | null;
+  pagoCon: number | null;
   items: OrderDraftItem[];
 };
