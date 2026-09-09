@@ -279,6 +279,14 @@ function ChatRow({
               Abierta
             </span>
           ) : null}
+          {!chat.order && chat.esperandoHumano ? (
+            <span
+              className="mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold"
+              style={{ backgroundColor: "#FFF4E5", color: brand.orange }}
+            >
+              Sin pedido
+            </span>
+          ) : null}
         </div>
         {chat.nombre && !chat.order ? (
           <p className="truncate text-sm text-brand-muted">{chat.phoneNumber}</p>

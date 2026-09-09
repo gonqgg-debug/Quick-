@@ -1,3 +1,5 @@
+import { paymentMethodLabel } from "@/lib/cash-payment";
+import { toMoney } from "@/lib/money";
 import type { OrderEstado } from "@/lib/types";
 
 export const MY_ORDERS_HASH = "mis-pedidos";
@@ -20,6 +22,7 @@ export type CustomerOrder = {
   direccion: string;
   metodoPago: string;
   metodoPagoLabel: string;
+  pagoCon: number | null;
   totalLabel: string;
   items: CustomerOrderItem[];
 };
@@ -54,8 +57,11 @@ export function formatCustomerOrderDate(iso: string): string {
   }).format(date);
 }
 
-export function metodoPagoLabel(metodo: string): string {
-  if (metodo === "efectivo") return "Efectivo";
-  if (metodo === "tarjeta") return "Tarjeta";
-  return metodo || "—";
+export function metodoPagoLabel(metodo: string, pagoCon?: number | null, total?: number | null): string {
+  return paymentMethodLabel(metodo, pagoCon, total);
+}
+
+export function parsePagoConValue(value: unknown): number | null {
+  const amount = toMoney(value);
+  return amount > 0 ? amount : null;
 }

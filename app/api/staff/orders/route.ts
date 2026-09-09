@@ -6,6 +6,14 @@ import type { OrderEstado, OrderItemEstado } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+const OPEN_ORDER_STATES: OrderEstado[] = [
+  "nueva",
+  "en_proceso",
+  "faltante_reportado",
+  "confirmada",
+  "despachada",
+];
+
 function unwrapOne<T>(value: T | T[] | null | undefined): T | null {
   if (!value) {
     return null;
@@ -29,6 +37,7 @@ export async function GET() {
       estado,
       direccion,
       metodo_pago,
+      pago_con,
       total_estimado,
       notas,
       chat_id,
@@ -83,6 +92,7 @@ export async function GET() {
       estado: order.estado as OrderEstado,
       direccion: String(order.direccion ?? ""),
       metodoPago: String(order.metodo_pago ?? ""),
+      pagoCon: order.pago_con == null ? null : toMoney(order.pago_con),
       totalEstimado: toMoney(order.total_estimado),
       totalLabel: formatPrice(order.total_estimado),
       notas: order.notas ? String(order.notas) : null,
@@ -109,5 +119,33 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({ orders });
+  const { data: waitingChats, error: waitingError } = await supabase
+    .from("chats")
+    .select("id, phone_number, nombre, esperando_humano_desde")
+    .eq("esperando_humano", true)
+    .order("esperando_humano_desde", { ascending: true });
+
+  if (waitingError) {
+    console.error("[staff] no se pudieron leer chats en espera", waitingError);
+  }
+
+  const openOrderChatIds = new Set(
+    orders
+      .filter((order) => OPEN_ORDER_STATES.includes(order.estado))
+      .map((order) => order.chatId)
+      .filter((id): id is string => Boolean(id))
+  );
+
+  const humanHelp = (waitingChats ?? []).map((chat) => {
+    const id = String(chat.id);
+    return {
+      id,
+      phoneNumber: String(chat.phone_number ?? ""),
+      nombre: chat.nombre ? String(chat.nombre) : null,
+      waitingSince: chat.esperando_humano_desde ? String(chat.esperando_humano_desde) : null,
+      hasOpenOrder: openOrderChatIds.has(id),
+    };
+  });
+
+  return NextResponse.json({ orders, humanHelp });
 }

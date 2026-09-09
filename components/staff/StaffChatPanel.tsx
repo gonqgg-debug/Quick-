@@ -351,7 +351,9 @@ export function StaffChatPanel({ chatId, onClose, onUnauthorized, onConcluded }:
           {selectedOrder ? (
             <OrderSummary order={selectedOrder} showTitle={orders.length <= 1} />
           ) : (
-            <p className="text-sm text-brand-muted">Este cliente no tiene un pedido abierto ahora.</p>
+            <p className="text-sm text-brand-muted">
+              Este cliente no tiene un pedido abierto. Contéstale desde aquí.
+            </p>
           )}
         </div>
 

@@ -34,20 +34,24 @@ export async function POST(
   }
 
   try {
-    const found = await reportMissingItem(orderId, productId);
-    if (!found) {
+    const result = await reportMissingItem(orderId, productId);
+    if (!result.found) {
       return NextResponse.json(
         { error: "No encontramos ese producto en el pedido" },
         { status: 404 }
       );
     }
+    return NextResponse.json({
+      ok: true,
+      cancelled: result.cancelled,
+      productName: result.productName,
+      totalLabel: result.totalLabel,
+    });
   } catch (error) {
     console.error("[staff] error al marcar faltante", error);
     return NextResponse.json(
-      { error: "No pudimos marcar el producto como faltante" },
+      { error: "No pudimos quitar el producto del pedido" },
       { status: 500 }
     );
   }
-
-  return NextResponse.json({ ok: true });
 }

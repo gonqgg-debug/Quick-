@@ -2,6 +2,7 @@ import { cache } from "react";
 import { getCustomerForChat } from "@/lib/customers";
 import {
   metodoPagoLabel,
+  parsePagoConValue,
   type CustomerOrder,
 } from "@/lib/customer-orders-shared";
 import { formatPrice, toMoney } from "@/lib/money";
@@ -41,6 +42,7 @@ export async function listCustomerOrdersForSession(chatId: string): Promise<Cust
       estado,
       direccion,
       metodo_pago,
+      pago_con,
       total_estimado,
       chat_id,
       customer_id,
@@ -91,7 +93,12 @@ export async function listCustomerOrdersForSession(chatId: string): Promise<Cust
       estado: String(row.estado) as OrderEstado,
       direccion: String(row.direccion ?? ""),
       metodoPago: String(row.metodo_pago ?? ""),
-      metodoPagoLabel: metodoPagoLabel(String(row.metodo_pago ?? "")),
+      metodoPagoLabel: metodoPagoLabel(
+        String(row.metodo_pago ?? ""),
+        parsePagoConValue(row.pago_con),
+        toMoney(row.total_estimado)
+      ),
+      pagoCon: parsePagoConValue(row.pago_con),
       totalLabel: formatPrice(row.total_estimado),
       items,
     };
@@ -121,6 +128,7 @@ export const getPublicOrder = cache(async (orderId: string): Promise<CustomerOrd
       estado,
       direccion,
       metodo_pago,
+      pago_con,
       total_estimado,
       order_items (
         id,
@@ -165,7 +173,12 @@ export const getPublicOrder = cache(async (orderId: string): Promise<CustomerOrd
     estado: String(data.estado) as OrderEstado,
     direccion: String(data.direccion ?? ""),
     metodoPago: String(data.metodo_pago ?? ""),
-    metodoPagoLabel: metodoPagoLabel(String(data.metodo_pago ?? "")),
+    metodoPagoLabel: metodoPagoLabel(
+      String(data.metodo_pago ?? ""),
+      parsePagoConValue(data.pago_con),
+      toMoney(data.total_estimado)
+    ),
+    pagoCon: parsePagoConValue(data.pago_con),
     totalLabel: formatPrice(data.total_estimado),
     items,
   };

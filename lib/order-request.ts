@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { coversTotal, parsePagoConAmount } from "@/lib/cash-payment";
 import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import type { CreateOrderItem, MetodoPago, OrderEstado } from "@/lib/types";
@@ -18,6 +19,24 @@ export function jsonError(message: string, status: number) {
 
 export function isMetodoPago(value: unknown): value is MetodoPago {
   return typeof value === "string" && METODOS_PAGO.includes(value as MetodoPago);
+}
+
+export function resolvePagoCon(
+  metodoPago: MetodoPago,
+  value: unknown,
+  total: number
+): { ok: true; pagoCon: number | null } | { ok: false; message: string } {
+  if (metodoPago !== "efectivo") {
+    return { ok: true, pagoCon: null };
+  }
+  const amount = parsePagoConAmount(value);
+  if (amount == null) {
+    return { ok: false, message: "Indica con cuánto vas a pagar en efectivo para llevar el cambio." };
+  }
+  if (!coversTotal(amount, total)) {
+    return { ok: false, message: "El monto con el que pagas tiene que cubrir el total del pedido." };
+  }
+  return { ok: true, pagoCon: amount };
 }
 
 export function parseItems(value: unknown): CreateOrderItem[] | null {

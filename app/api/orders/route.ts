@@ -5,6 +5,7 @@ import {
   jsonError,
   parseItems,
   priceCatalogItems,
+  resolvePagoCon,
 } from "@/lib/order-request";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import { confirmOrderToCustomer, sendOrderToStaff } from "@/lib/whatsapp";
@@ -16,6 +17,7 @@ type OrderBody = {
   items?: unknown;
   direccion?: unknown;
   metodoPago?: unknown;
+  pagoCon?: unknown;
   addressId?: unknown;
   nuevaDireccion?: unknown;
 };
@@ -88,6 +90,11 @@ export async function POST(request: NextRequest) {
     return jsonError(priced.message, priced.status);
   }
 
+  const pagoCon = resolvePagoCon(body.metodoPago, body.pagoCon, priced.totalEstimado);
+  if (!pagoCon.ok) {
+    return jsonError(pagoCon.message, 400);
+  }
+
   const customer = await getCustomerForChat(String(session.chat_id));
   let delivery = direccion;
   let customerId: string | null = customer?.id ?? null;
@@ -117,6 +124,7 @@ export async function POST(request: NextRequest) {
       customer_id: customerId,
       direccion: delivery,
       metodo_pago: body.metodoPago,
+      pago_con: pagoCon.pagoCon,
       estado: "nueva",
       total_estimado: priced.totalEstimado,
       es_prueba: esPrueba,

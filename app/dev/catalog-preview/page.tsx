@@ -208,6 +208,7 @@ export default function CatalogPreviewPage() {
       recommendations={recommendations}
       collections={collections}
       localProducts={products}
+      highDemand
     />
   );
 }

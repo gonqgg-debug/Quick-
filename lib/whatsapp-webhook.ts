@@ -297,14 +297,16 @@ async function handleStaffMissing(phoneNumber: string, text: string): Promise<vo
   const productId = match[2];
   const found = await reportMissingItem(orderId, productId);
 
-  if (!found) {
+  if (!found.found) {
     await sendTextMessage(phoneNumber, "No encontré ese producto en el pedido.");
     return;
   }
 
   await sendTextMessage(
     phoneNumber,
-    `Listo. Marcamos el producto como faltante y avisamos al cliente del pedido #${formatShortOrderId(orderId)}.`
+    found.cancelled
+      ? `Listo. Lo quitamos y cancelamos el pedido #${formatShortOrderId(orderId)} porque no quedaban productos.`
+      : `Listo. Quitamos el producto del pedido #${formatShortOrderId(orderId)} y avisamos al cliente.`
   );
 }
 
@@ -442,24 +444,19 @@ async function handleIncomingMessage(message: IncomingMessage): Promise<void> {
 
   if (!fromStaff) {
     try {
-      const openOrder = await getOpenStaffOrder(chat.id);
-      if (openOrder) {
+      const [openOrder, waiting] = await Promise.all([
+        getOpenStaffOrder(chat.id),
+        isWaitingForHuman(chat.id),
+      ]);
+      if (openOrder || waiting) {
         await flagCustomerMessageAlert(chat.id);
       }
-    } catch (error) {
-      console.error("[whatsapp] no se pudo marcar alerta de mensaje del cliente", error);
-    }
-  }
-
-  if (!fromStaff) {
-    try {
-      const waiting = await isWaitingForHuman(chat.id);
       if (waiting) {
         console.log("[whatsapp] skip:reply, chat espera humano", chat.id);
         return;
       }
     } catch (error) {
-      console.error("[whatsapp] no se pudo verificar espera humana", error);
+      console.error("[whatsapp] no se pudo marcar alerta de mensaje del cliente", error);
     }
   }
 

@@ -40,6 +40,9 @@ import {
   type CatalogCustomer,
   type CustomerAddress,
 } from "@/lib/customers";
+import { CashAmountPicker } from "@/components/catalog/CashAmountPicker";
+import { coversTotal } from "@/lib/cash-payment";
+import { HIGH_DEMAND_MESSAGE } from "@/lib/kitchen-demand";
 import { formatPrice } from "@/lib/money";
 import { brand, brandChipColor, categoryEmoji, isPharmaCategory } from "@/lib/theme";
 import type { CreateOrderPayload, MetodoPago, OrderDraft, Product } from "@/lib/types";
@@ -53,6 +56,7 @@ type CatalogExperienceProps = {
   recommendations?: CatalogRecommendationsData;
   collections?: CatalogCollectionRail[];
   localProducts?: Product[];
+  highDemand?: boolean;
 };
 
 type Step = "register" | "catalog" | "checkout" | "success";
@@ -142,6 +146,7 @@ export function CatalogExperience({
   recommendations = EMPTY_RECOMMENDATIONS,
   collections = [],
   localProducts,
+  highDemand: initialHighDemand = false,
 }: CatalogExperienceProps) {
   const [customer, setCustomer] = useState<CatalogCustomer | null>(initialCustomer);
   const [step, setStep] = useState<Step>(initialCustomer ? "catalog" : "register");
@@ -179,6 +184,8 @@ export function CatalogExperience({
   const [newEtiqueta, setNewEtiqueta] = useState<AddressLabel>("Casa");
   const [newAddress, setNewAddress] = useState<AddressDraft>(EMPTY_ADDRESS_DRAFT);
   const [metodoPago, setMetodoPago] = useState<MetodoPago | null>(editOrder?.metodoPago ?? null);
+  const [pagoCon, setPagoCon] = useState<number | null>(editOrder?.pagoCon ?? null);
+  const [highDemand, setHighDemand] = useState(initialHighDemand);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
@@ -285,8 +292,38 @@ export function CatalogExperience({
     if (editOrder?.metodoPago) {
       setMetodoPago((current) => current ?? editOrder.metodoPago);
     }
+    if (editOrder?.pagoCon) {
+      setPagoCon((current) => current ?? editOrder.pagoCon);
+    }
     setHydrated(true);
   }, [sessionId, editOrder, customer]);
+
+  useEffect(() => {
+    if (metodoPago !== "efectivo") {
+      return;
+    }
+    if (pagoCon != null && !coversTotal(pagoCon, total)) {
+      setPagoCon(null);
+    }
+  }, [metodoPago, pagoCon, total]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(`/api/catalog/demand?sessionId=${encodeURIComponent(sessionId)}`);
+        const body = (await response.json()) as { highDemand?: boolean };
+        if (!cancelled && response.ok && typeof body.highDemand === "boolean") {
+          setHighDemand(body.highDemand);
+        }
+      } catch {
+        // El aviso de demanda es informativo; si falla, seguimos con el valor inicial.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, step]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -448,6 +485,9 @@ export function CatalogExperience({
     if (!metodoPago || delivery.length < 6 || lines.length === 0) {
       return;
     }
+    if (metodoPago === "efectivo" && (pagoCon == null || !coversTotal(pagoCon, total))) {
+      return;
+    }
     if (addingNew && !newFields) {
       return;
     }
@@ -460,6 +500,7 @@ export function CatalogExperience({
       })),
       direccion: delivery,
       metodoPago: metodoPago,
+      pagoCon: metodoPago === "efectivo" ? pagoCon : null,
       addressId: customer && selectedAddressId !== "new" ? selectedAddressId : null,
       nuevaDireccion: customer && addingNew && newFields ? newFields : null,
     };
@@ -634,6 +675,8 @@ export function CatalogExperience({
         total={total}
         direccion={direccion}
         metodoPago={metodoPago}
+        pagoCon={pagoCon}
+        highDemand={highDemand}
         submitting={submitting}
         submitError={submitError}
         isEditing={isEditing}
@@ -651,7 +694,13 @@ export function CatalogExperience({
         }}
         onNewEtiquetaChange={setNewEtiqueta}
         onNewAddressChange={setNewAddress}
-        onMetodoPagoChange={setMetodoPago}
+        onMetodoPagoChange={(value) => {
+          setMetodoPago(value);
+          if (value !== "efectivo") {
+            setPagoCon(null);
+          }
+        }}
+        onPagoConChange={setPagoCon}
         onBack={() => {
           setSubmitError(null);
           setStep("catalog");
@@ -777,6 +826,7 @@ export function CatalogExperience({
         {showVitrine ? (
           <>
             <PromoBanner banners={CATALOG_PROMO_BANNERS} />
+            {highDemand ? <HighDemandBanner /> : null}
             <p className="mt-4 text-sm leading-relaxed text-brand-muted">
               {isEditing
                 ? "Ya cargamos tu pedido. Cambia lo que necesites y guarda los cambios."
@@ -1196,6 +1246,8 @@ function CheckoutScreen({
   total,
   direccion,
   metodoPago,
+  pagoCon,
+  highDemand,
   submitting,
   submitError,
   isEditing,
@@ -1207,6 +1259,7 @@ function CheckoutScreen({
   onNewEtiquetaChange,
   onNewAddressChange,
   onMetodoPagoChange,
+  onPagoConChange,
   onBack,
   onConfirm,
 }: {
@@ -1214,6 +1267,8 @@ function CheckoutScreen({
   total: number;
   direccion: string;
   metodoPago: MetodoPago | null;
+  pagoCon: number | null;
+  highDemand: boolean;
   submitting: boolean;
   submitError: string | null;
   isEditing: boolean;
@@ -1225,12 +1280,14 @@ function CheckoutScreen({
   onNewEtiquetaChange: (value: AddressLabel) => void;
   onNewAddressChange: (value: AddressDraft) => void;
   onMetodoPagoChange: (value: MetodoPago) => void;
+  onPagoConChange: (value: number | null) => void;
   onBack: () => void;
   onConfirm: () => void;
 }) {
   const addingNew = selectedAddressId === "new" || addresses.length === 0;
   const addressOk = addingNew ? isAddressDraftComplete(newAddress) : direccion.trim().length >= 6;
-  const canConfirm = addressOk && metodoPago !== null && !submitting;
+  const cashOk = metodoPago !== "efectivo" || (pagoCon != null && coversTotal(pagoCon, total));
+  const canConfirm = addressOk && metodoPago !== null && cashOk && !submitting;
 
   return (
     <div className="mx-auto min-h-screen max-w-lg bg-white px-4 pb-10 pt-5">
@@ -1240,6 +1297,7 @@ function CheckoutScreen({
       <h1 className="font-display mt-4 text-3xl font-bold text-brand-ink">
         {isEditing ? "Guardar cambios" : "Confirmar pedido"}
       </h1>
+      {highDemand ? <HighDemandBanner className="mt-3" /> : null}
       <p className="mt-1 text-sm text-brand-muted">
         {lines.length} {lines.length === 1 ? "producto" : "productos"} ·{" "}
         <span className="font-bold" style={{ color: brand.orange }}>
@@ -1347,6 +1405,10 @@ function CheckoutScreen({
         </div>
       </fieldset>
 
+      {metodoPago === "efectivo" ? (
+        <CashAmountPicker total={total} value={pagoCon} onChange={onPagoConChange} />
+      ) : null}
+
       {submitError ? (
         <p className="mt-4 rounded-2xl border px-4 py-3 text-sm text-brand-error" style={{ borderColor: `${brand.error}40` }}>
           {submitError}
@@ -1449,5 +1511,16 @@ function SuccessScreen({
         </div>
       </section>
     </main>
+  );
+}
+
+function HighDemandBanner({ className = "mt-3" }: { className?: string }) {
+  return (
+    <div className={`rounded-[22px] px-4 py-3 ${className}`} style={{ backgroundColor: "#FFF4E5" }}>
+      <p className="text-sm font-bold" style={{ color: brand.orange }}>
+        Alta demanda
+      </p>
+      <p className="mt-0.5 text-sm leading-relaxed text-brand-ink">{HIGH_DEMAND_MESSAGE}</p>
+    </div>
   );
 }

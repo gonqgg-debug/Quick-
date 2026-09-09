@@ -5,6 +5,7 @@ import { StaffChatPanel } from "@/components/staff/StaffChatPanel";
 import { StaffChrome } from "@/components/staff/StaffChrome";
 import { StaffLogin, staffLogout } from "@/components/staff/StaffLogin";
 import { OrderSnapshot } from "@/components/staff/OrderSnapshot";
+import { StaffOrderEditor } from "@/components/staff/StaffOrderEditor";
 import { PruebaBadge } from "@/components/order/PruebaBadge";
 import { isToday } from "@/lib/local-day";
 import {
@@ -42,6 +43,7 @@ type StaffOrder = {
   estado: OrderEstado;
   direccion: string;
   metodoPago: string;
+  pagoCon: number | null;
   totalEstimado: number;
   totalLabel: string;
   notas: string | null;
@@ -50,6 +52,14 @@ type StaffOrder = {
   mensajePendiente?: boolean;
   esPrueba?: boolean;
   items: StaffOrderItem[];
+};
+
+type HumanHelpChat = {
+  id: string;
+  phoneNumber: string;
+  nombre: string | null;
+  waitingSince: string | null;
+  hasOpenOrder: boolean;
 };
 
 const STATUS_ACTIONS: { estado: OrderEstado; label: string }[] = [
@@ -156,6 +166,8 @@ export function StaffPanel() {
   const [now, setNow] = useState(() => Date.now());
   const [soundMuted, setSoundMuted] = useState(false);
   const [openChatId, setOpenChatId] = useState<string | null>(null);
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+  const [humanHelp, setHumanHelp] = useState<HumanHelpChat[]>([]);
   const seenNewIds = useRef<Set<string> | null>(null);
   const seenUrgentIds = useRef<Set<string> | null>(null);
 
@@ -170,8 +182,9 @@ export function StaffPanel() {
       const body = (await response.json().catch(() => null)) as { error?: string } | null;
       throw new Error(body?.error || "No pudimos cargar los pedidos");
     }
-    const body = (await response.json()) as { orders: StaffOrder[] };
+    const body = (await response.json()) as { orders: StaffOrder[]; humanHelp?: HumanHelpChat[] };
     setOrders(body.orders ?? []);
+    setHumanHelp(body.humanHelp ?? []);
     setAuthorized(true);
     return true;
   }, []);
@@ -260,6 +273,11 @@ export function StaffPanel() {
     return todayOrders.filter((order) => activeFilter.match(order.estado) && orderMatchesQuery(order, query));
   }, [todayOrders, activeFilter, query]);
 
+  const editingOrder = useMemo(
+    () => orders.find((order) => order.id === editingOrderId) ?? null,
+    [orders, editingOrderId]
+  );
+
   const needsLiveClock = useMemo(
     () => todayOrders.some((order) => usesOrderAging(order.estado)),
     [todayOrders]
@@ -339,7 +357,7 @@ export function StaffPanel() {
 
   async function markMissing(order: StaffOrder, item: StaffOrderItem) {
     const confirmed = window.confirm(
-      `¿Marcar "${item.nombre}" como faltante y avisar al cliente del pedido #${formatOrderNumber(order.id)}?`
+      `¿Quitar "${item.nombre}" del pedido #${formatOrderNumber(order.id)} y avisar al cliente?`
     );
     if (!confirmed) {
       return;
@@ -394,6 +412,7 @@ export function StaffPanel() {
         void staffLogout().then(() => {
           setAuthorized(false);
           setOrders([]);
+          setHumanHelp([]);
           setSelectedId(null);
         });
       }}
@@ -440,6 +459,10 @@ export function StaffPanel() {
         </div>
       }
     >
+      {humanHelp.length > 0 ? (
+        <HumanHelpBanner chats={humanHelp} onOpenChat={setOpenChatId} />
+      ) : null}
+
       {error ? (
         <p className="mb-3 rounded-2xl px-3 py-2 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
           {error}
@@ -461,6 +484,7 @@ export function StaffPanel() {
               onStatus={changeStatus}
               onMissing={markMissing}
               onOpenChat={setOpenChatId}
+              onEdit={setEditingOrderId}
             />
           ))}
         </ul>
@@ -475,6 +499,7 @@ export function StaffPanel() {
           onStatus={changeStatus}
           onMissing={markMissing}
           onOpenChat={setOpenChatId}
+          onEdit={setEditingOrderId}
         />
       )}
 
@@ -491,11 +516,33 @@ export function StaffPanel() {
           }}
         />
       ) : null}
+
+      {editingOrder ? (
+        <StaffOrderEditor
+          orderId={editingOrder.id}
+          orderNumber={formatOrderNumber(editingOrder.id)}
+          items={editingOrder.items}
+          onClose={() => setEditingOrderId(null)}
+          onSaved={() => {
+            setEditingOrderId(null);
+            void refresh().catch(() => undefined);
+          }}
+          onUnauthorized={() => setAuthorized(false)}
+        />
+      ) : null}
     </StaffChrome>
   );
 }
 
-function MessageAlert({ compact = false, onOpen }: { compact?: boolean; onOpen: () => void }) {
+function MessageAlert({
+  compact = false,
+  pending = false,
+  onOpen,
+}: {
+  compact?: boolean;
+  pending?: boolean;
+  onOpen: () => void;
+}) {
   return (
     <button
       type="button"
@@ -504,18 +551,63 @@ function MessageAlert({ compact = false, onOpen }: { compact?: boolean; onOpen: 
         onOpen();
       }}
       className={`relative inline-flex items-center justify-center rounded-full ${compact ? "h-9 w-9" : "h-11 w-11"}`}
-      style={{ backgroundColor: "#FFF4E5" }}
-      aria-label="El cliente escribió. Abrir chat de WhatsApp"
-      title="El cliente escribió. Abrir chat"
+      style={{ backgroundColor: pending ? "#FFF4E5" : "#F3F4F6" }}
+      aria-label={pending ? "El cliente escribió. Abrir chat de WhatsApp" : "Escribir al cliente"}
+      title={pending ? "El cliente escribió. Abrir chat" : "Escribir al cliente"}
     >
-      <svg viewBox="0 0 24 24" className={compact ? "h-4 w-4" : "h-5 w-5"} fill="none" stroke={brand.orange} strokeWidth="2.2">
+      <svg
+        viewBox="0 0 24 24"
+        className={compact ? "h-4 w-4" : "h-5 w-5"}
+        fill="none"
+        stroke={pending ? brand.orange : brand.ink}
+        strokeWidth="2.2"
+      >
         <path d="M5 16.5V7.8A2.8 2.8 0 0 1 7.8 5h8.4A2.8 2.8 0 0 1 19 7.8v5.4A2.8 2.8 0 0 1 16.2 16H9l-4 3.5z" />
       </svg>
-      <span
-        className="absolute right-0.5 top-0.5 h-3 w-3 rounded-full ring-2 ring-white"
-        style={{ backgroundColor: brand.orange }}
-        aria-hidden
-      />
+      {pending ? (
+        <span
+          className="absolute right-0.5 top-0.5 h-3 w-3 rounded-full ring-2 ring-white"
+          style={{ backgroundColor: brand.orange }}
+          aria-hidden
+        />
+      ) : null}
+    </button>
+  );
+}
+
+function HumanHelpBanner({
+  chats,
+  onOpenChat,
+}: {
+  chats: HumanHelpChat[];
+  onOpenChat: (chatId: string) => void;
+}) {
+  const withoutOrder = chats.filter((chat) => !chat.hasOpenOrder);
+  const first = withoutOrder[0] ?? chats[0];
+  const count = withoutOrder.length > 0 ? withoutOrder.length : chats.length;
+  const label =
+    withoutOrder.length > 0
+      ? count === 1
+        ? "Un cliente quiere hablar y no tiene pedido. Ábrelo para contestar."
+        : `${count} clientes quieren hablar y no tienen pedido.`
+      : count === 1
+        ? "Un cliente espera respuesta en Chat."
+        : `${count} clientes esperan respuesta en Chat.`;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenChat(first.id)}
+      className="mb-3 w-full rounded-[24px] px-4 py-3 text-left"
+      style={{ backgroundColor: "#FFF4E5" }}
+    >
+      <p className="text-sm font-bold" style={{ color: brand.orange }}>
+        Chat pendiente
+      </p>
+      <p className="mt-0.5 text-sm text-brand-ink">{label}</p>
+      <p className="mt-1 text-xs font-semibold" style={{ color: brand.orange }}>
+        Abrir conversación →
+      </p>
     </button>
   );
 }
@@ -560,6 +652,7 @@ function OrderCard({
   onStatus,
   onMissing,
   onOpenChat,
+  onEdit,
 }: {
   order: StaffOrder;
   open: boolean;
@@ -569,6 +662,7 @@ function OrderCard({
   onStatus: (orderId: string, estado: OrderEstado) => void;
   onMissing: (order: StaffOrder, item: StaffOrderItem) => void;
   onOpenChat: (chatId: string) => void;
+  onEdit: (orderId: string) => void;
 }) {
   const aging = usesOrderAging(order.estado);
   const agingLevel = aging ? orderAgingLevel(elapsedMinutes(order.createdAt, now)) : null;
@@ -631,9 +725,12 @@ function OrderCard({
           <p className="mt-2 font-display text-lg font-bold">{order.totalLabel}</p>
         </div>
       </button>
-      {order.mensajePendiente && order.chatId ? (
+      {order.chatId ? (
         <div className="pr-4 pt-4">
-          <MessageAlert onOpen={() => onOpenChat(order.chatId!)} />
+          <MessageAlert
+            pending={Boolean(order.mensajePendiente)}
+            onOpen={() => onOpenChat(order.chatId!)}
+          />
         </div>
       ) : null}
       </div>
@@ -657,7 +754,14 @@ function OrderCard({
       ) : null}
 
       {open ? (
-        <OrderDetails order={order} busyKey={busyKey} onStatus={onStatus} onMissing={onMissing} />
+        <OrderDetails
+          order={order}
+          busyKey={busyKey}
+          onStatus={onStatus}
+          onMissing={onMissing}
+          onOpenChat={onOpenChat}
+          onEdit={onEdit}
+        />
       ) : null}
     </li>
   );
@@ -673,6 +777,7 @@ function OrderTable({
   onStatus,
   onMissing,
   onOpenChat,
+  onEdit,
 }: {
   orders: StaffOrder[];
   now: number;
@@ -683,6 +788,7 @@ function OrderTable({
   onStatus: (orderId: string, estado: OrderEstado) => void;
   onMissing: (order: StaffOrder, item: StaffOrderItem) => void;
   onOpenChat: (chatId: string) => void;
+  onEdit: (orderId: string) => void;
 }) {
   return (
     <div className="overflow-x-auto rounded-[24px] border" style={{ borderColor: "#E5E7EB" }}>
@@ -721,6 +827,7 @@ function OrderTable({
                 onStatus={onStatus}
                 onMissing={onMissing}
                 onOpenChat={onOpenChat}
+                onEdit={onEdit}
               />
             );
           })}
@@ -741,6 +848,7 @@ function TableRowFragment({
   onStatus,
   onMissing,
   onOpenChat,
+  onEdit,
 }: {
   order: StaffOrder;
   open: boolean;
@@ -752,6 +860,7 @@ function TableRowFragment({
   onStatus: (orderId: string, estado: OrderEstado) => void;
   onMissing: (order: StaffOrder, item: StaffOrderItem) => void;
   onOpenChat: (chatId: string) => void;
+  onEdit: (orderId: string) => void;
 }) {
   return (
     <>
@@ -764,9 +873,13 @@ function TableRowFragment({
               {agingLevel === "urgent" ? " ⚠️" : ""}
             </span>
           </button>
-          {order.mensajePendiente && order.chatId ? (
+          {order.chatId ? (
             <div className="mt-2">
-              <MessageAlert compact onOpen={() => onOpenChat(order.chatId!)} />
+              <MessageAlert
+                compact
+                pending={Boolean(order.mensajePendiente)}
+                onOpen={() => onOpenChat(order.chatId!)}
+              />
             </div>
           ) : null}
           <p className="text-xs text-brand-muted">{formatWhen(order.createdAt)}</p>
@@ -806,7 +919,14 @@ function TableRowFragment({
       {open ? (
         <tr style={{ backgroundColor: "#FFFFFF" }}>
           <td colSpan={6} className="px-2 pb-4">
-            <OrderDetails order={order} busyKey={busyKey} onStatus={onStatus} onMissing={onMissing} />
+            <OrderDetails
+          order={order}
+          busyKey={busyKey}
+          onStatus={onStatus}
+          onMissing={onMissing}
+          onOpenChat={onOpenChat}
+          onEdit={onEdit}
+        />
           </td>
         </tr>
       ) : null}
@@ -819,17 +939,24 @@ function OrderDetails({
   busyKey,
   onStatus,
   onMissing,
+  onOpenChat,
+  onEdit,
 }: {
   order: StaffOrder;
   busyKey: string | null;
   onStatus: (orderId: string, estado: OrderEstado) => void;
   onMissing: (order: StaffOrder, item: StaffOrderItem) => void;
+  onOpenChat: (chatId: string) => void;
+  onEdit: (orderId: string) => void;
 }) {
+  const canEdit = order.estado !== "completada" && order.estado !== "cancelada";
   return (
     <div className="px-5 pb-5">
       <OrderSnapshot
         direccion={order.direccion}
         metodoPago={order.metodoPago}
+        pagoCon={order.pagoCon}
+        totalEstimado={order.totalEstimado}
         clienteTelefono={order.clienteTelefono}
         items={order.items}
         missingAction={{
@@ -844,6 +971,36 @@ function OrderDetails({
       />
 
       <div className="mt-3 grid grid-cols-2 gap-2">
+        {order.chatId ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenChat(order.chatId!);
+            }}
+            className="rounded-2xl px-3 py-3 text-sm font-bold"
+            style={{ minHeight: 48, backgroundColor: "#FFF4E5", color: brand.ink }}
+          >
+            Escribir al cliente
+          </button>
+        ) : (
+          <span />
+        )}
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onEdit(order.id);
+            }}
+            className="rounded-2xl px-3 py-3 text-sm font-bold"
+            style={{ minHeight: 48, backgroundColor: "#F3F4F6", color: brand.ink }}
+          >
+            Editar pedido
+          </button>
+        ) : (
+          <span />
+        )}
         {STATUS_ACTIONS.map((action) => {
           const active = order.estado === action.estado;
           return (
