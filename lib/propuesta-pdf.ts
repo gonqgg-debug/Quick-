@@ -51,7 +51,7 @@ export async function downloadPropuestaPdf(): Promise<void> {
   chrome?.classList.add("is-hidden");
   document.title = PDF_TITLE;
 
-  const mapSlide = document.getElementById("slide-8");
+  const mapSlide = document.querySelector<HTMLElement>("[data-map]")?.closest<HTMLElement>(".propuesta-slide");
   mapSlide?.scrollIntoView({ behavior: "instant", block: "start" });
   window.dispatchEvent(new Event("propuesta:prepare-print"));
 

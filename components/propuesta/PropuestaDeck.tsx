@@ -8,62 +8,67 @@ import { EXPANSION_SITES } from "@/lib/expansion-sites";
 import { downloadPropuestaPdf } from "@/lib/propuesta-pdf";
 import { brand, whatsappHref } from "@/lib/theme";
 
-const SLIDE_COUNT = 12;
+const SLIDE_COUNT = 11;
 
 const PRODUCT_GROUPS = [
-  { title: "Frutas y vegetales", emoji: "🥬", text: "Lo fresco de la semana: fruta, ensalada y hierbas para el día a día." },
-  { title: "Desayuno", emoji: "🥣", text: "Café, leche, pan, cereal, avena y huevos de primera hora." },
-  { title: "Cocina y abarrotes", emoji: "🍝", text: "Aceites, arroz, pastas, enlatados y lo básico para armar la comida." },
-  { title: "Lácteos y huevos", emoji: "🥛", text: "Leche, yogurt, quesos y huevos que no pueden faltar en el apto." },
-  { title: "Snacks y antojos", emoji: "🍪", text: "Chips, galletas, dulces y lo que se pide en el residencial." },
-  { title: "Bebidas refrescantes", emoji: "🥤", text: "Aguas, jugos, refrescos y hielo para el clima de Bávaro." },
-  { title: "Caliente", emoji: "☕", text: "Café, té e infusiones listos para el desayuno o la oficina en casa." },
-  { title: "Alcohol frío", emoji: "🍺", text: "Cervezas y listo-para-tomar, siempre fríos en nevera." },
-  { title: "Cuidado personal", emoji: "🧴", text: "Higiene, dental, shampoo y lo esencial del baño." },
-  { title: "Hogar y limpieza", emoji: "🧹", text: "Papel, desechables, detergente y lo que termina el mismo día." },
-  { title: "Bebé y mascotas", emoji: "🍼", text: "Pañales, fórmula, snacks de mascota y lo urgente de la familia." },
-  { title: "Congelados", emoji: "🧊", text: "Helados, vegetales y comidas rápidas para la semana." },
+  { title: "Frutas y vegetales", emoji: "🥬", text: "Lo fresco de la semana: frutas, vegetales y hierbas para tu día a día." },
+  { title: "Desayuno", emoji: "🥣", text: "Café, leche, pan, cereales y huevos frescos desde primera hora." },
+  { title: "Cocina y abarrotes", emoji: "🍝", text: "Aceites, arroz, pastas, enlatados y los esenciales de tu despensa." },
+  { title: "Lácteos y refrigerados", emoji: "🥛", text: "Leche, yogurt, quesos variados y básicos del refrigerador." },
+  { title: "Snacks y antojos", emoji: "🍪", text: "Chips, galletas, chocolates y los favoritos de la comunidad." },
+  { title: "Bebidas refrescantes", emoji: "🥤", text: "Agua, jugos, refrescos y hielo listo para el clima de Bávaro." },
+  { title: "Bebidas calientes", emoji: "☕", text: "Café, té e infusiones para tu mañana o tus jornadas de home office." },
+  { title: "Bebidas frías con alcohol", emoji: "🍺", text: "Cervezas y cócteles listos para tomar, siempre a temperatura ideal." },
+  { title: "Cuidado personal", emoji: "🧴", text: "Higiene personal, salud dental, cuidado del cabello y básicos del baño." },
+  { title: "Hogar y limpieza", emoji: "🧹", text: "Detergentes, papel, desechables y los insumos que se agotan al instante." },
+  { title: "Bebés y mascotas", emoji: "🍼", text: "Pañales, fórmula, alimento para mascotas y las urgencias del hogar." },
+  { title: "Congelados", emoji: "🧊", text: "Helados, hielo, vegetales y comidas prácticas para resolver la semana." },
 ] as const;
 
 const SERVICE_VALUES = [
   {
-    title: "Cercanía",
-    text: "Abrimos donde vive la gente, no donde es más fácil para nosotros.",
+    title: "Servicio de excelencia",
+    text: "Optimizamos cada proceso día a día para brindarte una atención ágil, confiable y a la altura de tus necesidades.",
   },
   {
-    title: "Consistencia",
-    text: "Misma calidad, mismo horario y el mismo trato en cada sucursal.",
+    title: "Garantía de calidad",
+    text: "Mantenemos la misma excelencia en atención, higiene y cumplimiento en cada sucursal.",
   },
   {
-    title: "Simplicidad",
-    text: "Lo del día a día, sin complicaciones ni surtido que cambia cada semana.",
+    title: "Esenciales al día",
+    text: "Encuentras lo que buscas para tu rutina diaria de forma rápida y sin complicaciones.",
   },
   {
-    title: "Comunidad",
-    text: "Empleo local y un espacio que suma al residencial, no un colmado improvisado.",
+    title: "Impacto positivo",
+    text: "Un espacio estructurado que eleva la plusvalía del residencial y respalda al talento local.",
   },
 ] as const;
 
 const TECH_FEATURES = [
   {
     title: "Catálogo con fotos y precios",
-    text: "Busca por producto, marca o categoría. Ves lo mismo que en el pasillo, en tu celular.",
+    emoji: "📱",
+    text: "Explora por producto, marca o categoría. Tienes la misma variedad de nuestros pasillos, al alcance de tu mano.",
   },
   {
-    title: "Repite tu pedido al instante",
-    text: "Lo más pedido en el residencial, tus favoritos y tu última compra, listos para agregar.",
+    title: "Pedidos rápidos y favoritos",
+    emoji: "⚡",
+    text: "Guarda tu última compra o accede a los productos más solicitados de tu comunidad para pedir de nuevo en un par de clics.",
   },
   {
-    title: "Seguimiento y cambios",
-    text: "Consulta el estado, modifica o cancela desde WhatsApp mientras preparamos tu pedido.",
+    title: "Seguimiento y flexibilidad",
+    emoji: "🛵",
+    text: "Consulta el estado de tu pedido, realiza modificaciones o cancela directamente por WhatsApp mientras lo preparamos.",
   },
   {
-    title: "¿No lo encuentras?",
-    text: "Pide el producto aunque no esté en el catálogo. El equipo lo revisa y te confirma.",
+    title: "¿Buscas algo en específico?",
+    emoji: "🔎",
+    text: "Si no encuentras un artículo en el catálogo digital, indícanoslo por el chat; nuestro equipo verifica la disponibilidad al instante.",
   },
   {
     title: "QuickCoins",
-    text: "Puntos en cada compra, canjeables por descuento en el siguiente pedido.",
+    emoji: "🪙",
+    text: "Acumula puntos automáticos en cada compra y canjéalos por descuentos en tus próximos pedidos.",
   },
 ] as const;
 
@@ -213,6 +218,9 @@ export function PropuestaDeck() {
   const joinHref = `${whatsappHref()}?text=${encodeURIComponent(
     "Hola! Quiero proponer un espacio para Quick! Mini Market.",
   )}`;
+  const catalogHref = `${whatsappHref()}?text=${encodeURIComponent(
+    "Hola! Quiero ver el catálogo de Quick! Mini Market.",
+  )}`;
 
   return (
     <div className="propuesta-root">
@@ -243,75 +251,15 @@ export function PropuestaDeck() {
           </div>
         </SlideFrame>
 
-        <SlideFrame id="slide-1" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
-          <div className="propuesta-fill propuesta-problem">
-            <div className="flex min-h-0 flex-col justify-center px-10 py-10 md:px-14">
-              <Kicker>El problema</Kicker>
-              <h2 className="propuesta-title">
-                La conveniencia no debería estar
-                <br />a 20 minutos en carro.
-              </h2>
-              <p className="propuesta-lead">
-                Los residentes salen del complejo por lo de todos los días. Un local vacío o un
-                colmado informal no sube el valor del residencial: genera quejas, stock irregular y
-                poca confianza.
-              </p>
-              <ol className="mt-8 grid gap-4">
-                {[
-                  {
-                    title: "Lejos de casa",
-                    text: "El súper queda en la carretera. Bajar a comprar leche se vuelve un viaje.",
-                  },
-                  {
-                    title: "El local no suma",
-                    text: "Un espacio vacío o un negocio que cambia de dueño no se vende en el brochure.",
-                  },
-                  {
-                    title: "Sin estándar",
-                    text: "Horario irregular, surtido que falta y un trato que no se replica mañana.",
-                  },
-                ].map((item, index) => (
-                  <li key={item.title} className="grid grid-cols-[auto_minmax(0,1fr)] gap-4">
-                    <span className="propuesta-num" style={{ color: brand.orange }}>
-                      0{index + 1}
-                    </span>
-                    <div>
-                      <h3 className="font-display text-xl font-extrabold">{item.title}</h3>
-                      <p className="mt-1 text-sm leading-relaxed" style={{ color: brand.muted }}>
-                        {item.text}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
-            <div className="relative min-h-0 overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/nathalia-rosa-rWMIbqmOxrY-unsplash.jpg"
-                alt="Pasillo de supermercado lejos de casa"
-                className="h-full w-full object-cover object-center"
-              />
-              <div className="propuesta-stamp">
-                <span className="font-display text-4xl font-black leading-none" style={{ color: brand.orange }}>
-                  20
-                </span>
-                <span className="mt-1 text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: brand.ink }}>
-                  minutos
-                </span>
-              </div>
-            </div>
-          </div>
-        </SlideFrame>
-
-        <SlideFrame id="slide-2" style={{ backgroundColor: "#F1F7EA" }}>
+        <SlideFrame id="slide-1" style={{ backgroundColor: "#F1F7EA" }}>
           <div className="propuesta-fill propuesta-idea">
             <div className="flex min-h-0 flex-col justify-center pr-4">
               <Kicker color={brand.green}>La idea</Kicker>
               <h2 className="propuesta-title">Una cadena pensada para comunidades residenciales.</h2>
               <p className="propuesta-lead">
-                Quick! Mini Market no es un colmado de carretera. Abrimos dentro del residencial o en
-                la plaza que ya usa el vecino — calidad de cadena, trato de vecino.
+                Llevamos un mini market de primer nivel a la puerta de tu casa. Nos integramos a tu
+                residencial o plaza local para ofrecerte la calidad de una gran cadena con la calidez,
+                confianza y atención personalizada que te mereces.
               </p>
               <div className="propuesta-grid mt-6 md:grid-cols-2">
                 <article className="propuesta-card">
@@ -337,14 +285,15 @@ export function PropuestaDeck() {
           </div>
         </SlideFrame>
 
-        <SlideFrame id="slide-3" innerClassName="is-flush" style={{ backgroundColor: brand.green }}>
+        <SlideFrame id="slide-2" innerClassName="is-flush" style={{ backgroundColor: brand.green }}>
           <div className="propuesta-fill propuesta-split">
             <div className="flex min-h-0 flex-col justify-center px-10 py-10 md:px-14">
               <Kicker color="rgba(255,255,255,0.82)">La tienda</Kicker>
               <h2 className="propuesta-title text-white">Así opera Quick! en el residencial.</h2>
               <p className="propuesta-lead !text-white/90">
-                Una tienda con horario largo, surtido del día a día y entrega a la puerta. El vecino
-                baja o pide: mismo estándar.
+                Así funciona Quick! en tu comunidad: un mini market con horario extendido, los
+                productos que necesitas todos los días y entrega directo a tu puerta. Ya sea que nos
+                visites o pidas a domicilio, recibes siempre la misma calidad.
               </p>
               <div className="mt-7 grid grid-cols-2 gap-3">
                 {OPERATION_STATS.map((item) => (
@@ -366,17 +315,17 @@ export function PropuestaDeck() {
           </div>
         </SlideFrame>
 
-        <SlideFrame id="slide-4" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
+        <SlideFrame id="slide-3" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
           <div className="propuesta-fill propuesta-split">
             <div className="flex min-h-0 flex-col justify-center px-10 py-10 md:px-14">
               <Kicker>Estándar de servicio</Kicker>
               <h2 className="propuesta-title">
-                Calidad de cadena.
+                Servicio de primer nivel,
                 <br />
-                Trato de vecino.
+                atención cercana.
               </h2>
               <p className="propuesta-lead">
-                El vecino baja a una cadena; no a un negocio que cambia de dueño y de calidad.
+                Tu residencial merece una experiencia de compra estable, moderna y siempre disponible.
               </p>
               <div className="propuesta-service-grid mt-7">
                 {SERVICE_VALUES.map((item) => (
@@ -399,12 +348,12 @@ export function PropuestaDeck() {
           </div>
         </SlideFrame>
 
-        <SlideFrame id="slide-5" style={{ backgroundColor: "#F1F7EA" }}>
+        <SlideFrame id="slide-4" style={{ backgroundColor: "#F1F7EA" }}>
           <Kicker color={brand.green}>Surtido Quick!</Kicker>
-          <h2 className="propuesta-title">Mini market de vida diaria, no de fin de semana.</h2>
+          <h2 className="propuesta-title">Mini market para tu vida diaria, siempre a la mano.</h2>
           <p className="propuesta-lead">
-            El catálogo se arma con lo que el residencial pide. Si no está, el vecino lo solicita y
-            el equipo lo evalúa.
+            Diseñamos nuestro inventario pensando en la dinámica de cada residencial, adaptando el
+            surtido a las necesidades y al estilo de vida de tu comunidad.
           </p>
           <div className="propuesta-assortment-grid">
             {PRODUCT_GROUPS.map((item, index) => {
@@ -422,25 +371,24 @@ export function PropuestaDeck() {
           </div>
         </SlideFrame>
 
-        <SlideFrame id="slide-6" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
+        <SlideFrame id="slide-5" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
           <div className="propuesta-fill propuesta-tech">
             <div className="min-h-0">
               <Kicker>Tecnología</Kicker>
               <h2 className="propuesta-title" style={{ fontSize: "clamp(28px, 3.4vw, 44px)" }}>
-                Tu mini market, ahora en el celular.
+                Tu mini market, ahora en tu celular.
               </h2>
               <p className="propuesta-lead">
-                No es mandar una lista por chat. Es abrir el catálogo completo desde WhatsApp — con
-                fotos, precios y confirmación por el mismo chat.
+                Olvídate de mandar listas de compras por texto. Explora nuestro catálogo digital
+                directamente en WhatsApp: consulta fotos, confirma precios en tiempo real y gestiona
+                tu pedido por el mismo chat.
               </p>
               <ul className="propuesta-tech-features">
                 {TECH_FEATURES.map((feature) => (
                   <li key={feature.title} className="flex gap-3">
-                    <span
-                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: brand.green }}
-                      aria-hidden
-                    />
+                    <span className="text-base leading-none" aria-hidden>
+                      {feature.emoji}
+                    </span>
                     <div>
                       <h3 className="font-display text-base font-bold">{feature.title}</h3>
                       <p className="mt-0.5 text-sm leading-relaxed" style={{ color: brand.muted }}>
@@ -450,19 +398,42 @@ export function PropuestaDeck() {
                   </li>
                 ))}
               </ul>
+              <a
+                href={catalogHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-5 inline-flex min-h-11 items-center justify-center rounded-full px-6 text-sm font-bold text-white"
+                style={{ backgroundColor: brand.green }}
+              >
+                Prueba la experiencia Quick! por WhatsApp
+              </a>
             </div>
-            <PhoneFrame className="!mx-0 !w-[230px] shrink-0 md:!w-[250px]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/catalogo-screenshot.png"
-                alt="Catálogo Quick! en el celular"
-                className="absolute inset-0 h-full w-full object-cover object-top"
-              />
-            </PhoneFrame>
+            <a
+              href={catalogHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group shrink-0 no-underline"
+              aria-label="Abrir el catálogo Quick! por WhatsApp"
+            >
+              <PhoneFrame className="!mx-0 !w-[230px] md:!w-[250px]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/images/catalogo-screenshot.png"
+                  alt="Catálogo Quick! en el celular"
+                  className="absolute inset-0 h-full w-full object-cover object-top"
+                />
+              </PhoneFrame>
+              <p
+                className="mt-3 text-center text-xs font-bold uppercase tracking-[0.12em]"
+                style={{ color: brand.orange }}
+              >
+                Abrir catálogo
+              </p>
+            </a>
           </div>
         </SlideFrame>
 
-        <SlideFrame id="slide-7" innerClassName="is-flush" style={{ backgroundColor: "#EAF4FB" }}>
+        <SlideFrame id="slide-6" innerClassName="is-flush" style={{ backgroundColor: "#EAF4FB" }}>
           <div className="propuesta-fill propuesta-split">
             <div className="flex min-h-0 flex-col justify-center px-10 py-10 md:px-14">
               <div className="w-fit rounded-2xl bg-white px-4 py-3 shadow-[0_10px_24px_rgba(31,130,197,0.12)]">
@@ -511,7 +482,7 @@ export function PropuestaDeck() {
           </div>
         </SlideFrame>
 
-        <SlideFrame id="slide-8" innerClassName="is-tight" style={{ backgroundColor: brand.cream }}>
+        <SlideFrame id="slide-7" innerClassName="is-tight" style={{ backgroundColor: brand.cream }}>
           <Kicker>Panorama de crecimiento</Kicker>
           <h2 className="propuesta-title" style={{ fontSize: "clamp(28px, 3.2vw, 42px)" }}>
             Nuestra ruta de expansión
@@ -544,7 +515,7 @@ export function PropuestaDeck() {
           </div>
         </SlideFrame>
 
-        <SlideFrame id="slide-9" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
+        <SlideFrame id="slide-8" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
           <div className="propuesta-fill propuesta-seek">
             <div className="relative min-h-0 overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -594,7 +565,7 @@ export function PropuestaDeck() {
           </div>
         </SlideFrame>
 
-        <SlideFrame id="slide-10" innerClassName="is-flush" style={{ backgroundColor: "#F1F7EA" }}>
+        <SlideFrame id="slide-9" innerClassName="is-flush" style={{ backgroundColor: "#F1F7EA" }}>
           <div className="propuesta-fill propuesta-split">
             <div className="flex min-h-0 flex-col justify-center px-10 py-10 md:px-14">
               <Kicker color={brand.green}>Qué gana el residencial</Kicker>
@@ -620,7 +591,7 @@ export function PropuestaDeck() {
           </div>
         </SlideFrame>
 
-        <SlideFrame id="slide-11" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
+        <SlideFrame id="slide-10" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
           <div className="propuesta-fill propuesta-close">
             <div className="relative min-h-0 overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}

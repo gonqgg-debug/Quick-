@@ -256,8 +256,8 @@ html.propuesta-html body {
 
 .propuesta-tech-features {
   display: grid;
-  gap: 14px;
-  margin-top: 22px;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 .propuesta-chrome {
