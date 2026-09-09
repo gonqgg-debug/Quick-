@@ -193,6 +193,10 @@ export function StaffPanel() {
     await loadOrders();
   }, [loadOrders]);
 
+  const handleUnauthorized = useCallback(() => {
+    setAuthorized(false);
+  }, []);
+
   useEffect(() => {
     setSoundMuted(readStaffSoundMuted());
     const unlock = () => {
@@ -510,7 +514,7 @@ export function StaffPanel() {
             setOpenChatId(null);
             void refresh().catch(() => undefined);
           }}
-          onUnauthorized={() => setAuthorized(false)}
+          onUnauthorized={handleUnauthorized}
           onConcluded={() => {
             void refresh().catch(() => undefined);
           }}
@@ -527,7 +531,7 @@ export function StaffPanel() {
             setEditingOrderId(null);
             void refresh().catch(() => undefined);
           }}
-          onUnauthorized={() => setAuthorized(false)}
+          onUnauthorized={handleUnauthorized}
         />
       ) : null}
     </StaffChrome>
