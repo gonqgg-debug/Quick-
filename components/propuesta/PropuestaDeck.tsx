@@ -421,7 +421,7 @@ export function PropuestaDeck() {
         <SlideFrame id="slide-8" innerClassName="is-tight" style={{ backgroundColor: brand.cream }}>
           <Kicker>Panorama de crecimiento</Kicker>
           <h2 className="propuesta-title" style={{ fontSize: "clamp(28px, 3.2vw, 42px)" }}>
-            Cada tienda, un punto. Cada marca, su logo.
+            Nuestra ruta de expansión
           </h2>
           <div className="propuesta-map-wrap">
             <ExpansionMap />
