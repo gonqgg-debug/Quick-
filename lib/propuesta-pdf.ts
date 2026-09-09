@@ -6,6 +6,23 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function waitForImages(slide: HTMLElement): Promise<void> {
+  const images = Array.from(slide.querySelectorAll("img"));
+  return Promise.all(
+    images.map(
+      (image) =>
+        new Promise<void>((resolve) => {
+          if (image.complete) {
+            resolve();
+            return;
+          }
+          image.addEventListener("load", () => resolve(), { once: true });
+          image.addEventListener("error", () => resolve(), { once: true });
+        }),
+    ),
+  ).then(() => undefined);
+}
+
 function backgroundOf(slide: HTMLElement): string {
   const color = window.getComputedStyle(slide).backgroundColor;
   return color && color !== "rgba(0, 0, 0, 0)" ? color : "#ffffff";
@@ -36,7 +53,8 @@ export async function downloadPropuestaPdf(): Promise<void> {
     for (let index = 0; index < slides.length; index += 1) {
       const slide = slides[index];
       slide.scrollIntoView({ behavior: "instant", block: "start" });
-      await delay(slide.querySelector("[data-map]") ? 700 : 180);
+      await waitForImages(slide);
+      await delay(slide.querySelector("[data-map]") ? 700 : 220);
 
       const canvas = await html2canvas(slide, {
         scale: 2,
