@@ -4,33 +4,48 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-function waitForImages(root: ParentNode = document): Promise<void> {
-  const images = Array.from(root.querySelectorAll("img"));
-  return Promise.all(
-    images.map(
-      (image) =>
-        new Promise<void>((resolve) => {
-          if (image.complete) {
-            resolve();
-            return;
-          }
-          image.addEventListener("load", () => resolve(), { once: true });
-          image.addEventListener("error", () => resolve(), { once: true });
-        }),
-    ),
-  ).then(() => undefined);
-}
-
 function nextPaint(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   });
 }
 
+async function decodeImages(root: ParentNode = document): Promise<void> {
+  const images = Array.from(root.querySelectorAll("img"));
+  await Promise.all(
+    images.map(async (image) => {
+      if (typeof image.decode === "function") {
+        try {
+          await image.decode();
+          return;
+        } catch {
+          // Fall through to load listeners.
+        }
+      }
+      if (image.complete) {
+        return;
+      }
+      await new Promise<void>((resolve) => {
+        image.addEventListener("load", () => resolve(), { once: true });
+        image.addEventListener("error", () => resolve(), { once: true });
+      });
+    }),
+  );
+}
+
+async function prepareSlidesForPrint(): Promise<void> {
+  const slides = Array.from(document.querySelectorAll<HTMLElement>(".propuesta-slide"));
+  for (const slide of slides) {
+    slide.scrollIntoView({ behavior: "instant", block: "start" });
+    await nextPaint();
+    await decodeImages(slide);
+  }
+}
+
 /**
  * Native print-to-PDF. Chrome/Safari/Edge render the slides with the same
- * engine as the screen (photos, CSS, Leaflet). html2canvas re-paints the DOM
- * in JS and drops object-fit, gradients, map pins and web fonts.
+ * engine as the screen (photos as CSS backgrounds, map tiles, web fonts).
+ * html2canvas re-paints the DOM in JS and drops object-fit, gradients and pins.
  */
 export async function downloadPropuestaPdf(): Promise<void> {
   const chrome = document.querySelector<HTMLElement>(".propuesta-chrome");
@@ -51,19 +66,21 @@ export async function downloadPropuestaPdf(): Promise<void> {
   chrome?.classList.add("is-hidden");
   document.title = PDF_TITLE;
 
+  await document.fonts.ready;
+  await prepareSlidesForPrint();
+
   const mapSlide = document.querySelector<HTMLElement>("[data-map]")?.closest<HTMLElement>(".propuesta-slide");
   mapSlide?.scrollIntoView({ behavior: "instant", block: "start" });
   window.dispatchEvent(new Event("propuesta:prepare-print"));
-
-  await document.fonts.ready;
-  await waitForImages();
   await nextPaint();
   await delay(mapSlide ? 700 : 150);
 
   await new Promise<void>((resolve) => {
     const finish = () => {
-      cleanup();
-      resolve();
+      window.setTimeout(() => {
+        cleanup();
+        resolve();
+      }, 800);
     };
     window.addEventListener("afterprint", finish, { once: true });
     window.print();

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } 
 import { Logo } from "@/components/brand/Logo";
 import { PhoneFrame } from "@/components/PhoneFrame";
 import { ExpansionMap } from "@/components/propuesta/ExpansionMap";
+import { SlidePhoto } from "@/components/propuesta/SlidePhoto";
 import { EXPANSION_SITES } from "@/lib/expansion-sites";
 import { downloadPropuestaPdf } from "@/lib/propuesta-pdf";
 import { brand, whatsappHref } from "@/lib/theme";
@@ -255,14 +256,11 @@ export function PropuestaDeck() {
                 </article>
               </div>
             </div>
-            <div className="relative min-h-0">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/tienda-isometrica.png"
-                alt="Ilustración isométrica del formato Quick! Mini Market"
-                className="absolute inset-0 h-full w-full object-contain object-center"
-              />
-            </div>
+            <SlidePhoto
+              src="/images/tienda-isometrica.png"
+              alt="Ilustración isométrica del formato Quick! Mini Market"
+              fit="contain"
+            />
           </div>
         </SlideFrame>
 
@@ -285,14 +283,12 @@ export function PropuestaDeck() {
                 ))}
               </div>
             </div>
-            <div className="propuesta-split-photo">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/quienes-somos-tienda.jpg"
-                alt="Interior de Quick! Mini Market con personal en caja"
-                style={{ objectPosition: "center 20%" }}
-              />
-            </div>
+            <SlidePhoto
+              className="propuesta-split-photo"
+              src="/images/quienes-somos-tienda.jpg"
+              alt="Interior de Quick! Mini Market con personal en caja"
+              objectPosition="center 20%"
+            />
           </div>
         </SlideFrame>
 
@@ -318,14 +314,12 @@ export function PropuestaDeck() {
                 ))}
               </div>
             </div>
-            <div className="propuesta-split-photo">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/quienes-somos-equipo.jpg"
-                alt="Equipo de Quick! Mini Market frente a la tienda"
-                style={{ objectPosition: "center 30%" }}
-              />
-            </div>
+            <SlidePhoto
+              className="propuesta-split-photo"
+              src="/images/quienes-somos-equipo.jpg"
+              alt="Equipo de Quick! Mini Market frente a la tienda"
+              objectPosition="center 30%"
+            />
           </div>
         </SlideFrame>
 
@@ -397,11 +391,11 @@ export function PropuestaDeck() {
               aria-label="Abrir el catálogo Quick! por WhatsApp"
             >
               <PhoneFrame className="!mx-0 !w-[230px] md:!w-[250px]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <SlidePhoto
                   src="/images/catalogo-screenshot.png"
                   alt="Catálogo Quick! en el celular"
-                  className="absolute inset-0 h-full w-full object-cover object-top"
+                  objectPosition="center top"
+                  className="absolute inset-0"
                 />
               </PhoneFrame>
               <p
@@ -456,13 +450,11 @@ export function PropuestaDeck() {
                 ))}
               </ul>
             </div>
-            <div className="propuesta-split-photo">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/pharmaquick-storefront.jpeg"
-                alt="Fachada de PharmaQuick! en Plaza Crisfer"
-              />
-            </div>
+            <SlidePhoto
+              className="propuesta-split-photo"
+              src="/images/pharmaquick-storefront.jpeg"
+              alt="Fachada de PharmaQuick! en Plaza Crisfer"
+            />
           </div>
         </SlideFrame>
 
@@ -502,12 +494,11 @@ export function PropuestaDeck() {
         <SlideFrame id="slide-8" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
           <div className="propuesta-fill propuesta-seek">
             <div className="relative min-h-0 overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <SlidePhoto
                 src="/images/tienda-fachada.jpeg"
                 alt="Pasillo residencial junto a un local para Quick!"
-                className="h-full w-full object-cover"
-                style={{ objectPosition: "32% center" }}
+                objectPosition="32% center"
+                className="h-full"
               />
               <div
                 className="absolute inset-0"
@@ -548,15 +539,11 @@ export function PropuestaDeck() {
 
         <SlideFrame id="slide-9" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
           <div className="propuesta-fill propuesta-close">
-            <div className="relative min-h-0 overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/hero.jpeg"
-                alt="Delivery Quick! entregando un pedido en el residencial"
-                className="h-full w-full object-cover"
-                style={{ objectPosition: "center 20%" }}
-              />
-            </div>
+            <SlidePhoto
+              src="/images/hero.jpeg"
+              alt="Delivery Quick! entregando un pedido en el residencial"
+              objectPosition="center 20%"
+            />
             <div className="flex min-h-0 flex-col items-center justify-center px-10 py-12 text-center md:px-16">
               <Logo className="h-14 max-w-[220px]" />
               <h2 className="propuesta-title mt-6" style={{ color: brand.orange }}>
