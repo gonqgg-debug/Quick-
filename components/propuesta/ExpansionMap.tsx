@@ -31,6 +31,7 @@ function pinHtml(site: ExpansionSite): string {
 
 export function ExpansionMap() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<import("leaflet").Map | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -39,7 +40,10 @@ export function ExpansionMap() {
     }
 
     let cancelled = false;
-    let map: import("leaflet").Map | null = null;
+
+    function refreshMap() {
+      mapRef.current?.invalidateSize();
+    }
 
     async function setup() {
       const leaflet = await import("leaflet");
@@ -48,11 +52,12 @@ export function ExpansionMap() {
         return;
       }
 
-      map = L.map(el, {
+      const map = L.map(el, {
         scrollWheelZoom: false,
         zoomControl: true,
         attributionControl: true,
       });
+      mapRef.current = map;
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OpenStreetMap",
@@ -82,17 +87,20 @@ export function ExpansionMap() {
       }
 
       map.fitBounds(bounds, { padding: [56, 56], maxZoom: 12 });
-      requestAnimationFrame(() => {
-        map?.invalidateSize();
-      });
-      window.setTimeout(() => map?.invalidateSize(), 250);
+      requestAnimationFrame(refreshMap);
+      window.setTimeout(refreshMap, 250);
     }
 
     void setup();
+    window.addEventListener("beforeprint", refreshMap);
+    window.addEventListener("propuesta:prepare-print", refreshMap);
 
     return () => {
       cancelled = true;
-      map?.remove();
+      window.removeEventListener("beforeprint", refreshMap);
+      window.removeEventListener("propuesta:prepare-print", refreshMap);
+      mapRef.current?.remove();
+      mapRef.current = null;
     };
   }, []);
 

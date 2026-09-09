@@ -1,64 +1,72 @@
-const PDF_NAME = "Quick-Mini-Market-Propuesta-Comercial.pdf";
-const PAGE_WIDTH = 1920;
-const PAGE_HEIGHT = 1080;
+const PDF_TITLE = "Quick-Mini-Market-Propuesta-Comercial";
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-function backgroundOf(slide: HTMLElement): string {
-  const color = window.getComputedStyle(slide).backgroundColor;
-  return color && color !== "rgba(0, 0, 0, 0)" ? color : "#ffffff";
+function waitForImages(root: ParentNode = document): Promise<void> {
+  const images = Array.from(root.querySelectorAll("img"));
+  return Promise.all(
+    images.map(
+      (image) =>
+        new Promise<void>((resolve) => {
+          if (image.complete) {
+            resolve();
+            return;
+          }
+          image.addEventListener("load", () => resolve(), { once: true });
+          image.addEventListener("error", () => resolve(), { once: true });
+        }),
+    ),
+  ).then(() => undefined);
 }
 
-export async function downloadPropuestaPdf(): Promise<void> {
-  const html2canvas = (await import("html2canvas")).default;
-  const { jsPDF } = await import("jspdf");
+function nextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
 
+/**
+ * Native print-to-PDF. Chrome/Safari/Edge render the slides with the same
+ * engine as the screen (photos, CSS, Leaflet). html2canvas re-paints the DOM
+ * in JS and drops object-fit, gradients, map pins and web fonts.
+ */
+export async function downloadPropuestaPdf(): Promise<void> {
   const chrome = document.querySelector<HTMLElement>(".propuesta-chrome");
-  const slides = Array.from(document.querySelectorAll<HTMLElement>(".propuesta-slide"));
-  if (slides.length === 0) {
-    throw new Error("No se encontraron las diapositivas.");
-  }
+  const previousTitle = document.title;
+  let cleaned = false;
+
+  const cleanup = () => {
+    if (cleaned) {
+      return;
+    }
+    cleaned = true;
+    document.title = previousTitle;
+    document.documentElement.classList.remove("is-exporting");
+    chrome?.classList.remove("is-hidden");
+  };
 
   document.documentElement.classList.add("is-exporting");
   chrome?.classList.add("is-hidden");
+  document.title = PDF_TITLE;
 
-  const pdf = new jsPDF({
-    orientation: "landscape",
-    unit: "px",
-    format: [PAGE_WIDTH, PAGE_HEIGHT],
-    hotfixes: ["px_scaling"],
-    compress: true,
+  const mapSlide = document.getElementById("slide-8");
+  mapSlide?.scrollIntoView({ behavior: "instant", block: "start" });
+  window.dispatchEvent(new Event("propuesta:prepare-print"));
+
+  await document.fonts.ready;
+  await waitForImages();
+  await nextPaint();
+  await delay(mapSlide ? 700 : 150);
+
+  await new Promise<void>((resolve) => {
+    const finish = () => {
+      cleanup();
+      resolve();
+    };
+    window.addEventListener("afterprint", finish, { once: true });
+    window.print();
+    window.setTimeout(finish, 180_000);
   });
-
-  try {
-    for (let index = 0; index < slides.length; index += 1) {
-      const slide = slides[index];
-      slide.scrollIntoView({ behavior: "instant", block: "start" });
-      await delay(slide.querySelector("[data-map]") ? 700 : 180);
-
-      const canvas = await html2canvas(slide, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: backgroundOf(slide),
-        width: slide.offsetWidth,
-        height: slide.offsetHeight,
-        windowWidth: slide.offsetWidth,
-        windowHeight: slide.offsetHeight,
-        logging: false,
-      });
-
-      const image = canvas.toDataURL("image/jpeg", 0.92);
-      if (index > 0) {
-        pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT], "landscape");
-      }
-      pdf.addImage(image, "JPEG", 0, 0, PAGE_WIDTH, PAGE_HEIGHT, undefined, "FAST");
-    }
-
-    pdf.save(PDF_NAME);
-  } finally {
-    document.documentElement.classList.remove("is-exporting");
-    chrome?.classList.remove("is-hidden");
-  }
 }
