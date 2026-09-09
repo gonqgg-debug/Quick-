@@ -787,9 +787,57 @@ html.propuesta-html.is-exporting .leaflet-control-attribution {
     break-inside: avoid;
   }
 
-  * {
+  /* Chrome turns rgba box-shadows and print-color-adjust on * into solid black blobs. */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
+  }
+
+  html.propuesta-html,
+  html.propuesta-html body,
+  .propuesta-slide,
+  .propuesta-slide-inner,
+  .propuesta-scallop,
+  .propuesta-scallop::before,
+  .propuesta-tile,
+  .propuesta-stat,
+  .propuesta-card,
+  .propuesta-fill,
+  .propuesta-slide-photo,
+  .propuesta-split-photo,
+  .propuesta-pin-point,
+  .propuesta-pin-name,
+  .propuesta-pin-logo,
+  .propuesta-landmark,
+  .propuesta-legend,
+  .propuesta-legend-swatch,
+  .propuesta-slide a,
+  .propuesta-slide button {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  .propuesta-legend-swatch {
+    outline: 2px solid #7eb341;
+    outline-offset: 2px;
+  }
+
+  .propuesta-legend-swatch.is-projected {
+    outline: 2px solid #7eb341;
+    outline-offset: 0;
+  }
+
+  .propuesta-legend-swatch.is-pharma {
+    outline-color: #1f82c5;
+  }
+
+  .propuesta-map,
+  .propuesta-legend,
+  .propuesta-card {
+    border: 1px solid rgba(26, 26, 26, 0.08);
   }
 }
 
