@@ -101,8 +101,8 @@ export function CatalogSearch({
           aria-controls={listboxId}
           aria-autocomplete="list"
           autoComplete="off"
-          className="w-full rounded-full border bg-white py-2.5 pl-11 pr-4 text-sm text-brand-ink outline-none placeholder:text-brand-muted"
-          style={{ borderColor: query ? brand.green : `${brand.muted}40` }}
+          className="w-full rounded-full border bg-white py-2.5 pl-11 pr-4 text-brand-ink outline-none placeholder:text-brand-muted"
+          style={{ borderColor: query ? brand.green : `${brand.muted}40`, fontSize: 16 }}
         />
       </label>
 

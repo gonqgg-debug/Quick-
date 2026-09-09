@@ -17,6 +17,17 @@
 html {
   color-scheme: light;
   scroll-behavior: smooth;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* iOS Safari zooms focused fields under 16px. Keep controls at 16px so focus
+   never changes the page scale, even if a viewport meta is ignored. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]),
+select,
+textarea {
+  font-size: 16px;
 }
 
 body {

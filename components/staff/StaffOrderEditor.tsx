@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CatalogProductPhoto } from "@/components/catalog/CatalogProductPhoto";
 import { formatPrice } from "@/lib/money";
-import { SEARCH_DEBOUNCE_MS } from "@/lib/catalog-search";
+import { SEARCH_DEBOUNCE_MS, SEARCH_SUGGESTION_MIN_CHARS } from "@/lib/catalog-search";
 import { brand } from "@/lib/theme";
 import type { Product } from "@/lib/types";
 
@@ -34,6 +34,8 @@ export function StaffOrderEditor({
   onUnauthorized,
 }: StaffOrderEditorProps) {
   const [draft, setDraft] = useState<Record<string, EditorItem>>(() => itemsFromOrder(items));
+  const unauthorizedRef = useRef(onUnauthorized);
+  unauthorizedRef.current = onUnauthorized;
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [results, setResults] = useState<Product[]>([]);
@@ -47,16 +49,23 @@ export function StaffOrderEditor({
   }, [query]);
 
   useEffect(() => {
+    if (debounced.length < SEARCH_SUGGESTION_MIN_CHARS) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+
+    const controller = new AbortController();
     let cancelled = false;
     (async () => {
       setSearching(true);
       try {
         const response = await fetch(
           `/api/staff/products?q=${encodeURIComponent(debounced)}`,
-          { credentials: "include" }
+          { credentials: "include", signal: controller.signal }
         );
         if (response.status === 401) {
-          onUnauthorized?.();
+          unauthorizedRef.current?.();
           return;
         }
         const body = (await response.json()) as { products?: Product[]; error?: string };
@@ -68,9 +77,10 @@ export function StaffOrderEditor({
           setError(null);
         }
       } catch (loadError) {
-        if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : "Error al buscar");
+        if (cancelled || controller.signal.aborted) {
+          return;
         }
+        setError(loadError instanceof Error ? loadError.message : "Error al buscar");
       } finally {
         if (!cancelled) {
           setSearching(false);
@@ -79,8 +89,9 @@ export function StaffOrderEditor({
     })();
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [debounced, onUnauthorized]);
+  }, [debounced]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -255,11 +266,19 @@ export function StaffOrderEditor({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Buscar en el catálogo"
-              className="mt-2 w-full rounded-full border px-4 py-3 text-sm outline-none"
+              autoComplete="off"
+              enterKeyHint="search"
+              className="mt-2 w-full rounded-full border px-4 py-3 outline-none"
               style={{ borderColor: "#E5E7EB", fontSize: 16, minHeight: 48 }}
             />
           </label>
+          {query.trim().length > 0 && query.trim().length < SEARCH_SUGGESTION_MIN_CHARS ? (
+            <p className="mt-2 text-xs text-brand-muted">Escribe al menos 2 letras para buscar.</p>
+          ) : null}
           {searching ? <p className="mt-2 text-xs text-brand-muted">Buscando...</p> : null}
+          {!searching && debounced.length >= SEARCH_SUGGESTION_MIN_CHARS && results.length === 0 ? (
+            <p className="mt-2 text-xs text-brand-muted">Sin resultados.</p>
+          ) : null}
           <ul className="mt-2 space-y-1">
             {results.map((product) => (
               <li key={product.id}>
