@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Logo } from "@/components/brand/Logo";
 import { ExpansionMap } from "@/components/propuesta/ExpansionMap";
 import { EXPANSION_SITES } from "@/lib/expansion-sites";
+import { downloadPropuestaPdf } from "@/lib/propuesta-pdf";
 import { brand, whatsappHref } from "@/lib/theme";
 
 const SLIDE_COUNT = 12;
@@ -95,8 +96,18 @@ function SlideFrame({
 }
 
 export function PropuestaDeck() {
-  const deckRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
+  const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.classList.add("propuesta-html");
+    const params = new URLSearchParams(window.location.search);
+    const slide = Number(params.get("slide"));
+    if (!Number.isNaN(slide) && slide >= 0) {
+      document.getElementById(`slide-${slide}`)?.scrollIntoView({ behavior: "instant" as ScrollBehavior });
+    }
+    return () => document.documentElement.classList.remove("propuesta-html");
+  }, []);
 
   const goTo = useCallback((index: number) => {
     const next = Math.max(0, Math.min(SLIDE_COUNT - 1, index));
@@ -104,12 +115,23 @@ export function PropuestaDeck() {
     setActive(next);
   }, []);
 
-  useEffect(() => {
-    const root = deckRef.current;
-    if (!root) {
+  const onDownloadPdf = useCallback(async () => {
+    if (exporting) {
       return;
     }
-    const slides = Array.from(root.querySelectorAll<HTMLElement>(".propuesta-slide"));
+    setExporting(true);
+    try {
+      await downloadPropuestaPdf();
+    } catch (error) {
+      console.error(error);
+      window.alert("No se pudo generar el PDF. Recarga e inténtalo de nuevo.");
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting]);
+
+  useEffect(() => {
+    const slides = Array.from(document.querySelectorAll<HTMLElement>(".propuesta-slide"));
     const observer = new IntersectionObserver(
       (entries) => {
         const visible = entries
@@ -123,7 +145,7 @@ export function PropuestaDeck() {
           setActive(index);
         }
       },
-      { root, threshold: 0.55 },
+      { threshold: 0.55 },
     );
     slides.forEach((slide) => observer.observe(slide));
     return () => observer.disconnect();
@@ -150,7 +172,7 @@ export function PropuestaDeck() {
 
   return (
     <div className="propuesta-root">
-      <div ref={deckRef} className="propuesta-deck">
+      <div className="propuesta-deck">
         <SlideFrame id="slide-0" className="propuesta-scallop">
           <div className="relative z-10 mx-auto flex h-full max-w-5xl flex-col items-center justify-center text-center">
             <div className="w-full rounded-[40px] bg-[#FFF6E8] px-10 py-12 shadow-[0_24px_50px_rgba(26,26,26,0.18)] md:px-16 md:py-14">
@@ -536,13 +558,9 @@ export function PropuestaDeck() {
             />
           ))}
         </div>
-        <a
-          className="propuesta-print-btn"
-          href="/propuesta.pdf"
-          download="Quick-Mini-Market-Propuesta-Comercial.pdf"
-        >
-          Descargar PDF
-        </a>
+        <button type="button" className="propuesta-print-btn" disabled={exporting} onClick={() => void onDownloadPdf()}>
+          {exporting ? "Generando PDF…" : "Descargar PDF"}
+        </button>
       </div>
     </div>
   );

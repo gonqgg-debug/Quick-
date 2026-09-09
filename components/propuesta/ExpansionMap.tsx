@@ -75,8 +75,8 @@ export function ExpansionMap() {
         const icon = L.divIcon({
           className: "propuesta-pin",
           html: pinHtml(site),
-          iconSize: [148, 78],
-          iconAnchor: [74, 78],
+          iconSize: site.brand === "pharmaquick" ? [96, 64] : [120, 70],
+          iconAnchor: site.brand === "pharmaquick" ? [48, 64] : [60, 70],
         });
         L.marker([site.lat, site.lng], { icon, zIndexOffset: site.status === "open" ? 200 : 0 }).addTo(map);
       }

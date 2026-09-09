@@ -7,11 +7,17 @@
   background: #1a1a1a;
 }
 
-.propuesta-deck {
-  height: 100dvh;
+html.propuesta-html,
+html.propuesta-html body {
+  height: auto;
+  overflow-x: hidden;
   overflow-y: auto;
   scroll-snap-type: y mandatory;
   scroll-behavior: smooth;
+  background: #1a1a1a;
+}
+
+.propuesta-deck {
   background: #1a1a1a;
 }
 
@@ -72,6 +78,24 @@
   color: #fff6e8;
   background: #f79521;
   box-shadow: 0 8px 20px rgba(247, 149, 33, 0.35);
+}
+
+.propuesta-print-btn:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.propuesta-chrome.is-hidden {
+  display: none !important;
+}
+
+html.propuesta-html.is-exporting {
+  scroll-snap-type: none;
+}
+
+html.propuesta-html.is-exporting .leaflet-control-zoom,
+html.propuesta-html.is-exporting .leaflet-control-attribution {
+  display: none !important;
 }
 
 .propuesta-dots {
@@ -215,7 +239,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 148px;
+  width: 120px;
 }
 
 .propuesta-pin-stack.is-left {
@@ -228,26 +252,39 @@
 
 .propuesta-pin-logo {
   display: flex;
-  max-width: 148px;
+  max-width: 92px;
   align-items: center;
   justify-content: center;
-  padding: 6px 8px;
+  overflow: hidden;
+  padding: 4px 6px;
   border: 2px solid #7eb341;
-  border-radius: 14px;
+  border-radius: 10px;
   background: #ffffff;
   box-shadow: 0 10px 22px rgba(26, 26, 26, 0.2);
 }
 
 .propuesta-pin-logo.is-pharma {
+  max-width: 72px;
+  padding: 3px 5px;
   border-color: #1f82c5;
 }
 
-.propuesta-pin-logo img {
+.propuesta-pin-logo img,
+.leaflet-container .propuesta-pin-logo img {
   display: block;
-  width: auto;
-  height: 22px;
-  max-width: 128px;
-  object-fit: contain;
+  width: 78px !important;
+  height: 18px !important;
+  max-width: 78px !important;
+  max-height: 18px !important;
+  object-fit: contain !important;
+}
+
+.propuesta-pin-logo.is-pharma img,
+.leaflet-container .propuesta-pin-logo.is-pharma img {
+  width: 64px !important;
+  height: 12px !important;
+  max-width: 64px !important;
+  max-height: 12px !important;
 }
 
 .propuesta-pin-name {
@@ -356,13 +393,14 @@
     margin: 0;
   }
 
-  html,
-  body,
+  html.propuesta-html,
+  html.propuesta-html body,
   .propuesta-root,
   .propuesta-deck {
     height: auto !important;
     overflow: visible !important;
     background: #ffffff !important;
+    scroll-snap-type: none !important;
   }
 
   .propuesta-chrome {
@@ -375,6 +413,10 @@
     min-height: 7.5in;
     max-height: 7.5in;
     overflow: hidden;
+    page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
 
   .propuesta-slide-inner {
