@@ -8,7 +8,7 @@ import { EXPANSION_SITES } from "@/lib/expansion-sites";
 import { downloadPropuestaPdf } from "@/lib/propuesta-pdf";
 import { brand, whatsappHref } from "@/lib/theme";
 
-const SLIDE_COUNT = 11;
+const SLIDE_COUNT = 10;
 
 const PRODUCT_GROUPS = [
   { title: "Frutas y vegetales", emoji: "🥬", text: "Lo fresco de la semana: frutas, vegetales y hierbas para tu día a día." },
@@ -85,25 +85,6 @@ const SEEK_OPTIONS = [
   { num: "01", title: "Alquiler", text: "Local en residencial, plaza comercial o local independiente." },
   { num: "02", title: "Compra", text: "Adquirir el espacio cuando el proyecto y la ubicación lo justifiquen." },
   { num: "03", title: "Alianza", text: "Acuerdo con la administración o el desarrollador del residencial." },
-] as const;
-
-const GAIN_ITEMS = [
-  {
-    title: "Necesidades siempre cubiertas",
-    text: "El residente resuelve lo de todos los días sin salir del complejo: leche, cena, un antojo o lo que se acabó.",
-  },
-  {
-    title: "Valor del inmueble",
-    text: "Una amenidad de cadena a pasos suma a la percepción del residencial y a la valuación de los apartamentos.",
-  },
-  {
-    title: "Comunidad",
-    text: "Un punto cotidiano de encuentro, empleo local y un vecino que opera con el mismo estándar todos los días.",
-  },
-  {
-    title: "Servicio profesional hasta la puerta",
-    text: "Pedido por WhatsApp, seguimiento del chat y entrega al apartamento — no un recadero improvisado.",
-  },
 ] as const;
 
 const TILE_STYLES = [
@@ -439,34 +420,37 @@ export function PropuestaDeck() {
               <div className="w-fit rounded-2xl bg-white px-4 py-3 shadow-[0_10px_24px_rgba(31,130,197,0.12)]">
                 <Logo variant="pharma" className="h-10 max-w-[240px]" />
               </div>
-              <Kicker color={brand.blue}>PharmaQuick!</Kicker>
+              <Kicker color={brand.blue}>Próximamente en Noviembre 2026</Kicker>
               <h2 className="propuesta-title" style={{ color: brand.blue }}>
-                Muy pronto. Noviembre 2026.
+                PharmaQuick!
               </h2>
               <p className="propuesta-lead">
-                La misma conveniencia. Un propósito distinto: tu salud. Un residencial o plaza puede
-                encajar Quick!, PharmaQuick!, o ambos.
-              </p>
-              <p className="font-display mt-4 text-5xl font-black uppercase leading-none" style={{ color: brand.blue }}>
-                Nov 2026
+                La misma conveniencia que ya conoces, ahora con un propósito dedicado a tu bienestar.
+                Una propuesta diseñada para cuidar de ti y de tu familia con acceso fácil, seguridad y
+                total tranquilidad.
               </p>
               <ul className="mt-5 grid gap-3">
                 {[
                   {
-                    title: "Medicamentos y cuidado personal",
-                    text: "Lo esencial para la salud del día a día, sin salir del entorno de la comunidad.",
+                    emoji: "💊",
+                    title: "Medicamentos y salud integral",
+                    text: "Todo lo esencial para el cuidado diario, medicamentos con receta, artículos de primeros auxilios y productos de bienestar, sin salir de tu comunidad.",
                   },
                   {
-                    title: "La misma cercanía de Quick!",
-                    text: "Calidad de cadena, trato de vecino. Si ya conoces Quick!, vas a reconocer PharmaQuick!.",
+                    emoji: "🛡️",
+                    title: "El estándar que te da tranquilidad",
+                    text: "Mantenemos la misma garantía de servicio, organización y atención personalizada que caracteriza a nuestra marca.",
                   },
                   {
-                    title: "Plaza Crisfer, Local 11",
-                    text: "Pueblo Bávaro. Un espacio de confianza, fácil de llegar.",
+                    emoji: "📲",
+                    title: "Todo en una sola plataforma",
+                    text: "Si tu zona cuenta con Quick! y PharmaQuick!, puedes hacer un solo pedido combinando productos de ambas tiendas desde WhatsApp y recibirlo todo en una sola entrega.",
                   },
                 ].map((item) => (
                   <li key={item.title} className="propuesta-card">
-                    <h3>{item.title}</h3>
+                    <h3>
+                      <span aria-hidden>{item.emoji}</span> {item.title}
+                    </h3>
                     <p>{item.text}</p>
                   </li>
                 ))}
@@ -523,7 +507,7 @@ export function PropuestaDeck() {
                 src="/images/tienda-fachada.jpeg"
                 alt="Pasillo residencial junto a un local para Quick!"
                 className="h-full w-full object-cover"
-                style={{ objectPosition: "88% center" }}
+                style={{ objectPosition: "32% center" }}
               />
               <div
                 className="absolute inset-0"
@@ -558,40 +542,11 @@ export function PropuestaDeck() {
                   </article>
                 ))}
               </div>
-              <p className="mt-6 text-sm font-semibold" style={{ color: brand.ink }}>
-                Para evaluar: tamaño, visibilidad, parqueo, restricciones y el nombre del residencial.
-              </p>
             </div>
           </div>
         </SlideFrame>
 
-        <SlideFrame id="slide-9" innerClassName="is-flush" style={{ backgroundColor: "#F1F7EA" }}>
-          <div className="propuesta-fill propuesta-split">
-            <div className="flex min-h-0 flex-col justify-center px-10 py-10 md:px-14">
-              <Kicker color={brand.green}>Qué gana el residencial</Kicker>
-              <h2 className="propuesta-title">Una amenidad que se vende. Un inquilino que opera.</h2>
-              <div className="propuesta-gains-grid mt-7">
-                {GAIN_ITEMS.map((item) => (
-                  <article key={item.title} className="propuesta-card">
-                    <span className="propuesta-dot-mark" style={{ backgroundColor: brand.green }} />
-                    <h3>{item.title}</h3>
-                    <p>{item.text}</p>
-                  </article>
-                ))}
-              </div>
-            </div>
-            <div className="propuesta-split-photo">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/Banner1.jpeg"
-                alt="Entrega Quick! en la puerta del apartamento"
-                style={{ objectPosition: "center 40%" }}
-              />
-            </div>
-          </div>
-        </SlideFrame>
-
-        <SlideFrame id="slide-10" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
+        <SlideFrame id="slide-9" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
           <div className="propuesta-fill propuesta-close">
             <div className="relative min-h-0 overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -629,7 +584,9 @@ export function PropuestaDeck() {
                 </a>
               </div>
               <p className="mt-6 text-sm font-semibold" style={{ color: brand.ink }}>
-                WhatsApp 809 226 4986 · Pueblo Bávaro, La Altagracia
+                <a href="tel:+13056083660" className="hover:underline">
+                  Contactanos: +1 305 608 3660
+                </a>
               </p>
             </div>
           </div>
