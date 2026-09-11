@@ -136,14 +136,20 @@ function sumLedger(rows: LedgerRow[], tipo: "Entrada" | "Salida"): number {
   return rows.reduce((sum, row) => sum + (row.tipo === tipo ? toMoney(row.monto) : 0), 0);
 }
 
-function entradasTurnos(turnos: CajaTurno[], caja: Caja, moneda: CajaMoneda): number {
+function entradasTurnos(turnos: CajaTurno[], caja: Caja, moneda: CajaMoneda, tasaUsdDop: number): number {
   if (caja !== "Fuerte") {
     return 0;
   }
   if (moneda === "USD") {
     return turnos.reduce((sum, turno) => sum + turno.reportadoUsd, 0);
   }
-  return turnos.reduce((sum, turno) => sum + getEfectivoTotalDop(turno), 0);
+  // Caja Fuerte DOP is the only caja that receives verified-shift cash.
+  // Reportado_Efectivo_DOP already includes USD counted in pesos, so subtract
+  // Reportado_USD * tasa or that amount is counted twice (once here, once in USD).
+  return turnos.reduce((sum, turno) => {
+    const efectivoRealDop = getEfectivoTotalDop({ ...turno, tasaUsdDop });
+    return sum + efectivoRealDop;
+  }, 0);
 }
 
 function balanceFrom(
@@ -158,7 +164,7 @@ function balanceFrom(
   }
   return (
     saldoInicial(parametros, caja, moneda) +
-    entradasTurnos(turnos, caja, moneda) +
+    entradasTurnos(turnos, caja, moneda, parametros.tasaUsdDop) +
     sumLedger(ledger, "Entrada") -
     sumLedger(ledger, "Salida")
   );
@@ -173,9 +179,12 @@ export async function getCajaParametros(): Promise<CajaParametros> {
   return mapParametros(data as Record<string, unknown> | null);
 }
 
+/** DOP cash of the shift after removing the USD portion converted at `tasa_usd_dop`. */
 export function getEfectivoTotalDop(turno: CajaTurno | Record<string, unknown>): number {
   const mapped = mapCajaTurno(turno);
-  return mapped.reportadoEfectivo - mapped.reportadoUsd * mapped.tasaUsdDop;
+  const tasaUsdDop = mapped.tasaUsdDop;
+  const efectivoRealDop = mapped.reportadoEfectivo - mapped.reportadoUsd * tasaUsdDop;
+  return efectivoRealDop;
 }
 
 export function getVarianzas(turno: CajaTurno | Record<string, unknown>): CajaVarianzas {
