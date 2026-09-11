@@ -4,117 +4,141 @@ import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } 
 import { Logo } from "@/components/brand/Logo";
 import { PhoneFrame } from "@/components/PhoneFrame";
 import { ExpansionMap } from "@/components/propuesta/ExpansionMap";
+import { SlidePhoto } from "@/components/propuesta/SlidePhoto";
 import { EXPANSION_SITES } from "@/lib/expansion-sites";
 import { downloadPropuestaPdf } from "@/lib/propuesta-pdf";
 import { brand, whatsappHref } from "@/lib/theme";
 
-const SLIDE_COUNT = 12;
+const SLIDE_COUNT = 10;
+const PHARMA_BG = "#F3F8FD";
 
 const PRODUCT_GROUPS = [
-  { title: "Frutas y vegetales", emoji: "🥬", text: "Lo fresco de la semana: fruta, ensalada y hierbas para el día a día." },
-  { title: "Desayuno", emoji: "🥣", text: "Café, leche, pan, cereal, avena y huevos de primera hora." },
-  { title: "Cocina y abarrotes", emoji: "🍝", text: "Aceites, arroz, pastas, enlatados y lo básico para armar la comida." },
-  { title: "Lácteos y huevos", emoji: "🥛", text: "Leche, yogurt, quesos y huevos que no pueden faltar en el apto." },
-  { title: "Snacks y antojos", emoji: "🍪", text: "Chips, galletas, dulces y lo que se pide en el residencial." },
-  { title: "Bebidas refrescantes", emoji: "🥤", text: "Aguas, jugos, refrescos y hielo para el clima de Bávaro." },
-  { title: "Caliente", emoji: "☕", text: "Café, té e infusiones listos para el desayuno o la oficina en casa." },
-  { title: "Alcohol frío", emoji: "🍺", text: "Cervezas y listo-para-tomar, siempre fríos en nevera." },
-  { title: "Cuidado personal", emoji: "🧴", text: "Higiene, dental, shampoo y lo esencial del baño." },
-  { title: "Hogar y limpieza", emoji: "🧹", text: "Papel, desechables, detergente y lo que termina el mismo día." },
-  { title: "Bebé y mascotas", emoji: "🍼", text: "Pañales, fórmula, snacks de mascota y lo urgente de la familia." },
-  { title: "Congelados", emoji: "🧊", text: "Helados, vegetales y comidas rápidas para la semana." },
+  { title: "Frutas y vegetales", emoji: "🥬", tone: "green", text: "Lo fresco de la semana: frutas, vegetales y hierbas para tu día a día." },
+  { title: "Desayuno", emoji: "🥣", tone: "orange", text: "Café, leche, pan, cereales y huevos frescos desde primera hora." },
+  { title: "Cocina y abarrotes", emoji: "🍝", tone: "orange", text: "Aceites, arroz, pastas, enlatados y los esenciales de tu despensa." },
+  { title: "Lácteos y refrigerados", emoji: "🥛", tone: "blue", text: "Leche, yogurt, quesos variados y básicos del refrigerador." },
+  { title: "Snacks y antojos", emoji: "🍪", tone: "orange", text: "Chips, galletas, chocolates y los favoritos de la comunidad." },
+  { title: "Bebidas refrescantes", emoji: "🥤", tone: "blue", text: "Agua, jugos, refrescos y hielo listo para el clima de Bávaro." },
+  { title: "Bebidas calientes", emoji: "☕", tone: "green", text: "Café, té e infusiones para tu mañana o tus jornadas de home office." },
+  { title: "Bebidas frías con alcohol", emoji: "🍺", tone: "orange", text: "Cervezas y cócteles listos para tomar, siempre a temperatura ideal." },
+  { title: "Cuidado personal", emoji: "🧴", tone: "blue", text: "Higiene personal, salud dental, cuidado del cabello y básicos del baño." },
+  { title: "Hogar y limpieza", emoji: "🧹", tone: "blue", text: "Detergentes, papel, desechables y los insumos que se agotan al instante." },
+  { title: "Bebés y mascotas", emoji: "🍼", tone: "orange", text: "Pañales, fórmula, alimento para mascotas y las urgencias del hogar." },
+  { title: "Congelados", emoji: "🧊", tone: "blue", text: "Helados, hielo, vegetales y comidas prácticas para resolver la semana." },
 ] as const;
 
 const SERVICE_VALUES = [
-  {
-    title: "Cercanía",
-    text: "Abrimos donde vive la gente, no donde es más fácil para nosotros.",
-  },
-  {
-    title: "Consistencia",
-    text: "Misma calidad, mismo horario y el mismo trato en cada sucursal.",
-  },
-  {
-    title: "Simplicidad",
-    text: "Lo del día a día, sin complicaciones ni surtido que cambia cada semana.",
-  },
-  {
-    title: "Comunidad",
-    text: "Empleo local y un espacio que suma al residencial, no un colmado improvisado.",
-  },
+  { title: "Servicio de excelencia", icon: "star", tone: "green", text: "Optimizamos cada proceso día a día para brindarte una atención ágil, confiable y a la altura de tus necesidades." },
+  { title: "Garantía de calidad", icon: "badge", tone: "orange", text: "Mantenemos la misma excelencia en atención, higiene y cumplimiento en cada sucursal." },
+  { title: "Esenciales al día", icon: "cart", tone: "blue", text: "Encuentras lo que buscas para tu rutina diaria de forma rápida y sin complicaciones." },
+  { title: "Impacto positivo", icon: "people", tone: "green", text: "Un espacio estructurado que eleva la plusvalía del residencial y respalda al talento local." },
 ] as const;
 
 const TECH_FEATURES = [
-  {
-    title: "Catálogo con fotos y precios",
-    text: "Busca por producto, marca o categoría. Ves lo mismo que en el pasillo, en tu celular.",
-  },
-  {
-    title: "Repite tu pedido al instante",
-    text: "Lo más pedido en el residencial, tus favoritos y tu última compra, listos para agregar.",
-  },
-  {
-    title: "Seguimiento y cambios",
-    text: "Consulta el estado, modifica o cancela desde WhatsApp mientras preparamos tu pedido.",
-  },
-  {
-    title: "¿No lo encuentras?",
-    text: "Pide el producto aunque no esté en el catálogo. El equipo lo revisa y te confirma.",
-  },
-  {
-    title: "QuickCoins",
-    text: "Puntos en cada compra, canjeables por descuento en el siguiente pedido.",
-  },
+  { title: "Catálogo con fotos y precios", icon: "cart", tone: "green", text: "Explora por producto, marca o categoría. Tienes la misma variedad de nuestros pasillos, al alcance de tu mano." },
+  { title: "Pedidos rápidos y favoritos", icon: "bolt", tone: "orange", text: "Guarda tu última compra o accede a los productos más solicitados de tu comunidad para pedir de nuevo en un par de clics." },
+  { title: "Seguimiento y flexibilidad", icon: "gear", tone: "blue", text: "Consulta el estado de tu pedido, realiza modificaciones o cancela directamente por WhatsApp mientras lo preparamos." },
+  { title: "¿Buscas algo en específico?", icon: "search", tone: "green", text: "Si no encuentras un artículo en el catálogo digital, indícanoslo por el chat; nuestro equipo verifica la disponibilidad al instante." },
+  { title: "QuickCoins", icon: "coins", tone: "orange", text: "Acumula puntos automáticos en cada compra y canjéalos por descuentos en tus próximos pedidos." },
 ] as const;
 
 const OPERATION_STATS = [
-  { title: "Dónde está", text: "Residencial Jardines 3, Pueblo Bávaro, La Altagracia." },
-  { title: "Horario", text: "Todos los días, de 8:00 a. m. a 12:00 a. m." },
-  { title: "Pedidos", text: "Catálogo por WhatsApp. Entrega a edificio y apartamento." },
-  { title: "Zona de entrega", text: "Jardines III, Crisfer y Canas del Este." },
-  { title: "Pagos", text: "Efectivo y tarjeta en tienda y en el pedido." },
-  { title: "El equipo", text: "Personal de tienda y delivery, en un mismo sistema." },
+  { title: "Dónde está", icon: "pin", tone: "green", text: "Residencial Jardines 3, Pueblo Bávaro, La Altagracia." },
+  { title: "Horario", icon: "clock", tone: "orange", text: "Todos los días, de 8:00 a. m. a 12:00 a. m." },
+  { title: "Pedidos", icon: "whatsapp", tone: "green", text: "Catálogo por WhatsApp. Entrega a edificio y apartamento." },
+  { title: "Zona de entrega", icon: "truck", tone: "blue", text: "Jardines III, Crisfer y Canas del Este." },
+  { title: "Pagos", icon: "card", tone: "orange", text: "Efectivo y tarjeta en tienda y en el pedido." },
+  { title: "El equipo", icon: "people", tone: "blue", text: "Personal de tienda y delivery, en un mismo sistema." },
 ] as const;
 
 const SEEK_OPTIONS = [
-  { num: "01", title: "Alquiler", text: "Local en residencial, plaza comercial o local independiente." },
-  { num: "02", title: "Compra", text: "Adquirir el espacio cuando el proyecto y la ubicación lo justifiquen." },
-  { num: "03", title: "Alianza", text: "Acuerdo con la administración o el desarrollador del residencial." },
+  { num: "01", title: "Alquiler", icon: "home", tone: "green", text: "Local en residencial, plaza comercial o local independiente." },
+  { num: "02", title: "Compra", icon: "cart", tone: "orange", text: "Adquirir el espacio cuando el proyecto y la ubicación lo justifiquen." },
+  { num: "03", title: "Alianza", icon: "hands", tone: "blue", text: "Acuerdo con la administración o el desarrollador del residencial." },
 ] as const;
 
-const GAIN_ITEMS = [
-  {
-    title: "Necesidades siempre cubiertas",
-    text: "El residente resuelve lo de todos los días sin salir del complejo: leche, cena, un antojo o lo que se acabó.",
-  },
-  {
-    title: "Valor del inmueble",
-    text: "Una amenidad de cadena a pasos suma a la percepción del residencial y a la valuación de los apartamentos.",
-  },
-  {
-    title: "Comunidad",
-    text: "Un punto cotidiano de encuentro, empleo local y un vecino que opera con el mismo estándar todos los días.",
-  },
-  {
-    title: "Servicio profesional hasta la puerta",
-    text: "Pedido por WhatsApp, seguimiento del chat y entrega al apartamento — no un recadero improvisado.",
-  },
+const PHARMA_ITEMS = [
+  { title: "Medicamentos y salud integral", icon: "pill", tone: "blue", text: "Todo lo esencial para el cuidado diario, medicamentos con receta, artículos de primeros auxilios y productos de bienestar, sin salir de tu comunidad." },
+  { title: "El estándar que te da tranquilidad", icon: "shield", tone: "blue", text: "Mantenemos la misma garantía de servicio, organización y atención personalizada que caracteriza a nuestra marca." },
+  { title: "Todo en una sola plataforma", icon: "phone", tone: "orange", text: "Si tu zona cuenta con Quick! y PharmaQuick!, puedes hacer un solo pedido combinando productos de ambas tiendas desde WhatsApp y recibirlo todo en una sola entrega." },
 ] as const;
 
-const TILE_STYLES = [
-  { background: brand.green, color: "#ffffff", muted: "rgba(255,255,255,0.88)" },
-  { background: brand.orange, color: "#ffffff", muted: "rgba(255,255,255,0.9)" },
-  { background: brand.cream, color: brand.ink, muted: brand.muted },
-  { background: brand.blue, color: "#ffffff", muted: "rgba(255,255,255,0.9)" },
-  { background: "#ffffff", color: brand.ink, muted: brand.muted },
-  { background: "#F1F7EA", color: brand.ink, muted: brand.muted },
-] as const;
+type Tone = "green" | "orange" | "blue";
+
+const TONE: Record<Tone, string> = {
+  green: brand.green,
+  orange: brand.orange,
+  blue: brand.blue,
+};
+
+function Icon({ name }: { name: string }) {
+  const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  switch (name) {
+    case "bolt":
+      return <svg viewBox="0 0 24 24" aria-hidden><path {...common} d="M13 3 5 14h7l-1 7 8-11h-7l1-7Z" /></svg>;
+    case "home":
+      return <svg viewBox="0 0 24 24" aria-hidden><path {...common} d="M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-8.5Z" /></svg>;
+    case "truck":
+      return <svg viewBox="0 0 24 24" aria-hidden><path {...common} d="M3 7h11v10H3V7Zm11 3h4l3 3v4h-7v-7ZM7 20a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm10 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" /></svg>;
+    case "pin":
+      return <svg viewBox="0 0 24 24" aria-hidden><path {...common} d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11Z" /><circle {...common} cx="12" cy="10" r="2.2" /></svg>;
+    case "clock":
+      return <svg viewBox="0 0 24 24" aria-hidden><circle {...common} cx="12" cy="12" r="8" /><path {...common} d="M12 8v4.5L15 15" /></svg>;
+    case "whatsapp":
+      return <svg viewBox="0 0 24 24" aria-hidden><path {...common} d="M5 19l1.2-3.3A8 8 0 1 1 19 12a8 8 0 0 1-9.8 7.8L5 19Z" /><path {...common} d="M9.2 9.6c.3 1.8 1.8 3.3 3.6 3.6.3 0 .8-.2 1.1-.5l.7-.7c.2-.2.2-.5 0-.7l-.8-.8c-.2-.2-.5-.2-.7 0l-.3.3c-.8-.3-1.4-.9-1.7-1.7l.3-.3c.2-.2.2-.5 0-.7l-.8-.8c-.2-.2-.5-.2-.7 0l-.7.7c-.3.3-.5.8-.5 1.1Z" /></svg>;
+    case "card":
+      return <svg viewBox="0 0 24 24" aria-hidden><rect {...common} x="3" y="6" width="18" height="12" rx="2" /><path {...common} d="M3 10h18" /></svg>;
+    case "people":
+      return <svg viewBox="0 0 24 24" aria-hidden><circle {...common} cx="9" cy="8" r="2.4" /><circle {...common} cx="16" cy="9" r="2" /><path {...common} d="M4.5 18a4.5 4.5 0 0 1 9 0M14 18a3.8 3.8 0 0 1 5.5 0" /></svg>;
+    case "star":
+      return <svg viewBox="0 0 24 24" aria-hidden><path {...common} d="m12 4 2.2 4.6 5 .7-3.6 3.5.9 5L12 15.8 7.5 18.8l.9-5L4.8 10.3l5-.7L12 4Z" /></svg>;
+    case "badge":
+      return <svg viewBox="0 0 24 24" aria-hidden><circle {...common} cx="12" cy="12" r="7" /><path {...common} d="m9 12 2 2 4-4" /></svg>;
+    case "cart":
+      return <svg viewBox="0 0 24 24" aria-hidden><path {...common} d="M4 6h2l1.2 8.2A2 2 0 0 0 9.2 16H17a2 2 0 0 0 2-1.6L20 8H7" /><circle {...common} cx="9.5" cy="19" r="1.2" /><circle {...common} cx="16.5" cy="19" r="1.2" /></svg>;
+    case "gear":
+      return <svg viewBox="0 0 24 24" aria-hidden><circle {...common} cx="12" cy="12" r="3" /><path {...common} d="M12 5v2M12 17v2M5 12h2M17 12h2M7.2 7.2l1.4 1.4M15.4 15.4l1.4 1.4M7.2 16.8l1.4-1.4M15.4 8.6l1.4-1.4" /></svg>;
+    case "search":
+      return <svg viewBox="0 0 24 24" aria-hidden><circle {...common} cx="11" cy="11" r="6" /><path {...common} d="m16 16 4 4" /></svg>;
+    case "coins":
+      return <svg viewBox="0 0 24 24" aria-hidden><ellipse {...common} cx="12" cy="8" rx="6" ry="3" /><path {...common} d="M6 8v4c0 1.7 2.7 3 6 3s6-1.3 6-3V8M6 12v4c0 1.7 2.7 3 6 3s6-1.3 6-3v-4" /></svg>;
+    case "pill":
+      return <svg viewBox="0 0 24 24" aria-hidden><path {...common} d="m9 15 6-6a3.5 3.5 0 0 1 5 5l-6 6a3.5 3.5 0 0 1-5-5Z" /><path {...common} d="m11.5 12.5 4-4" /></svg>;
+    case "shield":
+      return <svg viewBox="0 0 24 24" aria-hidden><path {...common} d="M12 4 5 7v6c0 4 3 6.5 7 8 4-1.5 7-4 7-8V7l-7-3Z" /></svg>;
+    case "phone":
+      return <svg viewBox="0 0 24 24" aria-hidden><rect {...common} x="8" y="3" width="8" height="18" rx="2" /><path {...common} d="M11 18h2" /></svg>;
+    case "hands":
+      return <svg viewBox="0 0 24 24" aria-hidden><path {...common} d="M8 12v7M16 12v7M5 14h3l2 2h4l2-2h3M9 9V6a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v3" /></svg>;
+    case "mail":
+      return <svg viewBox="0 0 24 24" aria-hidden><rect {...common} x="3" y="6" width="18" height="12" rx="2" /><path {...common} d="m4 8 8 6 8-6" /></svg>;
+    default:
+      return <span aria-hidden>{name}</span>;
+  }
+}
+
+function Orb({ tone, children }: { tone: Tone; children: ReactNode }) {
+  return (
+    <span className="propuesta-orb" style={{ color: TONE[tone] }}>
+      {children}
+    </span>
+  );
+}
 
 function Kicker({ children, color }: { children: string; color?: string }) {
   return (
     <p className="propuesta-kicker" style={{ color: color ?? brand.orange }}>
       {children}
     </p>
+  );
+}
+
+function Title({ children }: { children: ReactNode }) {
+  return (
+    <h2 className="propuesta-title">
+      {children}
+      <span className="propuesta-title-dot">.</span>
+    </h2>
   );
 }
 
@@ -132,9 +156,31 @@ function SlideFrame({
   style?: CSSProperties;
 }) {
   return (
-    <section id={id} className={`propuesta-slide ${className}`} style={style}>
+    <section id={id} className={`propuesta-slide propuesta-canvas ${className}`} style={style}>
+      <div className="propuesta-blob-tr" aria-hidden />
+      <div className="propuesta-blob-bl" aria-hidden />
       <div className={`propuesta-slide-inner ${innerClassName}`}>{children}</div>
     </section>
+  );
+}
+
+function Media({
+  src,
+  alt,
+  objectPosition,
+  fit,
+  className = "",
+}: {
+  src: string;
+  alt: string;
+  objectPosition?: string;
+  fit?: "cover" | "contain";
+  className?: string;
+}) {
+  return (
+    <div className={`propuesta-media ${className}`}>
+      <SlidePhoto src={src} alt={alt} objectPosition={objectPosition} fit={fit} />
+    </div>
   );
 }
 
@@ -213,309 +259,261 @@ export function PropuestaDeck() {
   const joinHref = `${whatsappHref()}?text=${encodeURIComponent(
     "Hola! Quiero proponer un espacio para Quick! Mini Market.",
   )}`;
+  const catalogHref = `${whatsappHref()}?text=${encodeURIComponent(
+    "Hola! Quiero ver el catálogo de Quick! Mini Market.",
+  )}`;
 
   return (
     <div className="propuesta-root">
       <div className="propuesta-deck">
-        <SlideFrame id="slide-0" className="propuesta-scallop">
-          <div className="relative z-10 mx-auto flex h-full max-w-5xl flex-col items-center justify-center text-center">
-            <div className="w-full rounded-[40px] bg-[#FFF6E8] px-10 py-12 shadow-[0_24px_50px_rgba(26,26,26,0.18)] md:px-16 md:py-14">
-              <Logo className="mx-auto h-16 max-w-[260px]" />
-              <p className="mt-8 text-2xl font-semibold md:text-3xl" style={{ color: brand.orange }}>
+        <SlideFrame id="slide-0" className="is-cover">
+          <p className="propuesta-cover-eyebrow">
+            Más tiempo
+            <br />
+            para lo que
+            <br />
+            importa
+          </p>
+          <div className="propuesta-cover-v2">
+            <div className="propuesta-cover-copy">
+              <Logo className="h-14 max-w-[240px]" />
+              <p className="propuesta-cover-line" style={{ color: brand.green }}>
                 Traemos la conveniencia
               </p>
-              <h1
-                className="font-display mt-1 text-5xl font-extrabold uppercase leading-[0.9] tracking-[-0.04em] md:text-7xl"
-                style={{ color: brand.orange }}
-              >
-                A tu residencial
+              <h1 className="propuesta-cover-title" style={{ color: brand.blue }}>
+                A tu residencial<span className="propuesta-title-dot">.</span>
               </h1>
-              <p className="mx-auto mt-5 max-w-xl text-lg" style={{ color: brand.muted }}>
-                Mini market de cadena, a un paso de tu casa.
-              </p>
-              <p
-                className="mt-8 text-xs font-bold uppercase tracking-[0.18em]"
-                style={{ color: brand.green }}
-              >
-                Propuesta para residenciales y locales
-              </p>
-            </div>
-          </div>
-        </SlideFrame>
-
-        <SlideFrame id="slide-1" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
-          <div className="propuesta-fill propuesta-problem">
-            <div className="flex min-h-0 flex-col justify-center px-10 py-10 md:px-14">
-              <Kicker>El problema</Kicker>
-              <h2 className="propuesta-title">
-                La conveniencia no debería estar
-                <br />a 20 minutos en carro.
-              </h2>
-              <p className="propuesta-lead">
-                Los residentes salen del complejo por lo de todos los días. Un local vacío o un
-                colmado informal no sube el valor del residencial: genera quejas, stock irregular y
-                poca confianza.
-              </p>
-              <ol className="mt-8 grid gap-4">
-                {[
-                  {
-                    title: "Lejos de casa",
-                    text: "El súper queda en la carretera. Bajar a comprar leche se vuelve un viaje.",
-                  },
-                  {
-                    title: "El local no suma",
-                    text: "Un espacio vacío o un negocio que cambia de dueño no se vende en el brochure.",
-                  },
-                  {
-                    title: "Sin estándar",
-                    text: "Horario irregular, surtido que falta y un trato que no se replica mañana.",
-                  },
-                ].map((item, index) => (
-                  <li key={item.title} className="grid grid-cols-[auto_minmax(0,1fr)] gap-4">
-                    <span className="propuesta-num" style={{ color: brand.orange }}>
-                      0{index + 1}
-                    </span>
-                    <div>
-                      <h3 className="font-display text-xl font-extrabold">{item.title}</h3>
-                      <p className="mt-1 text-sm leading-relaxed" style={{ color: brand.muted }}>
-                        {item.text}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
-            <div className="relative min-h-0 overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/nathalia-rosa-rWMIbqmOxrY-unsplash.jpg"
-                alt="Pasillo de supermercado lejos de casa"
-                className="h-full w-full object-cover object-center"
-              />
-              <div className="propuesta-stamp">
-                <span className="font-display text-4xl font-black leading-none" style={{ color: brand.orange }}>
-                  20
-                </span>
-                <span className="mt-1 text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: brand.ink }}>
-                  minutos
-                </span>
+              <p className="propuesta-lead">Mini market de cadena, a un paso de tu casa.</p>
+              <div className="propuesta-cover-features">
+                <div>
+                  <Orb tone="green">
+                    <Icon name="bolt" />
+                  </Orb>
+                  <strong>Fácil y rápido</strong>
+                </div>
+                <div>
+                  <Orb tone="orange">
+                    <Icon name="home" />
+                  </Orb>
+                  <strong>Tus productos favoritos</strong>
+                </div>
+                <div>
+                  <Orb tone="blue">
+                    <Icon name="truck" />
+                  </Orb>
+                  <strong>Directo a tu puerta</strong>
+                </div>
               </div>
+              <p className="propuesta-cover-foot">Propuesta para residenciales y locales</p>
             </div>
+            <Media src="/images/nathalia-rosa-rWMIbqmOxrY-unsplash.jpg" alt="Pasillo de un mini market Quick!" />
           </div>
+          <div className="propuesta-brandbar" aria-hidden />
         </SlideFrame>
 
-        <SlideFrame id="slide-2" style={{ backgroundColor: "#F1F7EA" }}>
-          <div className="propuesta-fill propuesta-idea">
-            <div className="flex min-h-0 flex-col justify-center pr-4">
-              <Kicker color={brand.green}>La idea</Kicker>
-              <h2 className="propuesta-title">Una cadena pensada para comunidades residenciales.</h2>
+        <SlideFrame id="slide-1">
+          <Logo className="propuesta-slide-logo" />
+          <div className="propuesta-fill propuesta-split-clean">
+            <div className="propuesta-copy">
+              <Kicker>La idea</Kicker>
+              <Title>Una cadena pensada para comunidades residenciales</Title>
               <p className="propuesta-lead">
-                Quick! Mini Market no es un colmado de carretera. Abrimos dentro del residencial o en
-                la plaza que ya usa el vecino — calidad de cadena, trato de vecino.
+                Llevamos un mini market de primer nivel a la puerta de tu casa. Nos integramos a tu
+                residencial o plaza local para ofrecerte la calidad de una gran cadena con la calidez,
+                confianza y atención personalizada que te mereces.
               </p>
-              <div className="propuesta-grid mt-6 md:grid-cols-2">
-                <article className="propuesta-card">
-                  <Logo className="h-10 max-w-[180px]" />
-                  <h3 className="mt-4">Quick! Mini Market</h3>
+              <div className="propuesta-brand-cards">
+                <article className="propuesta-soft-card">
+                  <Logo className="h-8 max-w-[160px]" />
+                  <h3>Quick! Mini Market</h3>
                   <p>Conveniencia cotidiana: lo que se necesita todos los días, a pasos de casa.</p>
                 </article>
-                <article className="propuesta-card">
-                  <Logo variant="pharma" className="h-9 max-w-[220px]" />
-                  <h3 className="mt-4">PharmaQuick!</h3>
+                <article className="propuesta-soft-card">
+                  <Logo variant="pharma" className="h-8 max-w-[190px]" />
+                  <h3>PharmaQuick!</h3>
                   <p>Farmacia hermana. Misma forma de atenderte, un propósito distinto: tu salud.</p>
                 </article>
               </div>
             </div>
-            <div className="relative min-h-0">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/tienda-isometrica.png"
-                alt="Ilustración isométrica del formato Quick! Mini Market"
-                className="absolute inset-0 h-full w-full object-contain object-center"
-              />
-            </div>
+            <Media
+              src="/images/tienda-isometrica.png"
+              alt="Ilustración isométrica del formato Quick! Mini Market"
+              fit="contain"
+              className="is-contain"
+            />
           </div>
         </SlideFrame>
 
-        <SlideFrame id="slide-3" innerClassName="is-flush" style={{ backgroundColor: brand.green }}>
-          <div className="propuesta-fill propuesta-split">
-            <div className="flex min-h-0 flex-col justify-center px-10 py-10 md:px-14">
-              <Kicker color="rgba(255,255,255,0.82)">La tienda</Kicker>
-              <h2 className="propuesta-title text-white">Así opera Quick! en el residencial.</h2>
-              <p className="propuesta-lead !text-white/90">
-                Una tienda con horario largo, surtido del día a día y entrega a la puerta. El vecino
-                baja o pide: mismo estándar.
+        <SlideFrame id="slide-2">
+          <Logo className="propuesta-slide-logo" />
+          <div className="propuesta-fill propuesta-split-clean">
+            <div className="propuesta-copy">
+              <Kicker>La tienda</Kicker>
+              <Title>Así opera Quick! en el residencial</Title>
+              <p className="propuesta-lead">
+                Así funciona Quick! en tu comunidad: un mini market con horario extendido, los
+                productos que necesitas todos los días y entrega directo a tu puerta. Ya sea que nos
+                visites o pidas a domicilio, recibes siempre la misma calidad.
               </p>
-              <div className="mt-7 grid grid-cols-2 gap-3">
+              <div className="propuesta-icon-grid">
                 {OPERATION_STATS.map((item) => (
-                  <article key={item.title} className="propuesta-stat">
-                    <h3 className="font-display text-base font-bold">{item.title}</h3>
-                    <p className="mt-1 text-sm leading-relaxed text-white/90">{item.text}</p>
-                  </article>
-                ))}
-              </div>
-            </div>
-            <div className="propuesta-split-photo">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/quienes-somos-tienda.jpg"
-                alt="Interior de Quick! Mini Market con personal en caja"
-                style={{ objectPosition: "center 20%" }}
-              />
-            </div>
-          </div>
-        </SlideFrame>
-
-        <SlideFrame id="slide-4" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
-          <div className="propuesta-fill propuesta-split">
-            <div className="flex min-h-0 flex-col justify-center px-10 py-10 md:px-14">
-              <Kicker>Estándar de servicio</Kicker>
-              <h2 className="propuesta-title">
-                Calidad de cadena.
-                <br />
-                Trato de vecino.
-              </h2>
-              <p className="propuesta-lead">
-                El vecino baja a una cadena; no a un negocio que cambia de dueño y de calidad.
-              </p>
-              <div className="propuesta-service-grid mt-7">
-                {SERVICE_VALUES.map((item) => (
-                  <article key={item.title} className="propuesta-card">
-                    <span className="propuesta-dot-mark" style={{ backgroundColor: brand.green }} />
-                    <h3>{item.title}</h3>
-                    <p>{item.text}</p>
-                  </article>
-                ))}
-              </div>
-            </div>
-            <div className="propuesta-split-photo">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/quienes-somos-equipo.jpg"
-                alt="Equipo de Quick! Mini Market frente a la tienda"
-                style={{ objectPosition: "center 30%" }}
-              />
-            </div>
-          </div>
-        </SlideFrame>
-
-        <SlideFrame id="slide-5" style={{ backgroundColor: "#F1F7EA" }}>
-          <Kicker color={brand.green}>Surtido Quick!</Kicker>
-          <h2 className="propuesta-title">Mini market de vida diaria, no de fin de semana.</h2>
-          <p className="propuesta-lead">
-            El catálogo se arma con lo que el residencial pide. Si no está, el vecino lo solicita y
-            el equipo lo evalúa.
-          </p>
-          <div className="propuesta-assortment-grid">
-            {PRODUCT_GROUPS.map((item, index) => {
-              const tile = TILE_STYLES[index % TILE_STYLES.length];
-              return (
-                <article key={item.title} className="propuesta-tile" style={{ background: tile.background, color: tile.color }}>
-                  <span className="mb-1 text-xl" aria-hidden>
-                    {item.emoji}
-                  </span>
-                  <h3>{item.title}</h3>
-                  <p style={{ color: tile.muted }}>{item.text}</p>
-                </article>
-              );
-            })}
-          </div>
-        </SlideFrame>
-
-        <SlideFrame id="slide-6" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
-          <div className="propuesta-fill propuesta-tech">
-            <div className="min-h-0">
-              <Kicker>Tecnología</Kicker>
-              <h2 className="propuesta-title" style={{ fontSize: "clamp(28px, 3.4vw, 44px)" }}>
-                Tu mini market, ahora en el celular.
-              </h2>
-              <p className="propuesta-lead">
-                No es mandar una lista por chat. Es abrir el catálogo completo desde WhatsApp — con
-                fotos, precios y confirmación por el mismo chat.
-              </p>
-              <ul className="propuesta-tech-features">
-                {TECH_FEATURES.map((feature) => (
-                  <li key={feature.title} className="flex gap-3">
-                    <span
-                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: brand.green }}
-                      aria-hidden
-                    />
+                  <article key={item.title} className="propuesta-icon-item">
+                    <Orb tone={item.tone}>
+                      <Icon name={item.icon} />
+                    </Orb>
                     <div>
-                      <h3 className="font-display text-base font-bold">{feature.title}</h3>
-                      <p className="mt-0.5 text-sm leading-relaxed" style={{ color: brand.muted }}>
-                        {feature.text}
-                      </p>
+                      <h3>{item.title}</h3>
+                      <p>{item.text}</p>
                     </div>
-                  </li>
+                  </article>
                 ))}
-              </ul>
+              </div>
             </div>
-            <PhoneFrame className="!mx-0 !w-[230px] shrink-0 md:!w-[250px]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/catalogo-screenshot.png"
-                alt="Catálogo Quick! en el celular"
-                className="absolute inset-0 h-full w-full object-cover object-top"
-              />
-            </PhoneFrame>
+            <Media
+              src="/images/quienes-somos-tienda.jpg"
+              alt="Interior de Quick! Mini Market con personal en caja"
+              objectPosition="center 20%"
+            />
           </div>
         </SlideFrame>
 
-        <SlideFrame id="slide-7" innerClassName="is-flush" style={{ backgroundColor: "#EAF4FB" }}>
-          <div className="propuesta-fill propuesta-split">
-            <div className="flex min-h-0 flex-col justify-center px-10 py-10 md:px-14">
-              <div className="w-fit rounded-2xl bg-white px-4 py-3 shadow-[0_10px_24px_rgba(31,130,197,0.12)]">
-                <Logo variant="pharma" className="h-10 max-w-[240px]" />
+        <SlideFrame id="slide-3">
+          <Logo className="propuesta-slide-logo" />
+          <div className="propuesta-fill propuesta-split-clean">
+            <div className="propuesta-copy">
+              <Kicker>Estándar de servicio</Kicker>
+              <Title>Servicio de primer nivel, atención cercana</Title>
+              <p className="propuesta-lead">
+                Tu residencial merece una experiencia de compra estable, moderna y siempre disponible.
+              </p>
+              <div className="propuesta-icon-grid">
+                {SERVICE_VALUES.map((item) => (
+                  <article key={item.title} className="propuesta-icon-item">
+                    <Orb tone={item.tone}>
+                      <Icon name={item.icon} />
+                    </Orb>
+                    <div>
+                      <h3>{item.title}</h3>
+                      <p>{item.text}</p>
+                    </div>
+                  </article>
+                ))}
               </div>
-              <Kicker color={brand.blue}>PharmaQuick!</Kicker>
+            </div>
+            <Media
+              src="/images/quienes-somos-equipo.jpg"
+              alt="Equipo de Quick! Mini Market frente a la tienda"
+              objectPosition="center 20%"
+            />
+          </div>
+        </SlideFrame>
+
+        <SlideFrame id="slide-4">
+          <Logo className="propuesta-slide-logo" />
+          <Kicker color={brand.green}>Surtido Quick!</Kicker>
+          <Title>Mini market para tu vida diaria, siempre a la mano</Title>
+          <p className="propuesta-lead">
+            Diseñamos nuestro inventario pensando en la dinámica de cada residencial, adaptando el
+            surtido a las necesidades y al estilo de vida de tu comunidad.
+          </p>
+          <div className="propuesta-assortment-clean">
+            {PRODUCT_GROUPS.map((item) => (
+              <article key={item.title} className="propuesta-icon-item">
+                <Orb tone={item.tone}>
+                  <span aria-hidden>{item.emoji}</span>
+                </Orb>
+                <div>
+                  <h3>{item.title}</h3>
+                  <p>{item.text}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </SlideFrame>
+
+        <SlideFrame id="slide-5">
+          <Logo className="propuesta-slide-logo" />
+          <div className="propuesta-fill propuesta-split-clean is-tech">
+            <div className="propuesta-copy">
+              <Kicker>Tecnología</Kicker>
+              <Title>Tu mini market, ahora en tu celular</Title>
+              <p className="propuesta-lead">
+                Olvídate de mandar listas de compras por texto. Explora nuestro catálogo digital
+                directamente en WhatsApp: consulta fotos, confirma precios en tiempo real y gestiona
+                tu pedido por el mismo chat.
+              </p>
+              <div className="propuesta-icon-stack">
+                {TECH_FEATURES.map((feature) => (
+                  <article key={feature.title} className="propuesta-icon-item">
+                    <Orb tone={feature.tone}>
+                      <Icon name={feature.icon} />
+                    </Orb>
+                    <div>
+                      <h3>{feature.title}</h3>
+                      <p>{feature.text}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <a href={catalogHref} target="_blank" rel="noopener noreferrer" className="propuesta-pill is-green">
+                <Icon name="whatsapp" />
+                Prueba la experiencia Quick! por WhatsApp
+              </a>
+            </div>
+            <a
+              href={catalogHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="propuesta-phone-link"
+              aria-label="Abrir el catálogo Quick! por WhatsApp"
+            >
+              <PhoneFrame className="!mx-0 !w-[230px] md:!w-[250px]">
+                <SlidePhoto
+                  src="/images/catalogo-screenshot.png"
+                  alt="Catálogo Quick! en el celular"
+                  objectPosition="center top"
+                  className="absolute inset-0"
+                />
+              </PhoneFrame>
+              <p>Abrir catálogo</p>
+            </a>
+          </div>
+        </SlideFrame>
+
+        <SlideFrame id="slide-6" className="is-pharma" style={{ backgroundColor: PHARMA_BG }}>
+          <Logo variant="pharma" className="propuesta-slide-logo h-10 max-w-[260px]" />
+          <div className="propuesta-fill propuesta-split-clean">
+            <div className="propuesta-copy">
+              <Kicker color={brand.blue}>Próximamente en Noviembre 2026</Kicker>
               <h2 className="propuesta-title" style={{ color: brand.blue }}>
-                Muy pronto. Noviembre 2026.
+                PharmaQuick<span className="propuesta-title-dot">!</span>
               </h2>
               <p className="propuesta-lead">
-                La misma conveniencia. Un propósito distinto: tu salud. Un residencial o plaza puede
-                encajar Quick!, PharmaQuick!, o ambos.
+                La misma conveniencia que ya conoces, ahora con un propósito dedicado a tu bienestar.
+                Una propuesta diseñada para cuidar de ti y de tu familia con acceso fácil, seguridad y
+                total tranquilidad.
               </p>
-              <p className="font-display mt-4 text-5xl font-black uppercase leading-none" style={{ color: brand.blue }}>
-                Nov 2026
-              </p>
-              <ul className="mt-5 grid gap-3">
-                {[
-                  {
-                    title: "Medicamentos y cuidado personal",
-                    text: "Lo esencial para la salud del día a día, sin salir del entorno de la comunidad.",
-                  },
-                  {
-                    title: "La misma cercanía de Quick!",
-                    text: "Calidad de cadena, trato de vecino. Si ya conoces Quick!, vas a reconocer PharmaQuick!.",
-                  },
-                  {
-                    title: "Plaza Crisfer, Local 11",
-                    text: "Pueblo Bávaro. Un espacio de confianza, fácil de llegar.",
-                  },
-                ].map((item) => (
-                  <li key={item.title} className="propuesta-card">
-                    <h3>{item.title}</h3>
-                    <p>{item.text}</p>
-                  </li>
+              <div className="propuesta-icon-stack">
+                {PHARMA_ITEMS.map((item) => (
+                  <article key={item.title} className="propuesta-icon-item">
+                    <Orb tone={item.tone}>
+                      <Icon name={item.icon} />
+                    </Orb>
+                    <div>
+                      <h3>{item.title}</h3>
+                      <p>{item.text}</p>
+                    </div>
+                  </article>
                 ))}
-              </ul>
+              </div>
             </div>
-            <div className="propuesta-split-photo">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/pharmaquick-storefront.jpeg"
-                alt="Fachada de PharmaQuick! en Plaza Crisfer"
-              />
-            </div>
+            <Media src="/images/pharmaquick-storefront.jpeg" alt="Fachada de PharmaQuick! en Plaza Crisfer" />
           </div>
         </SlideFrame>
 
-        <SlideFrame id="slide-8" innerClassName="is-tight" style={{ backgroundColor: brand.cream }}>
+        <SlideFrame id="slide-7" innerClassName="is-tight">
           <Kicker>Panorama de crecimiento</Kicker>
-          <h2 className="propuesta-title" style={{ fontSize: "clamp(28px, 3.2vw, 42px)" }}>
-            Nuestra ruta de expansión
-          </h2>
+          <Title>Nuestra ruta de expansión</Title>
           <div className="propuesta-map-wrap">
             <ExpansionMap />
             <aside className="propuesta-legend">
@@ -544,121 +542,67 @@ export function PropuestaDeck() {
           </div>
         </SlideFrame>
 
-        <SlideFrame id="slide-9" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
-          <div className="propuesta-fill propuesta-seek">
-            <div className="relative min-h-0 overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+        <SlideFrame id="slide-8">
+          <div className="propuesta-fill propuesta-split-clean is-photo-left">
+            <div className="relative min-h-0">
+              <Media
                 src="/images/tienda-fachada.jpeg"
-                alt="Pasillo residencial junto a un local para Quick!"
-                className="h-full w-full object-cover"
-                style={{ objectPosition: "88% center" }}
+                alt="Fachada de Quick! Mini Market en el residencial"
+                objectPosition="32% center"
               />
-              <div
-                className="absolute inset-0"
-                style={{
-                  background:
-                    "linear-gradient(90deg, transparent 40%, rgba(255,246,232,0.35) 78%, #FFF6E8 100%)",
-                }}
-              />
-              <p className="absolute bottom-8 left-8 max-w-[220px] rounded-full bg-[#1A1A1A]/80 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white">
-                Un local, un residencial
-              </p>
+              <p className="propuesta-media-chip">Un local, un residencial</p>
             </div>
-            <div className="flex min-h-0 flex-col justify-center px-10 py-10 md:px-14">
+            <div className="propuesta-copy">
               <Kicker>Qué buscamos</Kicker>
-              <h2 className="propuesta-title">Espacios que encajen con el modelo.</h2>
+              <Title>Espacios que encajen con el modelo</Title>
               <p className="propuesta-lead">
                 Evaluamos de forma continua locales bien ubicados, espacios dentro de residenciales y
                 alianzas a largo plazo.
               </p>
-              <div className="mt-8 grid gap-5">
+              <div className="propuesta-icon-stack mt-6">
                 {SEEK_OPTIONS.map((item) => (
-                  <article key={item.title} className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4">
-                    <span className="propuesta-num" style={{ color: brand.orange }}>
-                      {item.num}
-                    </span>
-                    <div className="border-t border-[#ead9bf] pt-3">
-                      <h3 className="font-display text-2xl font-extrabold">{item.title}</h3>
-                      <p className="mt-1 text-sm leading-relaxed" style={{ color: brand.muted }}>
-                        {item.text}
-                      </p>
+                  <article key={item.title} className="propuesta-icon-item is-numbered">
+                    <Orb tone={item.tone}>
+                      <Icon name={item.icon} />
+                    </Orb>
+                    <div>
+                      <h3>
+                        <span style={{ color: TONE[item.tone] }}>{item.num}</span> {item.title}
+                      </h3>
+                      <p>{item.text}</p>
                     </div>
                   </article>
                 ))}
               </div>
-              <p className="mt-6 text-sm font-semibold" style={{ color: brand.ink }}>
-                Para evaluar: tamaño, visibilidad, parqueo, restricciones y el nombre del residencial.
-              </p>
             </div>
           </div>
         </SlideFrame>
 
-        <SlideFrame id="slide-10" innerClassName="is-flush" style={{ backgroundColor: "#F1F7EA" }}>
-          <div className="propuesta-fill propuesta-split">
-            <div className="flex min-h-0 flex-col justify-center px-10 py-10 md:px-14">
-              <Kicker color={brand.green}>Qué gana el residencial</Kicker>
-              <h2 className="propuesta-title">Una amenidad que se vende. Un inquilino que opera.</h2>
-              <div className="propuesta-gains-grid mt-7">
-                {GAIN_ITEMS.map((item) => (
-                  <article key={item.title} className="propuesta-card">
-                    <span className="propuesta-dot-mark" style={{ backgroundColor: brand.green }} />
-                    <h3>{item.title}</h3>
-                    <p>{item.text}</p>
-                  </article>
-                ))}
-              </div>
-            </div>
-            <div className="propuesta-split-photo">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/Banner1.jpeg"
-                alt="Entrega Quick! en la puerta del apartamento"
-                style={{ objectPosition: "center 40%" }}
-              />
-            </div>
-          </div>
-        </SlideFrame>
-
-        <SlideFrame id="slide-11" innerClassName="is-flush" style={{ backgroundColor: brand.cream }}>
-          <div className="propuesta-fill propuesta-close">
-            <div className="relative min-h-0 overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/hero.jpeg"
-                alt="Delivery Quick! entregando un pedido en el residencial"
-                className="h-full w-full object-cover"
-                style={{ objectPosition: "center 20%" }}
-              />
-            </div>
-            <div className="flex min-h-0 flex-col items-center justify-center px-10 py-12 text-center md:px-16">
-              <Logo className="h-14 max-w-[220px]" />
-              <h2 className="propuesta-title mt-6" style={{ color: brand.orange }}>
-                ¿Tu residencial tiene un espacio para Quick!?
+        <SlideFrame id="slide-9">
+          <div className="propuesta-fill propuesta-split-clean is-photo-left is-close">
+            <Media
+              src="/images/Banner1.jpeg"
+              alt="Delivery Quick! entregando un pedido en el residencial"
+              objectPosition="center 40%"
+            />
+            <div className="propuesta-copy">
+              <Logo className="h-12 max-w-[200px]" />
+              <h2 className="propuesta-title mt-5">
+                ¿Tu residencial tiene un espacio para <span style={{ color: brand.orange }}>Quick!</span>?
               </h2>
-              <p className="mx-auto mt-4 max-w-xl text-lg" style={{ color: brand.muted }}>
-                Hablemos. Traemos conveniencia a más comunidades.
-              </p>
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                <a
-                  href={joinHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex min-h-12 items-center justify-center rounded-full px-7 text-base font-bold text-white"
-                  style={{ backgroundColor: brand.green }}
-                >
+              <p className="propuesta-lead">Hablemos. Traemos conveniencia a más comunidades.</p>
+              <div className="propuesta-close-actions">
+                <a href={joinHref} target="_blank" rel="noopener noreferrer" className="propuesta-pill is-green">
+                  <Icon name="whatsapp" />
                   Escribir por WhatsApp
                 </a>
-                <a
-                  href="/expansion"
-                  className="inline-flex min-h-12 items-center justify-center rounded-full px-7 text-base font-bold text-white"
-                  style={{ backgroundColor: brand.orange }}
-                >
+                <a href="/expansion" className="propuesta-pill is-orange">
+                  <Icon name="mail" />
                   Enviar una propuesta
                 </a>
               </div>
-              <p className="mt-6 text-sm font-semibold" style={{ color: brand.ink }}>
-                WhatsApp 809 226 4986 · Pueblo Bávaro, La Altagracia
+              <p className="propuesta-contact">
+                <a href="tel:+13056083660">Contáctanos: +1 305 608 3660</a>
               </p>
             </div>
           </div>
