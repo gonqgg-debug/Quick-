@@ -27,6 +27,28 @@ function isMissingConflictTarget(error: unknown): boolean {
   return code === "42P10" || /no unique or exclusion constraint/i.test(message);
 }
 
+function isUniqueViolation(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === "23505");
+}
+
+function hasOwn(input: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(input, key);
+}
+
+function parseMontoInput(value: unknown): number {
+  const montoRaw =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? parsePrice(value)
+        : null;
+  const monto = montoRaw == null ? null : toMoney(montoRaw);
+  if (monto == null || !(monto > 0)) {
+    throw new Error("El monto tiene que ser mayor que 0");
+  }
+  return monto;
+}
+
 function mapVenta(row: VentaRow | null): VentaDiaria | null {
   if (!row) {
     return null;
@@ -48,18 +70,7 @@ export function parseVentaInput(body: { fecha?: unknown; monto?: unknown }): { f
   if (!isDayKey(fecha) || fecha > yesterdayDayKey()) {
     throw new Error("La fecha no es válida");
   }
-
-  const montoRaw =
-    typeof body.monto === "number"
-      ? body.monto
-      : typeof body.monto === "string"
-        ? parsePrice(body.monto)
-        : null;
-  const monto = montoRaw == null ? null : toMoney(montoRaw);
-  if (monto == null || !(monto > 0)) {
-    throw new Error("El monto tiene que ser mayor que 0");
-  }
-  return { fecha, monto };
+  return { fecha, monto: parseMontoInput(body.monto) };
 }
 
 export async function listVentasDiarias(limit = VENTAS_DEFAULT_LIMIT): Promise<VentaDiaria[]> {
@@ -126,4 +137,66 @@ export async function upsertVentaDiaria(fecha: string, monto: number): Promise<V
     throw new Error("No pudimos guardar la venta");
   }
   return insertedMapped;
+}
+
+export type VentaPatch = {
+  fecha?: unknown;
+  monto?: unknown;
+};
+
+export async function updateVentaDiaria(id: string, patch: VentaPatch): Promise<VentaDiaria> {
+  const ventaId = id.trim();
+  if (!ventaId) {
+    throw new Error("Falta la venta");
+  }
+  if (!hasOwn(patch, "fecha") && !hasOwn(patch, "monto")) {
+    throw new Error("No hay cambios");
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const { data: current, error: loadError } = await supabase
+    .from("ventas_diarias")
+    .select(VENTA_SELECT)
+    .eq("id", ventaId)
+    .maybeSingle();
+  if (loadError) {
+    throw loadError;
+  }
+  const mapped = mapVenta(current);
+  if (!mapped) {
+    throw new Error("No encontramos esa venta");
+  }
+
+  const nextFecha = hasOwn(patch, "fecha")
+    ? typeof patch.fecha === "string"
+      ? patch.fecha.trim()
+      : ""
+    : mapped.fecha;
+  if (!isDayKey(nextFecha) || nextFecha > yesterdayDayKey()) {
+    throw new Error("La fecha no es válida");
+  }
+
+  const nextMonto = hasOwn(patch, "monto") ? parseMontoInput(patch.monto) : mapped.monto;
+  const diaSemana = diaSemanaFromFecha(nextFecha);
+  if (!diaSemana) {
+    throw new Error("La fecha no es válida");
+  }
+
+  const { data, error } = await supabase
+    .from("ventas_diarias")
+    .update({ fecha: nextFecha, dia_semana: diaSemana, venta_real: nextMonto })
+    .eq("id", ventaId)
+    .select(VENTA_SELECT)
+    .maybeSingle();
+  if (error) {
+    if (isUniqueViolation(error)) {
+      throw new Error("Ya existe una venta para esa fecha");
+    }
+    throw error;
+  }
+  const updated = mapVenta(data);
+  if (!updated) {
+    throw new Error("No encontramos esa venta");
+  }
+  return updated;
 }

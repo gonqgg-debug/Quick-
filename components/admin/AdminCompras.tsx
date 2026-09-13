@@ -37,7 +37,7 @@ export function AdminCompras() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [registerOpen, setRegisterOpen] = useState(false);
+  const [editing, setEditing] = useState<Compra | "new" | null>(null);
   const [proveedorId, setProveedorId] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -165,7 +165,7 @@ export function AdminCompras() {
         </div>
         <button
           type="button"
-          onClick={() => setRegisterOpen(true)}
+          onClick={() => setEditing("new")}
           className="rounded-full px-4 text-sm font-bold text-white"
           style={{ minHeight: 44, backgroundColor: brand.green }}
         >
@@ -269,15 +269,16 @@ export function AdminCompras() {
           </p>
         </div>
       ) : view === "pendientes" ? (
-        <PendientesTable compras={compras} busyId={busyId} onMarkPaid={markPaid} />
+        <PendientesTable compras={compras} busyId={busyId} onEdit={setEditing} onMarkPaid={markPaid} />
       ) : (
-        <HistorialTable compras={compras} page={page} total={total} onPage={setPage} />
+        <HistorialTable compras={compras} page={page} total={total} onEdit={setEditing} onPage={setPage} />
       )}
 
-      {registerOpen ? (
-        <RegistrarCompraModal
+      {editing ? (
+        <CompraModal
+          compra={editing === "new" ? null : editing}
           proveedores={proveedores}
-          onClose={() => setRegisterOpen(false)}
+          onClose={() => setEditing(null)}
           onSaved={async (_compra, createdProveedor) => {
             if (createdProveedor) {
               setProveedores((current) => {
@@ -289,7 +290,7 @@ export function AdminCompras() {
                 );
               });
             }
-            setRegisterOpen(false);
+            setEditing(null);
             await loadCompras();
           }}
         />
@@ -315,15 +316,17 @@ function SummaryCard({ label, amount, danger = false }: { label: string; amount:
 function PendientesTable({
   compras,
   busyId,
+  onEdit,
   onMarkPaid,
 }: {
   compras: Compra[];
   busyId: string | null;
+  onEdit: (compra: Compra) => void;
   onMarkPaid: (id: string) => void;
 }) {
   const today = todayDayKey();
   return (
-    <DataTable className="mt-6" tableClassName="min-w-[780px]">
+    <DataTable className="mt-6" tableClassName="min-w-[860px]">
       <DataTableHead>
         <DataTableTh>Proveedor</DataTableTh>
         <DataTableTh numeric>Monto</DataTableTh>
@@ -331,7 +334,7 @@ function PendientesTable({
         <DataTableTh className="whitespace-nowrap">Vence</DataTableTh>
         <DataTableTh className="whitespace-nowrap">Días restantes</DataTableTh>
         <DataTableTh>
-          <span className="sr-only">Pagar</span>
+          <span className="sr-only">Acciones</span>
         </DataTableTh>
       </DataTableHead>
       <tbody>
@@ -350,15 +353,25 @@ function PendientesTable({
                 {formatDaysRemaining(days)}
               </DataTableCell>
               <DataTableCell className="whitespace-nowrap text-right">
-                <button
-                  type="button"
-                  disabled={busyId === compra.id}
-                  onClick={() => onMarkPaid(compra.id)}
-                  className="rounded-full px-3 text-sm font-bold disabled:opacity-40"
-                  style={{ minHeight: 36, backgroundColor: "#F3F4F6", color: brand.ink }}
-                >
-                  {busyId === compra.id ? "..." : "Marcar como pagada"}
-                </button>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onEdit(compra)}
+                    className="text-sm font-bold"
+                    style={{ color: brand.green }}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyId === compra.id}
+                    onClick={() => onMarkPaid(compra.id)}
+                    className="rounded-full px-3 text-sm font-bold disabled:opacity-40"
+                    style={{ minHeight: 36, backgroundColor: "#F3F4F6", color: brand.ink }}
+                  >
+                    {busyId === compra.id ? "..." : "Marcar como pagada"}
+                  </button>
+                </div>
               </DataTableCell>
             </DataTableRow>
           );
@@ -372,11 +385,13 @@ function HistorialTable({
   compras,
   page,
   total,
+  onEdit,
   onPage,
 }: {
   compras: Compra[];
   page: number;
   total: number;
+  onEdit: (compra: Compra) => void;
   onPage: (page: number) => void;
 }) {
   const pageCount = Math.max(1, Math.ceil(total / COMPRAS_PAGE_SIZE));
@@ -384,13 +399,16 @@ function HistorialTable({
   const toRow = Math.min(total, page * COMPRAS_PAGE_SIZE);
   return (
     <div className="mt-6">
-      <DataTable tableClassName="min-w-[720px]">
+      <DataTable tableClassName="min-w-[800px]">
         <DataTableHead>
           <DataTableTh>Proveedor</DataTableTh>
           <DataTableTh numeric>Monto</DataTableTh>
           <DataTableTh className="whitespace-nowrap">Fecha</DataTableTh>
           <DataTableTh className="whitespace-nowrap">Vence</DataTableTh>
           <DataTableTh className="whitespace-nowrap">Estado</DataTableTh>
+          <DataTableTh className="w-24">
+            <span className="sr-only">Editar</span>
+          </DataTableTh>
         </DataTableHead>
         <tbody>
           {compras.map((compra) => (
@@ -411,6 +429,16 @@ function HistorialTable({
                     Pendiente
                   </span>
                 )}
+              </DataTableCell>
+              <DataTableCell>
+                <button
+                  type="button"
+                  onClick={() => onEdit(compra)}
+                  className="text-sm font-bold"
+                  style={{ color: brand.green }}
+                >
+                  Editar
+                </button>
               </DataTableCell>
             </DataTableRow>
           ))}
@@ -448,23 +476,36 @@ function HistorialTable({
   );
 }
 
-function RegistrarCompraModal({
+function montoDraft(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "";
+  }
+  return String(value);
+}
+
+function CompraModal({
+  compra,
   proveedores,
   onClose,
   onSaved,
 }: {
+  compra: Compra | null;
   proveedores: Proveedor[];
   onClose: () => void;
   onSaved: (compra: Compra, createdProveedor: Proveedor | null) => void | Promise<void>;
 }) {
+  const isNew = !compra;
   const today = todayDayKey();
-  const [query, setQuery] = useState("");
-  const [proveedorId, setProveedorId] = useState<string | null>(null);
-  const [monto, setMonto] = useState("");
-  const [fecha, setFecha] = useState(today);
-  const [dueDate, setDueDate] = useState(today);
+  const [query, setQuery] = useState(compra?.proveedorNombre ?? "");
+  const [proveedorId, setProveedorId] = useState<string | null>(compra?.proveedorId ?? null);
+  const [monto, setMonto] = useState(compra ? montoDraft(compra.monto) : "");
+  const [fecha, setFecha] = useState(compra?.fecha ?? today);
+  const [dueDate, setDueDate] = useState(compra?.dueDate ?? today);
+  const [pagado, setPagado] = useState(compra?.pagado ?? false);
+  const [pagadoEn, setPagadoEn] = useState(compra?.pagadoEn ?? today);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const skipAutoDue = useRef(!isNew);
 
   const selected = proveedores.find((item) => item.id === proveedorId) ?? null;
 
@@ -488,6 +529,10 @@ function RegistrarCompraModal({
   }, [onClose]);
 
   useEffect(() => {
+    if (skipAutoDue.current) {
+      skipAutoDue.current = false;
+      return;
+    }
     const proveedor = proveedores.find((item) => item.id === proveedorId) ?? null;
     setDueDate(dueDateFromCredit(fecha, proveedor));
   }, [fecha, proveedorId, proveedores]);
@@ -496,21 +541,28 @@ function RegistrarCompraModal({
     setSaving(true);
     setFormError(null);
     try {
-      const response = await fetch("/api/admin/compras", {
-        method: "POST",
+      const payload: Record<string, unknown> = {
+        proveedorId: proveedorId || undefined,
+        proveedorNombre: query.trim() || undefined,
+        monto,
+        fecha,
+        dueDate,
+      };
+      if (!isNew) {
+        payload.pagado = pagado;
+        if (pagado) {
+          payload.pagadoEn = pagadoEn;
+        }
+      }
+      const response = await fetch(isNew ? "/api/admin/compras" : `/api/admin/compras/${compra.id}`, {
+        method: isNew ? "POST" : "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          proveedorId: proveedorId || undefined,
-          proveedorNombre: query.trim() || undefined,
-          monto,
-          fecha,
-          dueDate,
-        }),
+        body: JSON.stringify(payload),
       });
       const body = (await response.json().catch(() => null)) as { compra?: Compra; error?: string } | null;
       if (!response.ok || !body?.compra) {
-        throw new Error(body?.error || "No pudimos registrar la compra");
+        throw new Error(body?.error || (isNew ? "No pudimos registrar la compra" : "No pudimos guardar la compra"));
       }
       const createdProveedor =
         proveedorId || !query.trim()
@@ -524,7 +576,13 @@ function RegistrarCompraModal({
             };
       await onSaved(body.compra, createdProveedor);
     } catch (saveError) {
-      setFormError(saveError instanceof Error ? saveError.message : "No pudimos registrar la compra");
+      setFormError(
+        saveError instanceof Error
+          ? saveError.message
+          : isNew
+            ? "No pudimos registrar la compra"
+            : "No pudimos guardar la compra"
+      );
     } finally {
       setSaving(false);
     }
@@ -537,7 +595,7 @@ function RegistrarCompraModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="compra-title"
-        className="relative z-10 w-full max-w-md overflow-hidden rounded-[28px] bg-white p-6"
+        className="relative z-10 max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[28px] bg-white p-6"
         style={{ boxShadow: "0 24px 64px rgba(26, 26, 26, 0.18)", color: brand.ink }}
         onSubmit={(event) => {
           event.preventDefault();
@@ -546,12 +604,13 @@ function RegistrarCompraModal({
       >
         <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Compras</p>
         <h2 id="compra-title" className="font-display mt-1 text-2xl font-bold">
-          Registrar compra
+          {isNew ? "Registrar compra" : "Editar compra"}
         </h2>
 
         <div className="mt-5">
           <p className={adminLabelClass}>Proveedor</p>
           <ProveedorCombobox
+            autoFocus={isNew}
             proveedores={proveedores}
             query={query}
             proveedorId={proveedorId}
@@ -598,6 +657,38 @@ function RegistrarCompraModal({
           </p>
         ) : null}
 
+        {!isNew ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className={adminLabelClass}>
+              Estado
+              <AdminSelect
+                value={pagado ? "pagada" : "pendiente"}
+                onChange={(event) => {
+                  const next = event.target.value === "pagada";
+                  setPagado(next);
+                  if (next && !pagadoEn) {
+                    setPagadoEn(today);
+                  }
+                }}
+              >
+                <option value="pendiente">Pendiente</option>
+                <option value="pagada">Pagada</option>
+              </AdminSelect>
+            </label>
+            {pagado ? (
+              <label className={adminLabelClass}>
+                Pagada el
+                <AdminInput
+                  type="date"
+                  required
+                  value={pagadoEn}
+                  onChange={(event) => setPagadoEn(event.target.value)}
+                />
+              </label>
+            ) : null}
+          </div>
+        ) : null}
+
         {formError ? (
           <p className="mt-4 rounded-2xl px-3 py-2 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
             {formError}
@@ -619,7 +710,7 @@ function RegistrarCompraModal({
             className="rounded-full px-5 text-sm font-bold text-white disabled:opacity-40"
             style={{ minHeight: 44, backgroundColor: brand.green }}
           >
-            {saving ? "Guardando..." : "Registrar"}
+            {saving ? "Guardando..." : isNew ? "Registrar" : "Guardar"}
           </button>
         </div>
       </form>
@@ -631,11 +722,13 @@ function ProveedorCombobox({
   proveedores,
   query,
   proveedorId,
+  autoFocus = true,
   onChange,
 }: {
   proveedores: Proveedor[];
   query: string;
   proveedorId: string | null;
+  autoFocus?: boolean;
   onChange: (next: { query: string; proveedorId: string | null }) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -649,8 +742,10 @@ function ProveedorCombobox({
   const canCreate = needle.length > 0 && !exact;
 
   useEffect(() => {
-    window.requestAnimationFrame(() => inputRef.current?.focus());
-  }, []);
+    if (autoFocus) {
+      window.requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }, [autoFocus]);
 
   useEffect(() => {
     function onPointer(event: MouseEvent) {

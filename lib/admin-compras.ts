@@ -318,47 +318,75 @@ async function getProveedorById(id: string): Promise<Proveedor | null> {
   return data ? mapProveedor(data as ProveedorRow) : null;
 }
 
-export async function createCompra(input: {
-  proveedorId?: unknown;
-  proveedorNombre?: unknown;
-  monto?: unknown;
-  fecha?: unknown;
-  dueDate?: unknown;
-}): Promise<Compra> {
-  const fecha = typeof input.fecha === "string" ? input.fecha.trim() : "";
-  const dueDate = typeof input.dueDate === "string" ? input.dueDate.trim() : "";
-  if (!isDayKey(fecha)) {
-    throw new Error("La fecha de compra no es válida");
+function parseDayField(value: unknown, message: string): string {
+  const day = typeof value === "string" ? value.trim() : "";
+  if (!isDayKey(day)) {
+    throw new Error(message);
   }
-  if (!isDayKey(dueDate)) {
-    throw new Error("La fecha de vencimiento no es válida");
-  }
+  return day;
+}
 
+function parseMontoInput(value: unknown): number {
   const montoRaw =
-    typeof input.monto === "number"
-      ? input.monto
-      : typeof input.monto === "string"
-        ? parsePrice(input.monto)
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? parsePrice(value)
         : null;
   const monto = montoRaw == null ? null : toMoney(montoRaw);
   if (monto == null || !(monto > 0)) {
     throw new Error("El monto tiene que ser mayor que 0");
   }
+  return monto;
+}
 
+function hasOwn(input: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(input, key);
+}
+
+async function resolveProveedor(input: { proveedorId?: unknown; proveedorNombre?: unknown }): Promise<Proveedor> {
   const proveedorIdRaw = typeof input.proveedorId === "string" ? input.proveedorId.trim() : "";
   const proveedorNombre = trimText(input.proveedorNombre, NOMBRE_MAX);
-  let proveedor: Proveedor | null = null;
   if (proveedorIdRaw) {
-    proveedor = await getProveedorById(proveedorIdRaw);
+    const proveedor = await getProveedorById(proveedorIdRaw);
     if (!proveedor) {
       throw new Error("No encontramos ese proveedor");
     }
-  } else if (proveedorNombre) {
-    proveedor = await findOrCreateProveedor(proveedorNombre);
+    return proveedor;
   }
-  if (!proveedor) {
-    throw new Error("Elige o escribe un proveedor");
+  if (proveedorNombre) {
+    return findOrCreateProveedor(proveedorNombre);
   }
+  throw new Error("Elige o escribe un proveedor");
+}
+
+async function getCompraById(id: string): Promise<Compra | null> {
+  if (!id) {
+    return null;
+  }
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.from("compras").select(COMPRA_SELECT).eq("id", id).maybeSingle();
+  if (error) {
+    throw error;
+  }
+  return data ? mapCompra(data as CompraRow) : null;
+}
+
+export type CompraInput = {
+  proveedorId?: unknown;
+  proveedorNombre?: unknown;
+  monto?: unknown;
+  fecha?: unknown;
+  dueDate?: unknown;
+  pagado?: unknown;
+  pagadoEn?: unknown;
+};
+
+export async function createCompra(input: CompraInput): Promise<Compra> {
+  const fecha = parseDayField(input.fecha, "La fecha de compra no es válida");
+  const dueDate = parseDayField(input.dueDate, "La fecha de vencimiento no es válida");
+  const monto = parseMontoInput(input.monto);
+  const proveedor = await resolveProveedor(input);
 
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
@@ -383,14 +411,78 @@ export async function createCompra(input: {
   return mapped;
 }
 
-export async function markCompraPagada(id: string): Promise<Compra> {
+export async function updateCompra(id: string, input: CompraInput): Promise<Compra> {
   if (!id) {
     throw new Error("Falta la compra");
   }
+  const current = await getCompraById(id);
+  if (!current) {
+    throw new Error("No encontramos esa compra");
+  }
+
+  const next: {
+    proveedor_id?: string;
+    monto?: number;
+    fecha?: string;
+    due_date?: string;
+    pagado?: boolean;
+    pagado_en?: string | null;
+  } = {};
+
+  if (hasOwn(input, "proveedorId") || hasOwn(input, "proveedorNombre")) {
+    const proveedor = await resolveProveedor(input);
+    if (proveedor.id !== current.proveedorId) {
+      next.proveedor_id = proveedor.id;
+    }
+  }
+  if (hasOwn(input, "monto")) {
+    next.monto = parseMontoInput(input.monto);
+  }
+  if (hasOwn(input, "fecha")) {
+    next.fecha = parseDayField(input.fecha, "La fecha de compra no es válida");
+  }
+  if (hasOwn(input, "dueDate")) {
+    next.due_date = parseDayField(input.dueDate, "La fecha de vencimiento no es válida");
+  }
+
+  const nextPagado = hasOwn(input, "pagado")
+    ? input.pagado === true
+      ? true
+      : input.pagado === false
+        ? false
+        : null
+    : current.pagado;
+  if (nextPagado == null) {
+    throw new Error("El estado de pago no es válido");
+  }
+
+  if (hasOwn(input, "pagado") && nextPagado !== current.pagado) {
+    next.pagado = nextPagado;
+  }
+
+  if (nextPagado) {
+    if (hasOwn(input, "pagadoEn")) {
+      if (input.pagadoEn == null || input.pagadoEn === "") {
+        next.pagado_en = todayDayKey();
+      } else {
+        next.pagado_en = parseDayField(input.pagadoEn, "La fecha de pago no es válida");
+      }
+    } else if (!current.pagado) {
+      next.pagado_en = todayDayKey();
+    }
+  } else if (current.pagado || current.pagadoEn) {
+    next.pagado = false;
+    next.pagado_en = null;
+  }
+
+  if (Object.keys(next).length === 0) {
+    return current;
+  }
+
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("compras")
-    .update({ pagado: true, pagado_en: todayDayKey() })
+    .update(next)
     .eq("id", id)
     .select(COMPRA_SELECT)
     .maybeSingle();
@@ -402,6 +494,10 @@ export async function markCompraPagada(id: string): Promise<Compra> {
     throw new Error("No encontramos esa compra");
   }
   return mapped;
+}
+
+export async function markCompraPagada(id: string): Promise<Compra> {
+  return updateCompra(id, { pagado: true });
 }
 
 export function parsePagadoParam(raw: string | null): boolean | null {

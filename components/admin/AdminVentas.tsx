@@ -8,9 +8,8 @@ import {
   type VentaDiaria,
 } from "@/lib/admin-ventas-shared";
 import { formatDayKey, todayDayKey, yesterdayDayKey } from "@/lib/local-day";
-import { formatPrice, toMoney } from "@/lib/money";
 import { brand } from "@/lib/theme";
-import { AdminInput, adminControlClass, adminLabelClass, cx } from "@/components/admin/AdminField";
+import { AdminInput, adminLabelClass } from "@/components/admin/AdminField";
 import {
   DataTable,
   DataTableCell,
@@ -18,17 +17,7 @@ import {
   DataTableRow,
   DataTableTh,
 } from "@/components/admin/DataTable";
-
-function montoDraft(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) {
-    return "";
-  }
-  return String(value);
-}
-
-function moneyEqual(left: number, right: number): boolean {
-  return Math.round(toMoney(left) * 100) === Math.round(toMoney(right) * 100);
-}
+import { InlineMonto, montoDraft } from "@/components/admin/InlineMonto";
 
 export function AdminVentas() {
   const router = useRouter();
@@ -41,6 +30,7 @@ export function AdminVentas() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [editing, setEditing] = useState<VentaDiaria | null>(null);
   const fechaRef = useRef(fecha);
   fechaRef.current = fecha;
 
@@ -113,13 +103,17 @@ export function AdminVentas() {
     if (!response.ok || !venta) {
       throw new Error(body?.error || "No pudimos guardar la venta");
     }
+    applyVenta(venta);
+    return venta;
+  }
+
+  function applyVenta(venta: VentaDiaria, previousId?: string) {
     setVentas((current) => {
-      const next = current.filter((item) => item.fecha !== venta.fecha);
+      const next = current.filter((item) => item.id !== venta.id && item.id !== previousId && item.fecha !== venta.fecha);
       next.push(venta);
       next.sort((left, right) => right.fecha.localeCompare(left.fecha));
       return next.slice(0, VENTAS_DEFAULT_LIMIT);
     });
-    return venta;
   }
 
   async function saveForm() {
@@ -223,7 +217,9 @@ export function AdminVentas() {
 
       <section className="mt-6">
         <h2 className="font-display text-lg font-bold">Últimos {VENTAS_DEFAULT_LIMIT} días capturados</h2>
-        <p className="mt-1 text-sm text-brand-muted">Haz clic en el monto para corregirlo. Enter o clic afuera guarda.</p>
+        <p className="mt-1 text-sm text-brand-muted">
+          Haz clic en el monto para corregirlo, o en Editar para cambiar fecha y monto. Enter o clic afuera guarda.
+        </p>
         {loading ? (
           <div className="mt-4 h-48 animate-pulse rounded-lg bg-gray-100" />
         ) : ventas.length === 0 ? (
@@ -237,6 +233,9 @@ export function AdminVentas() {
               <DataTableTh>Fecha</DataTableTh>
               <DataTableTh>Día</DataTableTh>
               <DataTableTh numeric>Monto</DataTableTh>
+              <DataTableTh className="w-24">
+                <span className="sr-only">Editar</span>
+              </DataTableTh>
             </DataTableHead>
             <tbody>
               {ventas.map((venta) => (
@@ -251,7 +250,21 @@ export function AdminVentas() {
                   </DataTableCell>
                   <DataTableCell className="whitespace-nowrap text-brand-muted">{formatDiaSemana(venta.diaSemana)}</DataTableCell>
                   <DataTableCell numeric className="py-2">
-                    <InlineMonto venta={venta} onSave={saveInline} />
+                    <InlineMonto
+                      value={venta.monto}
+                      ariaLabel={`Monto del ${venta.fecha}`}
+                      onSave={(nextMonto) => saveInline(venta.fecha, nextMonto)}
+                    />
+                  </DataTableCell>
+                  <DataTableCell>
+                    <button
+                      type="button"
+                      onClick={() => setEditing(venta)}
+                      className="text-sm font-bold"
+                      style={{ color: brand.green }}
+                    >
+                      Editar
+                    </button>
                   </DataTableCell>
                 </DataTableRow>
               ))}
@@ -259,122 +272,158 @@ export function AdminVentas() {
           </DataTable>
         )}
       </section>
+
+      {editing ? (
+        <VentaModal
+          venta={editing}
+          onClose={() => setEditing(null)}
+          onSaved={(venta) => {
+            applyVenta(venta, editing.id);
+            if (venta.fecha === fecha) {
+              setMonto(montoDraft(venta.monto));
+            } else if (editing.fecha === fecha) {
+              setMonto("");
+            }
+            setEditing(null);
+            setSaved(true);
+            setError(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
-function InlineMonto({
+function VentaModal({
   venta,
-  onSave,
+  onClose,
+  onSaved,
 }: {
   venta: VentaDiaria;
-  onSave: (fecha: string, monto: string) => Promise<void>;
+  onClose: () => void;
+  onSaved: (venta: VentaDiaria) => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(montoDraft(venta.monto));
-  const [busy, setBusy] = useState(false);
-  const [rowError, setRowError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const yesterday = yesterdayDayKey();
+  const [fecha, setFecha] = useState(venta.fecha);
+  const [monto, setMonto] = useState(montoDraft(venta.monto));
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!editing) {
-      setDraft(montoDraft(venta.monto));
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
     }
-  }, [editing, venta.monto]);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
 
-  useEffect(() => {
-    if (editing) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [editing]);
-
-  async function commit() {
-    if (busy) {
-      return;
-    }
-    const next = draft.trim();
-    if (!next) {
-      setDraft(montoDraft(venta.monto));
-      setEditing(false);
-      setRowError(null);
-      return;
-    }
-    const parsed = toMoney(next.replace(",", "."));
-    if (!(parsed > 0)) {
-      setRowError("El monto tiene que ser mayor que 0");
-      inputRef.current?.focus();
-      return;
-    }
-    if (moneyEqual(parsed, venta.monto)) {
-      setEditing(false);
-      setRowError(null);
-      return;
-    }
-    setBusy(true);
+  async function save() {
+    setSaving(true);
+    setFormError(null);
     try {
-      await onSave(venta.fecha, next);
-      setEditing(false);
-      setRowError(null);
+      const response = await fetch(`/api/admin/ventas/${venta.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fecha, monto }),
+      });
+      const body = (await response.json().catch(() => null)) as { venta?: VentaDiaria; error?: string } | null;
+      if (!response.ok || !body?.venta) {
+        throw new Error(body?.error || "No pudimos guardar la venta");
+      }
+      onSaved(body.venta);
     } catch (saveError) {
-      setRowError(saveError instanceof Error ? saveError.message : "No pudimos guardar");
+      setFormError(saveError instanceof Error ? saveError.message : "No pudimos guardar la venta");
     } finally {
-      setBusy(false);
+      setSaving(false);
     }
-  }
-
-  if (!editing) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setDraft(montoDraft(venta.monto));
-          setRowError(null);
-          setEditing(true);
-        }}
-        className="rounded-lg px-2 py-1.5 font-bold tabular-nums transition-colors hover:bg-black/[0.05]"
-        style={{ color: brand.ink }}
-        title="Editar monto"
-      >
-        {formatPrice(venta.monto)}
-      </button>
-    );
   }
 
   return (
-    <span className="inline-flex flex-col items-end">
-      <input
-        ref={inputRef}
-        value={draft}
-        inputMode="decimal"
-        disabled={busy}
-        aria-label={`Monto del ${venta.fecha}`}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => void commit()}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            void commit();
-          }
-          if (event.key === "Escape") {
-            event.preventDefault();
-            setDraft(montoDraft(venta.monto));
-            setRowError(null);
-            setEditing(false);
-          }
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+      <button type="button" className="absolute inset-0 bg-black/40" aria-label="Cerrar" onClick={onClose} />
+      <form
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="venta-title"
+        className="relative z-10 w-full max-w-md overflow-hidden rounded-[28px] bg-white p-6"
+        style={{ boxShadow: "0 24px 64px rgba(26, 26, 26, 0.18)", color: brand.ink }}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void save();
         }}
-        className={cx(
-          adminControlClass,
-          "h-9 w-32 px-2 text-right font-bold tabular-nums",
-          rowError && "border-brand-error focus:border-brand-error focus:ring-brand-error/40"
-        )}
-        style={{ color: brand.ink }}
-      />
-      {rowError ? (
-        <span className="mt-1 text-[11px] font-semibold" style={{ color: brand.error }}>
-          {rowError}
-        </span>
-      ) : null}
-    </span>
+      >
+        <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Ventas</p>
+        <h2 id="venta-title" className="font-display mt-1 text-2xl font-bold">
+          Editar venta
+        </h2>
+        <p className="mt-1 text-sm text-brand-muted">Puedes corregir la fecha y el monto de este día.</p>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <label className={adminLabelClass}>
+            Fecha
+            <AdminInput
+              type="date"
+              required
+              value={fecha}
+              max={yesterday}
+              onChange={(event) => setFecha(event.target.value)}
+            />
+          </label>
+          <label className={adminLabelClass}>
+            Monto
+            <span className="relative mt-1.5 block">
+              <span
+                className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-semibold"
+                style={{ color: brand.orange }}
+              >
+                RD$
+              </span>
+              <AdminInput
+                bare
+                required
+                value={monto}
+                inputMode="decimal"
+                onChange={(event) => setMonto(event.target.value)}
+                className="!pl-12 font-semibold tabular-nums"
+              />
+            </span>
+          </label>
+        </div>
+
+        {formError ? (
+          <p className="mt-4 rounded-2xl px-3 py-2 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
+            {formError}
+          </p>
+        ) : null}
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full px-4 text-sm font-bold"
+            style={{ minHeight: 44, border: "1px solid #E5E7EB", color: brand.ink }}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={saving || !monto.trim()}
+            className="rounded-full px-5 text-sm font-bold text-white disabled:opacity-40"
+            style={{ minHeight: 44, backgroundColor: brand.green }}
+          >
+            {saving ? "Guardando..." : "Guardar"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

@@ -32,6 +32,7 @@ import {
   DataTableRow,
   DataTableTh,
 } from "@/components/admin/DataTable";
+import { InlineMonto } from "@/components/admin/InlineMonto";
 
 type View = "resumen" | "detalle";
 
@@ -172,6 +173,25 @@ export function AdminVentasHistorico() {
   function openDetalle(mesValue: string) {
     setMes(monthInputValue(mesValue));
     setView("detalle");
+  }
+
+  async function saveVentaDia(fecha: string, nextMonto: string) {
+    setError(null);
+    const response = await fetch("/api/admin/ventas", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fecha, monto: nextMonto }),
+    });
+    if (response.status === 401) {
+      router.replace("/admin/login");
+      throw new Error("No autorizado");
+    }
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+    if (!response.ok) {
+      throw new Error(body?.error || "No pudimos guardar la venta");
+    }
+    await Promise.all([loadDetalle(mes), loadResumen()]);
   }
 
   return (
@@ -326,9 +346,12 @@ export function AdminVentasHistorico() {
                   <h2 className="font-display text-lg font-bold">{detalle.label}</h2>
                   {detalle.esMesActivo && detalle.hasta ? (
                     <p className="text-sm text-brand-muted">
-                      Hasta {formatDayKey(detalle.hasta)} — los días que faltan no se muestran.
+                      Hasta {formatDayKey(detalle.hasta)} — los días que faltan no se muestran. Haz clic en la venta
+                      real para corregirla.
                     </p>
-                  ) : null}
+                  ) : (
+                    <p className="text-sm text-brand-muted">Haz clic en la venta real para corregirla.</p>
+                  )}
                 </div>
               }
             >
@@ -353,8 +376,12 @@ export function AdminVentasHistorico() {
                   >
                     <DataTableCell className="whitespace-nowrap py-2.5 font-semibold">{formatDayKey(dia.fecha)}</DataTableCell>
                     <DataTableCell className="py-2.5">{dia.dia}</DataTableCell>
-                    <DataTableCell numeric className="py-2.5">
-                      {formatPrice(dia.ventaReal)}
+                    <DataTableCell numeric className="py-2">
+                      <InlineMonto
+                        value={dia.ventaReal}
+                        ariaLabel={`Venta real del ${dia.fecha}`}
+                        onSave={(nextMonto) => saveVentaDia(dia.fecha, nextMonto)}
+                      />
                     </DataTableCell>
                     <DataTableCell numeric className="py-2.5">
                       {formatPrice(dia.metaDelDia)}
