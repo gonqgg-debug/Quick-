@@ -25,7 +25,6 @@ export function CatalogCategoryGrid({ categories, onSelect }: CatalogCategoryGri
           <CategoryTile
             key={chip.name}
             name={chip.name}
-            count={chip.count}
             onSelect={() => onSelect(chip.name)}
           />
         ))}
@@ -33,7 +32,6 @@ export function CatalogCategoryGrid({ categories, onSelect }: CatalogCategoryGri
           <CategoryTile
             key={chip.name}
             name={chip.name}
-            count={chip.count}
             featured
             onSelect={() => onSelect(chip.name)}
           />
@@ -45,12 +43,10 @@ export function CatalogCategoryGrid({ categories, onSelect }: CatalogCategoryGri
 
 function CategoryTile({
   name,
-  count,
   featured = false,
   onSelect,
 }: {
   name: string;
-  count: number;
   featured?: boolean;
   onSelect: () => void;
 }) {
@@ -73,9 +69,11 @@ function CategoryTile({
       </span>
       <span className="min-w-0">
         <span className="block text-sm font-bold leading-tight text-brand-ink">{name}</span>
-        <span className="mt-0.5 block text-xs font-semibold" style={{ color: featured ? brand.blue : brand.muted }}>
-          {featured ? "PharmaQuick!" : `${count} productos`}
-        </span>
+        {featured ? (
+          <span className="mt-0.5 block text-xs font-semibold" style={{ color: brand.blue }}>
+            PharmaQuick!
+          </span>
+        ) : null}
       </span>
     </button>
   );
