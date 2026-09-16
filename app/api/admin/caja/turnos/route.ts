@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
 import { createCajaTurno, listCajaTurnos } from "@/lib/admin-caja";
+import { getCajaParametros } from "@/lib/caja";
 import { isDayKey } from "@/lib/local-day";
 
 export const dynamic = "force-dynamic";
@@ -13,8 +14,9 @@ export async function GET(request: NextRequest) {
 
   const fechaRaw = request.nextUrl.searchParams.get("fecha")?.trim() ?? "";
   try {
-    const turnos = await listCajaTurnos(isDayKey(fechaRaw) ? fechaRaw : null);
-    return NextResponse.json({ turnos });
+    const fecha = isDayKey(fechaRaw) ? fechaRaw : null;
+    const [turnos, parametros] = await Promise.all([listCajaTurnos(fecha), getCajaParametros()]);
+    return NextResponse.json({ turnos, tasaUsdDop: parametros.tasaUsdDop });
   } catch (error) {
     const message =
       error && typeof error === "object" && "message" in error && typeof error.message === "string" && error.message
