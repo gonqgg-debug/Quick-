@@ -91,7 +91,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
   },
   {
     id: "pharma-crisfer",
-    name: "Plaza Crisfer, Local 11",
+    name: "Plaza Crisfer",
     brand: "pharmaquick",
     status: "projected",
     lat: 18.6065,
