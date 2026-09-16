@@ -10,8 +10,9 @@ import {
   type CajaTurnoListItem,
   type CajaTurnoPeriodo,
 } from "@/lib/admin-caja-shared";
+import { parsePrice } from "@/lib/catalog-import";
 import { formatDayKey, yesterdayDayKey } from "@/lib/local-day";
-import { formatPrice } from "@/lib/money";
+import { formatPrice, toMoney } from "@/lib/money";
 import { brand } from "@/lib/theme";
 import { AdminInput, AdminSelect, AdminTextarea, adminLabelClass } from "@/components/admin/AdminField";
 import {
@@ -28,6 +29,7 @@ const RED = "#DC2626";
 export function AdminCajaTurnos() {
   const router = useRouter();
   const [turnos, setTurnos] = useState<CajaTurnoListItem[]>([]);
+  const [tasaUsdDop, setTasaUsdDop] = useState(0);
   const [fecha, setFecha] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,11 +48,14 @@ export function AdminCajaTurnos() {
       router.replace("/admin/login");
       return;
     }
-    const body = (await response.json().catch(() => null)) as { turnos?: CajaTurnoListItem[]; error?: string } | null;
+    const body = (await response.json().catch(() => null)) as
+      | { turnos?: CajaTurnoListItem[]; tasaUsdDop?: number; error?: string }
+      | null;
     if (!response.ok) {
       throw new Error(body?.error || "No pudimos cargar los turnos");
     }
     setTurnos(body?.turnos ?? []);
+    setTasaUsdDop(toMoney(body?.tasaUsdDop));
   }, [fecha, router]);
 
   useEffect(() => {
@@ -187,6 +192,7 @@ export function AdminCajaTurnos() {
       {editing ? (
         <TurnoModal
           turno={editing === "new" ? null : editing}
+          tasaUsdDop={tasaUsdDop}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
@@ -216,10 +222,12 @@ function amountDraft(value: number): string {
 
 function TurnoModal({
   turno: existing,
+  tasaUsdDop,
   onClose,
   onSaved,
 }: {
   turno: CajaTurnoListItem | null;
+  tasaUsdDop: number;
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {
@@ -335,7 +343,13 @@ function TurnoModal({
           <MoneyField label="Sistema efectivo" value={sistemaEfectivo} onChange={setSistemaEfectivo} />
           <MoneyField label="Reportado tarjeta" value={reportadoTarjeta} onChange={setReportadoTarjeta} />
           <MoneyField label="Reportado efectivo" value={reportadoEfectivo} onChange={setReportadoEfectivo} />
-          <MoneyField label="Reportado USD" prefix="US$" value={reportadoUsd} onChange={setReportadoUsd} />
+          <MoneyField
+            label="Reportado USD"
+            prefix="US$"
+            value={reportadoUsd}
+            onChange={setReportadoUsd}
+            hint={usdEquivalenteHint(reportadoUsd, tasaUsdDop || existing?.tasaUsdDop || 0)}
+          />
         </div>
 
         <label className={`${adminLabelClass} mt-4 flex items-center gap-2`}>
@@ -382,16 +396,29 @@ function TurnoModal({
   );
 }
 
+function usdEquivalenteHint(rawUsd: string, tasaUsdDop: number): string | null {
+  if (!(tasaUsdDop > 0)) {
+    return null;
+  }
+  const parsed = rawUsd.trim() === "" ? 0 : parsePrice(rawUsd);
+  if (parsed == null) {
+    return `Tasa aceptada ${formatPrice(tasaUsdDop)} / US$1`;
+  }
+  return `Equivale a ${formatPrice(toMoney(parsed * tasaUsdDop))} · tasa ${formatPrice(tasaUsdDop)} / US$1`;
+}
+
 function MoneyField({
   label,
   value,
   onChange,
   prefix = "RD$",
+  hint,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   prefix?: string;
+  hint?: string | null;
 }) {
   return (
     <label className={adminLabelClass}>
@@ -411,6 +438,9 @@ function MoneyField({
           className="!pl-12 font-semibold tabular-nums"
         />
       </span>
+      {hint ? (
+        <span className="mt-1 block text-xs font-medium text-brand-muted">{hint}</span>
+      ) : null}
     </label>
   );
 }

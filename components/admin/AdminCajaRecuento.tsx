@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { formatCajaMoney, isNearZero, type Caja, type CajaMoneda } from "@/lib/admin-caja-shared";
-import type { CajaBalances } from "@/lib/caja";
+import { formatCajaMoney, isNearZero, type CajaMoneda } from "@/lib/admin-caja-shared";
+import type { CajaAsignacionSugerida, CajaBalances } from "@/lib/caja";
 import { toMoney } from "@/lib/money";
 import { brand } from "@/lib/theme";
 import { AdminInput } from "@/components/admin/AdminField";
@@ -14,11 +14,146 @@ const GREEN = brand.green;
 const RED = brand.error;
 const DOP_DENOMS = [2000, 1000, 500, 200, 100, 50, 25, 10, 5, 1] as const;
 const USD_DENOMS = [100, 50, 20, 10, 5, 1] as const;
+const DRAFT_STORAGE_KEY = "quick.admin.caja.recuento.v2";
+const LEGACY_DRAFT_STORAGE_KEY = "quick.admin.caja.recuento.v1";
 
 type Counts<T extends number> = Record<T, string>;
+type MobileTab = "dop" | "usd";
+type DopModo = "Fuerte" | "Chica" | "Ajuste";
+type DopDenom = (typeof DOP_DENOMS)[number];
+type UsdDenom = (typeof USD_DENOMS)[number];
+type DopCountsMap = Record<DopModo, Counts<DopDenom>>;
+
+type RecuentoDraft = {
+  dopModo: DopModo;
+  mobileTab: MobileTab;
+  dopCounts: DopCountsMap;
+  usdCounts: Counts<UsdDenom>;
+};
+
+let memoryDraft: RecuentoDraft | null = null;
 
 function emptyCounts<T extends number>(denoms: readonly T[]): Counts<T> {
   return Object.fromEntries(denoms.map((denom) => [denom, ""])) as Counts<T>;
+}
+
+function parseStoredCounts<T extends number>(denoms: readonly T[], raw: unknown): Counts<T> {
+  const counts = emptyCounts(denoms);
+  if (!raw || typeof raw !== "object") {
+    return counts;
+  }
+  const record = raw as Record<string, unknown>;
+  for (const denom of denoms) {
+    const value = record[String(denom)];
+    if (typeof value === "string") {
+      counts[denom] = sanitizeCount(value);
+    }
+  }
+  return counts;
+}
+
+function emptyDopCountsMap(): DopCountsMap {
+  return {
+    Fuerte: emptyCounts(DOP_DENOMS),
+    Chica: emptyCounts(DOP_DENOMS),
+    Ajuste: emptyCounts(DOP_DENOMS),
+  };
+}
+
+function parseDopModo(value: unknown): DopModo {
+  return value === "Chica" || value === "Ajuste" ? value : "Fuerte";
+}
+
+function emptyDraft(): RecuentoDraft {
+  return {
+    dopModo: "Fuerte",
+    mobileTab: "dop",
+    dopCounts: emptyDopCountsMap(),
+    usdCounts: emptyCounts(USD_DENOMS),
+  };
+}
+
+function parseDraft(raw: unknown): RecuentoDraft | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const record = raw as Record<string, unknown>;
+  const dopCounts = emptyDopCountsMap();
+  if (record.dopCounts && typeof record.dopCounts === "object" && !Array.isArray(record.dopCounts)) {
+    const grouped = record.dopCounts as Record<string, unknown>;
+    if (grouped.Fuerte || grouped.Chica || grouped.Ajuste) {
+      dopCounts.Fuerte = parseStoredCounts(DOP_DENOMS, grouped.Fuerte);
+      dopCounts.Chica = parseStoredCounts(DOP_DENOMS, grouped.Chica);
+      dopCounts.Ajuste = parseStoredCounts(DOP_DENOMS, grouped.Ajuste);
+    } else {
+      const legacy = parseStoredCounts(DOP_DENOMS, grouped);
+      const modo = parseDopModo(record.cajaDop ?? record.dopModo);
+      dopCounts[modo] = legacy;
+    }
+  }
+  return {
+    dopModo: parseDopModo(record.dopModo ?? record.cajaDop),
+    mobileTab: record.mobileTab === "usd" ? "usd" : "dop",
+    dopCounts,
+    usdCounts: parseStoredCounts(USD_DENOMS, record.usdCounts),
+  };
+}
+
+function readStoredDraft(): RecuentoDraft | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = window.sessionStorage.getItem(DRAFT_STORAGE_KEY) ?? window.sessionStorage.getItem(LEGACY_DRAFT_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    return parseDraft(JSON.parse(raw) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+function loadDraft(): RecuentoDraft {
+  if (memoryDraft) {
+    return memoryDraft;
+  }
+  const stored = readStoredDraft();
+  if (stored) {
+    memoryDraft = stored;
+    return stored;
+  }
+  return emptyDraft();
+}
+
+function persistDraft(draft: RecuentoDraft) {
+  memoryDraft = draft;
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    window.sessionStorage.removeItem(LEGACY_DRAFT_STORAGE_KEY);
+  } catch {
+    // Private mode or quota: in-memory draft still survives tab switches in this session.
+  }
+}
+
+function clearDraft() {
+  memoryDraft = null;
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+    window.sessionStorage.removeItem(LEGACY_DRAFT_STORAGE_KEY);
+  } catch {
+    // Ignore storage failures on reset.
+  }
+}
+
+function countsHaveValue<T extends number>(counts: Counts<T>): boolean {
+  return Object.values(counts).some((value) => String(value).trim() !== "");
 }
 
 function parseCount(raw: string): number {
@@ -48,13 +183,31 @@ function formatSignedAmount(value: number, moneda: CajaMoneda): string {
 
 export function AdminCajaRecuento() {
   const router = useRouter();
-  const [cajaDop, setCajaDop] = useState<Caja>("Fuerte");
-  const [dopCounts, setDopCounts] = useState(() => emptyCounts(DOP_DENOMS));
+  const [dopModo, setDopModo] = useState<DopModo>("Fuerte");
+  const [dopCounts, setDopCounts] = useState<DopCountsMap>(() => emptyDopCountsMap());
   const [usdCounts, setUsdCounts] = useState(() => emptyCounts(USD_DENOMS));
-  const [mobileTab, setMobileTab] = useState<"dop" | "usd">("dop");
+  const [mobileTab, setMobileTab] = useState<MobileTab>("dop");
+  const [ready, setReady] = useState(false);
   const [balances, setBalances] = useState<CajaBalances | null>(null);
+  const [asignacion, setAsignacion] = useState<CajaAsignacionSugerida | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const draft = loadDraft();
+    setDopModo(draft.dopModo);
+    setDopCounts(draft.dopCounts);
+    setUsdCounts(draft.usdCounts);
+    setMobileTab(draft.mobileTab);
+    setReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+    persistDraft({ dopModo, mobileTab, dopCounts, usdCounts });
+  }, [ready, dopModo, mobileTab, dopCounts, usdCounts]);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,12 +219,15 @@ export function AdminCajaRecuento() {
           router.replace("/admin/login");
           return;
         }
-        const body = (await response.json().catch(() => null)) as { balances?: CajaBalances; error?: string } | null;
+        const body = (await response.json().catch(() => null)) as
+          | { balances?: CajaBalances; asignacion?: CajaAsignacionSugerida; error?: string }
+          | null;
         if (!response.ok) {
           throw new Error(body?.error || "No pudimos cargar el saldo esperado");
         }
         if (!cancelled) {
           setBalances(body?.balances ?? null);
+          setAsignacion(body?.asignacion ?? null);
           setError(null);
         }
       } catch (loadError) {
@@ -89,15 +245,35 @@ export function AdminCajaRecuento() {
     };
   }, [router]);
 
-  const totalDop = useMemo(() => totalFrom(DOP_DENOMS, dopCounts), [dopCounts]);
+  const dopCountsActivos = dopCounts[dopModo];
+  const totalDop = useMemo(() => totalFrom(DOP_DENOMS, dopCountsActivos), [dopCountsActivos]);
   const totalUsd = useMemo(() => totalFrom(USD_DENOMS, usdCounts), [usdCounts]);
-  const esperadoDop = cajaDop === "Chica" ? (balances?.chicaDop ?? null) : (balances?.fuerteDop ?? null);
+  const esperadoDop =
+    dopModo === "Ajuste"
+      ? (asignacion?.recomendadoMoverAChica ?? null)
+      : dopModo === "Chica"
+        ? (balances?.chicaDop ?? null)
+        : (balances?.fuerteDop ?? null);
   const esperadoUsd = balances?.fuerteUsd ?? null;
+  const canReset =
+    countsHaveValue(dopCounts.Fuerte) ||
+    countsHaveValue(dopCounts.Chica) ||
+    countsHaveValue(dopCounts.Ajuste) ||
+    countsHaveValue(usdCounts);
+
+  function resetRecuento() {
+    const next = emptyDraft();
+    setDopModo(next.dopModo);
+    setDopCounts(next.dopCounts);
+    setUsdCounts(next.usdCounts);
+    setMobileTab(next.mobileTab);
+    clearDraft();
+  }
 
   return (
     <div>
       <p className="text-sm" style={{ color: MUTED }}>
-        Calculadora de un solo uso: no se guarda nada. Si recargas, vuelve a cero.
+        El recuento se queda guardado si cambias de pestaña. Usa Resetear para borrar todo.
       </p>
       {error ? (
         <p className="mt-4 rounded-lg px-4 py-3 text-sm" style={{ backgroundColor: "#FEE2E2", color: RED }}>
@@ -120,21 +296,38 @@ export function AdminCajaRecuento() {
             title="Recuento DOP"
             moneda="DOP"
             denoms={DOP_DENOMS}
-            counts={dopCounts}
+            counts={dopCountsActivos}
             onCountChange={(denom, value) =>
-              setDopCounts((current) => ({ ...current, [denom]: sanitizeCount(value) }))
+              setDopCounts((current) => ({
+                ...current,
+                [dopModo]: { ...current[dopModo], [denom]: sanitizeCount(value) },
+              }))
             }
             total={totalDop}
             esperado={esperadoDop}
+            esperadoLabel={dopModo === "Ajuste" ? "Para llenar chica" : "Saldo esperado"}
             loadingEsperado={loading}
             header={
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Caja del recuento DOP">
-                <CajaChoice active={cajaDop === "Fuerte"} onClick={() => setCajaDop("Fuerte")}>
-                  Caja Fuerte
-                </CajaChoice>
-                <CajaChoice active={cajaDop === "Chica"} onClick={() => setCajaDop("Chica")}>
-                  Caja Chica
-                </CajaChoice>
+              <div>
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Caja del recuento DOP">
+                  <CajaChoice active={dopModo === "Fuerte"} onClick={() => setDopModo("Fuerte")}>
+                    Caja Fuerte
+                  </CajaChoice>
+                  <CajaChoice active={dopModo === "Chica"} onClick={() => setDopModo("Chica")}>
+                    Caja Chica
+                  </CajaChoice>
+                  <CajaChoice active={dopModo === "Ajuste"} onClick={() => setDopModo("Ajuste")}>
+                    Ajuste Caja Chica
+                  </CajaChoice>
+                </div>
+                {dopModo === "Ajuste" ? (
+                  <p className="mt-3 text-sm" style={{ color: MUTED }}>
+                    Cuenta lo que vas a mover a caja chica para dejarla llena
+                    {asignacion
+                      ? ` (objetivo ${formatCajaMoney(asignacion.objetivoCajaChica, "DOP")}, saldo ${formatCajaMoney(asignacion.saldoEsperadoChica, "DOP")}).`
+                      : "."}
+                  </p>
+                ) : null}
               </div>
             }
           />
@@ -159,6 +352,18 @@ export function AdminCajaRecuento() {
           />
         </div>
       </div>
+
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          onClick={resetRecuento}
+          disabled={!canReset}
+          className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
+          style={{ minHeight: 44, border: "1px solid #E5E7EB", color: INK, backgroundColor: "#FFFFFF" }}
+        >
+          Resetear recuento
+        </button>
+      </div>
     </div>
   );
 }
@@ -171,6 +376,7 @@ function RecuentoPanel<T extends number>({
   onCountChange,
   total,
   esperado,
+  esperadoLabel = "Saldo esperado",
   loadingEsperado,
   header,
 }: {
@@ -181,6 +387,7 @@ function RecuentoPanel<T extends number>({
   onCountChange: (denom: T, value: string) => void;
   total: number;
   esperado: number | null;
+  esperadoLabel?: string;
   loadingEsperado: boolean;
   header: ReactNode;
 }) {
@@ -237,7 +444,7 @@ function RecuentoPanel<T extends number>({
       <dl className="mt-5 space-y-2 border-t border-[#E5E7EB] pt-4">
         <SummaryRow label="Total contado" value={formatCajaMoney(total, moneda)} emphasize />
         <SummaryRow
-          label="Saldo esperado"
+          label={esperadoLabel}
           value={loadingEsperado ? "…" : esperado == null ? "—" : formatCajaMoney(esperado, moneda)}
         />
         <div className="flex items-baseline justify-between gap-3 pt-1">
