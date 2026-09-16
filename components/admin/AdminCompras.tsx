@@ -503,11 +503,14 @@ function CompraModal({
   const [dueDate, setDueDate] = useState(compra?.dueDate ?? today);
   const [pagado, setPagado] = useState(compra?.pagado ?? false);
   const [pagadoEn, setPagadoEn] = useState(compra?.pagadoEn ?? today);
+  const [pagadoAlRegistrar, setPagadoAlRegistrar] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const skipAutoDue = useRef(!isNew);
 
   const selected = proveedores.find((item) => item.id === proveedorId) ?? null;
+  const esCredito = Boolean(selected?.tieneCredito);
+  const vencimientoAutomatico = dueDateFromCredit(fecha, selected);
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -529,26 +532,35 @@ function CompraModal({
   }, [onClose]);
 
   useEffect(() => {
+    if (isNew) {
+      return;
+    }
     if (skipAutoDue.current) {
       skipAutoDue.current = false;
       return;
     }
     const proveedor = proveedores.find((item) => item.id === proveedorId) ?? null;
     setDueDate(dueDateFromCredit(fecha, proveedor));
-  }, [fecha, proveedorId, proveedores]);
+  }, [fecha, isNew, proveedorId, proveedores]);
 
   async function save() {
     setSaving(true);
     setFormError(null);
     try {
+      const registrarPagada = isNew && !esCredito && pagadoAlRegistrar;
       const payload: Record<string, unknown> = {
         proveedorId: proveedorId || undefined,
         proveedorNombre: query.trim() || undefined,
         monto,
         fecha,
-        dueDate,
+        dueDate: isNew ? vencimientoAutomatico : dueDate,
       };
-      if (!isNew) {
+      if (isNew) {
+        if (registrarPagada) {
+          payload.pagado = true;
+          payload.pagadoEn = fecha;
+        }
+      } else {
         payload.pagado = pagado;
         if (pagado) {
           payload.pagadoEn = pagadoEn;
@@ -641,20 +653,52 @@ function CompraModal({
           </span>
         </label>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className={`mt-4 grid gap-3 ${isNew ? "" : "sm:grid-cols-2"}`}>
           <label className={adminLabelClass}>
             Fecha
             <AdminInput type="date" required value={fecha} onChange={(event) => setFecha(event.target.value)} />
           </label>
-          <label className={adminLabelClass}>
-            Vence
-            <AdminInput type="date" required value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
-          </label>
+          {isNew ? null : (
+            <label className={adminLabelClass}>
+              Vence
+              <AdminInput type="date" required value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+            </label>
+          )}
         </div>
-        {selected?.tieneCredito ? (
+        {isNew && esCredito ? (
+          <div className="mt-3 rounded-2xl px-3 py-2.5" style={{ backgroundColor: "#F8FAF7" }}>
+            <p className="text-sm font-semibold">Vence {formatDayKey(vencimientoAutomatico)}</p>
+            <p className="mt-0.5 text-xs text-brand-muted">
+              Plazo máximo de {selected?.nombre}: {selected?.diasCredito} días.
+            </p>
+          </div>
+        ) : null}
+        {!isNew && selected?.tieneCredito ? (
           <p className="mt-2 text-xs text-brand-muted">
             Crédito de {selected.nombre}: {selected.diasCredito} días. Puedes cambiar la fecha de vencimiento.
           </p>
+        ) : null}
+
+        {isNew && !esCredito ? (
+          <div className="mt-4">
+            <label className="flex items-start gap-2.5 text-sm font-semibold">
+              <input
+                type="checkbox"
+                checked={pagadoAlRegistrar}
+                onChange={(event) => setPagadoAlRegistrar(event.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-[#7EB341]"
+              />
+              <span>
+                Orden pagada
+                <span className="mt-0.5 block text-xs font-medium text-brand-muted">
+                  Márcala si la pagaste al momento. Así no pasa a pendientes.
+                </span>
+              </span>
+            </label>
+            {!pagadoAlRegistrar ? (
+              <p className="mt-2 text-xs text-brand-muted">Contado · vence el mismo día.</p>
+            ) : null}
+          </div>
         ) : null}
 
         {!isNew ? (

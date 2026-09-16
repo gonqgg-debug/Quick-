@@ -4,6 +4,7 @@ import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import {
   COMPRAS_PAGE_SIZE,
+  dueDateFromCredit,
   sortProveedores,
   summarizePendientes,
   type Compra,
@@ -326,6 +327,16 @@ function parseDayField(value: unknown, message: string): string {
   return day;
 }
 
+function parseOptionalDayField(value: unknown, message: string): string | null {
+  if (value == null) {
+    return null;
+  }
+  if (typeof value === "string" && value.trim() === "") {
+    return null;
+  }
+  return parseDayField(value, message);
+}
+
 function parseMontoInput(value: unknown): number {
   const montoRaw =
     typeof value === "number"
@@ -384,9 +395,15 @@ export type CompraInput = {
 
 export async function createCompra(input: CompraInput): Promise<Compra> {
   const fecha = parseDayField(input.fecha, "La fecha de compra no es válida");
-  const dueDate = parseDayField(input.dueDate, "La fecha de vencimiento no es válida");
   const monto = parseMontoInput(input.monto);
   const proveedor = await resolveProveedor(input);
+  const dueDate =
+    parseOptionalDayField(input.dueDate, "La fecha de vencimiento no es válida") ??
+    dueDateFromCredit(fecha, proveedor);
+  const pagado = input.pagado === true;
+  const pagadoEn = pagado
+    ? parseOptionalDayField(input.pagadoEn, "La fecha de pago no es válida") ?? fecha
+    : null;
 
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
@@ -396,8 +413,8 @@ export async function createCompra(input: CompraInput): Promise<Compra> {
       monto,
       fecha,
       due_date: dueDate,
-      pagado: false,
-      pagado_en: null,
+      pagado,
+      pagado_en: pagadoEn,
     })
     .select(COMPRA_SELECT)
     .single();

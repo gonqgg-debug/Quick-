@@ -3,6 +3,7 @@ import {
   formatTendenciaFecha,
   type AdminDashboardData,
   type DashboardFactura,
+  type DashboardProximoDia,
   type DashboardSparkPoint,
   type DashboardTendenciaDia,
 } from "@/lib/admin-dashboard-shared";
@@ -28,7 +29,7 @@ import {
   type FacturaPendiente,
   type MesActivo,
 } from "@/lib/finanzas";
-import { addDaysToDayKey, yesterdayDayKey } from "@/lib/local-day";
+import { addDaysToDayKey, todayDayKey, yesterdayDayKey } from "@/lib/local-day";
 
 const SPARKLINE_DAYS = 14;
 const TENDENCIA_DAYS = 7;
@@ -50,6 +51,24 @@ function previousMes(mes: MesActivo): MesActivo {
   return { year: mes.year, month, diasEnMes: daysInMonth(mes.year, month) };
 }
 
+function mesFromDayKey(fecha: string): MesActivo | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha);
+  if (!match) {
+    return null;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  return { year, month, diasEnMes: daysInMonth(year, month) };
+}
+
+function mesKey(mes: MesActivo): string {
+  return `${mes.year}-${pad2(mes.month)}`;
+}
+
+async function metasPorDiaSemana(mes: MesActivo): Promise<number[]> {
+  return Promise.all(WEEKDAYS.map((dia) => getMetaDelDia(dia, mes)));
+}
+
 function mapFactura(factura: FacturaPendiente): DashboardFactura {
   return {
     id: factura.id,
@@ -64,7 +83,9 @@ function mapFactura(factura: FacturaPendiente): DashboardFactura {
 async function loadTendencias(mesActivo: MesActivo): Promise<{
   sparkline14: DashboardSparkPoint[];
   tendencia7: DashboardTendenciaDia[];
+  proximos7: DashboardProximoDia[];
 }> {
+  const today = todayDayKey();
   const yesterday = yesterdayDayKey();
   const monthStart = `${mesActivo.year}-${pad2(mesActivo.month)}-01`;
   const monthEnd = `${mesActivo.year}-${pad2(mesActivo.month)}-${pad2(mesActivo.diasEnMes)}`;
@@ -74,7 +95,7 @@ async function loadTendencias(mesActivo: MesActivo): Promise<{
   const [ventasMes, ventasPrev, metasPorDia] = await Promise.all([
     getVentasDiariasMes(mesActivo),
     needsPrevMonth ? getVentasDiariasMes(previousMes(mesActivo)) : Promise.resolve([]),
-    Promise.all(WEEKDAYS.map((dia) => getMetaDelDia(dia, mesActivo))),
+    metasPorDiaSemana(mesActivo),
   ]);
 
   const porFecha = new Map(
@@ -113,9 +134,43 @@ async function loadTendencias(mesActivo: MesActivo): Promise<{
     }
   }
 
+  const metasPorMes = new Map<string, number[]>([[mesKey(mesActivo), metasPorDia]]);
+  const fechasProximas = Array.from({ length: TENDENCIA_DAYS }, (_, offset) => addDaysToDayKey(today, offset));
+  const mesesFaltantes: MesActivo[] = [];
+  for (const fecha of fechasProximas) {
+    const mes = mesFromDayKey(fecha);
+    if (!mes) {
+      continue;
+    }
+    const key = mesKey(mes);
+    if (metasPorMes.has(key) || mesesFaltantes.some((item) => mesKey(item) === key)) {
+      continue;
+    }
+    mesesFaltantes.push(mes);
+  }
+
+  if (mesesFaltantes.length > 0) {
+    const extras = await Promise.all(mesesFaltantes.map((mes) => metasPorDiaSemana(mes)));
+    mesesFaltantes.forEach((mes, index) => {
+      metasPorMes.set(mesKey(mes), extras[index] ?? []);
+    });
+  }
+
+  const proximos7: DashboardProximoDia[] = fechasProximas.map((fecha) => {
+    const mes = mesFromDayKey(fecha) ?? mesActivo;
+    const metas = metasPorMes.get(mesKey(mes)) ?? metasPorDia;
+    const weekday = isoWeekdayIndex(fecha);
+    return {
+      fecha,
+      label: formatTendenciaFecha(fecha),
+      metaDelDia: weekday == null ? 0 : metas[weekday] ?? 0,
+    };
+  });
+
   return {
     sparkline14,
     tendencia7: mesDias.slice(-TENDENCIA_DAYS),
+    proximos7,
   };
 }
 
@@ -174,5 +229,6 @@ export async function loadAdminDashboard(): Promise<AdminDashboardData> {
     umbralStop: umbrales.umbralStop,
     sparkline14: tendencias.sparkline14,
     tendencia7: tendencias.tendencia7,
+    proximos7: tendencias.proximos7,
   };
 }

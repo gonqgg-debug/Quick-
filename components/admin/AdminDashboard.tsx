@@ -21,6 +21,7 @@ import {
   semaforoDisponible,
   type AdminDashboardData,
   type DashboardFactura,
+  type DashboardProximoDia,
   type DashboardSparkPoint,
   type SemaforoNivel,
 } from "@/lib/admin-dashboard-shared";
@@ -112,7 +113,7 @@ export function AdminDashboard({ data }: { data: AdminDashboardData }) {
 
       <AlertasSection vencidas={data.facturasVencidas} porVencer={data.facturasPorVencer} />
 
-      <TendenciaSection dias={data.tendencia7} chartReady={chartReady} />
+      <TendenciaSection dias={data.tendencia7} proximos={data.proximos7 ?? []} chartReady={chartReady} />
     </div>
   );
 }
@@ -305,11 +306,16 @@ function FacturaList({
 
 function TendenciaSection({
   dias,
+  proximos,
   chartReady,
 }: {
   dias: AdminDashboardData["tendencia7"];
+  proximos: DashboardProximoDia[];
   chartReady: boolean;
 }) {
+  const metaProximos = proximos.reduce((total, dia) => total + dia.metaDelDia, 0);
+  const today = todayDayKey();
+
   return (
     <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-sm">
       <h2 className="text-base font-semibold" style={{ color: INK }}>
@@ -395,6 +401,58 @@ function TendenciaSection({
           </div>
         </>
       )}
+
+      <div className="mt-8 border-t border-[#E5E7EB] pt-5">
+        <h3 className="text-base font-semibold" style={{ color: INK }}>
+          Próximos 7 días
+        </h3>
+        <p className="mt-1 text-sm" style={{ color: MUTED }}>
+          Solo fechas y meta, para ver qué viene.
+        </p>
+        {proximos.length === 0 ? (
+          <p className="mt-4 text-sm" style={{ color: MUTED }}>
+            No hay metas cargadas para los próximos días.
+          </p>
+        ) : (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[320px] text-left text-sm">
+              <thead>
+                <tr className="text-xs font-medium uppercase tracking-wide" style={{ color: MUTED }}>
+                  <th className="border-b border-[#E5E7EB] px-3 py-2 font-medium">Fecha</th>
+                  <th className="border-b border-[#E5E7EB] px-3 py-2 text-right font-medium">Meta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {proximos.map((dia) => (
+                  <tr key={dia.fecha}>
+                    <td className="border-b border-[#F3F4F6] px-3 py-2.5 font-medium" style={{ color: INK }}>
+                      {dia.label}
+                      {dia.fecha === today ? (
+                        <span className="ml-2 text-xs font-medium" style={{ color: MUTED }}>
+                          Hoy
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="border-b border-[#F3F4F6] px-3 py-2.5 text-right tabular-nums" style={{ color: INK }}>
+                      {formatPrice(dia.metaDelDia)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td className="px-3 py-2.5 text-sm font-semibold" style={{ color: INK }}>
+                    Total 7 días
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-sm font-semibold tabular-nums" style={{ color: INK }}>
+                    {formatPrice(metaProximos)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
