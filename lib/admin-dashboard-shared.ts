@@ -23,6 +23,12 @@ export type DashboardTendenciaDia = {
   acumuladoMes: number;
 };
 
+export type DashboardProximoDia = {
+  fecha: string;
+  label: string;
+  metaDelDia: number;
+};
+
 export type AdminDashboardData = {
   mesActivo: string;
   ventasAcumuladas: number;
@@ -44,6 +50,7 @@ export type AdminDashboardData = {
   umbralStop: number;
   sparkline14: DashboardSparkPoint[];
   tendencia7: DashboardTendenciaDia[];
+  proximos7: DashboardProximoDia[];
 };
 
 export type SemaforoNivel = "ok" | "cuidado" | "stop";
