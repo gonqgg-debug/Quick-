@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { formatPrice, toMoney } from "@/lib/money";
+import { formatPrice, parsePrice, toMoney } from "@/lib/money";
 import { normalizeBarcode } from "@/lib/barcode";
 import { parseSpreadsheet } from "@/lib/read-spreadsheet";
 import type {
@@ -202,28 +202,7 @@ function pickMarca(raw: string[], indexes: number[], fallback: string | null): s
   return fallback;
 }
 
-export function parsePrice(raw: string): number | null {
-  let value = raw.trim();
-  if (!value) {
-    return null;
-  }
-  value = value.replace(/rd\$|dop|usd/gi, "").replace(/\$/g, "").trim();
-  value = value.replace(/\s/g, "");
-  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(value)) {
-    value = value.replace(/\./g, "").replace(",", ".");
-  } else if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(value)) {
-    value = value.replace(/,/g, "");
-  } else if (/^\d+,\d{1,2}$/.test(value)) {
-    value = value.replace(",", ".");
-  } else {
-    value = value.replace(/,/g, "");
-  }
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount < 0) {
-    return null;
-  }
-  return Math.round(amount * 100) / 100;
-}
+export { parsePrice } from "@/lib/money";
 
 function moneyEqual(left: number, right: number): boolean {
   return Math.round(toMoney(left) * 100) === Math.round(toMoney(right) * 100);
