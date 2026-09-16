@@ -43,6 +43,8 @@ export async function POST(request: NextRequest) {
     monto?: unknown;
     fecha?: unknown;
     dueDate?: unknown;
+    pagado?: unknown;
+    pagadoEn?: unknown;
   };
   try {
     body = (await request.json()) as typeof body;
