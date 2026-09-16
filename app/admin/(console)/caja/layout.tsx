@@ -1,4 +1,5 @@
 import { AdminCajaNav } from "@/components/admin/AdminCajaNav";
+import { AdminCajaPages } from "@/components/admin/AdminCajaPages";
 
 export default function AdminCajaLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -6,7 +7,9 @@ export default function AdminCajaLayout({ children }: { children: React.ReactNod
       <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Finanzas</p>
       <h1 className="font-display mt-1 text-2xl font-bold">Caja</h1>
       <AdminCajaNav />
-      <div className="mt-6">{children}</div>
+      <div className="mt-6">
+        <AdminCajaPages>{children}</AdminCajaPages>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,3 @@
-import { AdminCajaRecuento } from "@/components/admin/AdminCajaRecuento";
-
 export const dynamic = "force-dynamic";
 
 export const metadata = {
@@ -8,5 +6,5 @@ export const metadata = {
 };
 
 export default function AdminCajaRecuentoPage() {
-  return <AdminCajaRecuento />;
+  return null;
 }

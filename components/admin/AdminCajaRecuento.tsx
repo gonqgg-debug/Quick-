@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { formatCajaMoney, isNearZero, type Caja, type CajaMoneda } from "@/lib/admin-caja-shared";
+import { formatCajaMoney, isCaja, isNearZero, type Caja, type CajaMoneda } from "@/lib/admin-caja-shared";
 import type { CajaBalances } from "@/lib/caja";
 import { toMoney } from "@/lib/money";
 import { brand } from "@/lib/theme";
@@ -14,11 +14,114 @@ const GREEN = brand.green;
 const RED = brand.error;
 const DOP_DENOMS = [2000, 1000, 500, 200, 100, 50, 25, 10, 5, 1] as const;
 const USD_DENOMS = [100, 50, 20, 10, 5, 1] as const;
+const DRAFT_STORAGE_KEY = "quick.admin.caja.recuento.v1";
 
 type Counts<T extends number> = Record<T, string>;
+type MobileTab = "dop" | "usd";
+
+type RecuentoDraft = {
+  cajaDop: Caja;
+  mobileTab: MobileTab;
+  dopCounts: Counts<(typeof DOP_DENOMS)[number]>;
+  usdCounts: Counts<(typeof USD_DENOMS)[number]>;
+};
+
+let memoryDraft: RecuentoDraft | null = null;
 
 function emptyCounts<T extends number>(denoms: readonly T[]): Counts<T> {
   return Object.fromEntries(denoms.map((denom) => [denom, ""])) as Counts<T>;
+}
+
+function parseStoredCounts<T extends number>(denoms: readonly T[], raw: unknown): Counts<T> {
+  const counts = emptyCounts(denoms);
+  if (!raw || typeof raw !== "object") {
+    return counts;
+  }
+  const record = raw as Record<string, unknown>;
+  for (const denom of denoms) {
+    const value = record[String(denom)];
+    if (typeof value === "string") {
+      counts[denom] = sanitizeCount(value);
+    }
+  }
+  return counts;
+}
+
+function emptyDraft(): RecuentoDraft {
+  return {
+    cajaDop: "Fuerte",
+    mobileTab: "dop",
+    dopCounts: emptyCounts(DOP_DENOMS),
+    usdCounts: emptyCounts(USD_DENOMS),
+  };
+}
+
+function parseDraft(raw: unknown): RecuentoDraft | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const record = raw as Record<string, unknown>;
+  return {
+    cajaDop: isCaja(record.cajaDop) ? record.cajaDop : "Fuerte",
+    mobileTab: record.mobileTab === "usd" ? "usd" : "dop",
+    dopCounts: parseStoredCounts(DOP_DENOMS, record.dopCounts),
+    usdCounts: parseStoredCounts(USD_DENOMS, record.usdCounts),
+  };
+}
+
+function readStoredDraft(): RecuentoDraft | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = window.sessionStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    return parseDraft(JSON.parse(raw) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+function loadDraft(): RecuentoDraft {
+  if (memoryDraft) {
+    return memoryDraft;
+  }
+  const stored = readStoredDraft();
+  if (stored) {
+    memoryDraft = stored;
+    return stored;
+  }
+  return emptyDraft();
+}
+
+function persistDraft(draft: RecuentoDraft) {
+  memoryDraft = draft;
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+  } catch {
+    // Private mode or quota: in-memory draft still survives tab switches in this session.
+  }
+}
+
+function clearDraft() {
+  memoryDraft = null;
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+  } catch {
+    // Ignore storage failures on reset.
+  }
+}
+
+function countsHaveValue<T extends number>(counts: Counts<T>): boolean {
+  return Object.values(counts).some((value) => String(value).trim() !== "");
 }
 
 function parseCount(raw: string): number {
@@ -51,10 +154,27 @@ export function AdminCajaRecuento() {
   const [cajaDop, setCajaDop] = useState<Caja>("Fuerte");
   const [dopCounts, setDopCounts] = useState(() => emptyCounts(DOP_DENOMS));
   const [usdCounts, setUsdCounts] = useState(() => emptyCounts(USD_DENOMS));
-  const [mobileTab, setMobileTab] = useState<"dop" | "usd">("dop");
+  const [mobileTab, setMobileTab] = useState<MobileTab>("dop");
+  const [ready, setReady] = useState(false);
   const [balances, setBalances] = useState<CajaBalances | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const draft = loadDraft();
+    setCajaDop(draft.cajaDop);
+    setDopCounts(draft.dopCounts);
+    setUsdCounts(draft.usdCounts);
+    setMobileTab(draft.mobileTab);
+    setReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+    persistDraft({ cajaDop, mobileTab, dopCounts, usdCounts });
+  }, [ready, cajaDop, mobileTab, dopCounts, usdCounts]);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,11 +213,21 @@ export function AdminCajaRecuento() {
   const totalUsd = useMemo(() => totalFrom(USD_DENOMS, usdCounts), [usdCounts]);
   const esperadoDop = cajaDop === "Chica" ? (balances?.chicaDop ?? null) : (balances?.fuerteDop ?? null);
   const esperadoUsd = balances?.fuerteUsd ?? null;
+  const canReset = countsHaveValue(dopCounts) || countsHaveValue(usdCounts);
+
+  function resetRecuento() {
+    const next = emptyDraft();
+    setCajaDop(next.cajaDop);
+    setDopCounts(next.dopCounts);
+    setUsdCounts(next.usdCounts);
+    setMobileTab(next.mobileTab);
+    clearDraft();
+  }
 
   return (
     <div>
       <p className="text-sm" style={{ color: MUTED }}>
-        Calculadora de un solo uso: no se guarda nada. Si recargas, vuelve a cero.
+        El recuento se queda guardado si cambias de pestaña. Usa Resetear para borrar todo.
       </p>
       {error ? (
         <p className="mt-4 rounded-lg px-4 py-3 text-sm" style={{ backgroundColor: "#FEE2E2", color: RED }}>
@@ -158,6 +288,18 @@ export function AdminCajaRecuento() {
             }
           />
         </div>
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          onClick={resetRecuento}
+          disabled={!canReset}
+          className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
+          style={{ minHeight: 44, border: "1px solid #E5E7EB", color: INK, backgroundColor: "#FFFFFF" }}
+        >
+          Resetear recuento
+        </button>
       </div>
     </div>
   );
