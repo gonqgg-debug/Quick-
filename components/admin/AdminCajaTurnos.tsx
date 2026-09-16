@@ -10,9 +10,8 @@ import {
   type CajaTurnoListItem,
   type CajaTurnoPeriodo,
 } from "@/lib/admin-caja-shared";
-import { parsePrice } from "@/lib/catalog-import";
 import { formatDayKey, yesterdayDayKey } from "@/lib/local-day";
-import { formatPrice, toMoney } from "@/lib/money";
+import { formatPrice, parsePrice, toMoney } from "@/lib/money";
 import { brand } from "@/lib/theme";
 import { AdminInput, AdminSelect, AdminTextarea, adminLabelClass } from "@/components/admin/AdminField";
 import {
