@@ -27,7 +27,7 @@ export function ExpansionMapSection() {
       <div className="expansion-map-frame">
         <ExpansionMap scrollWheelZoom focusId={focusId} />
       </div>
-      <div className="grid gap-2.5">
+      <div className="grid max-h-none gap-2.5 md:max-h-[min(560px,70vw)] md:overflow-y-auto md:pr-1">
         {EXPANSION_SITES.map((site) => {
           const selected = focusId === site.id;
           const color = site.brand === "pharmaquick" ? brand.blue : brand.green;
