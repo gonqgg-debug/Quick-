@@ -27,7 +27,7 @@ export const MAP_LANDMARKS = [
  * Los Robles / Green One follow the hotel strip (Hard Rock / Iberostar)
  * with the store on the inland side of Blvd. Turístico del Este.
  * Jardines 3–4 sit together in Pueblo Bávaro; pinOffset keeps both logos visible.
- * City Place, Doral Park and The Beach cluster around Downtown Punta Cana
+ * Doral Park and The Beach cluster around Downtown Punta Cana
  * (Downtown Mall / Coco Bongo); small lat/lng and pinOffset keep logos readable.
  */
 export const EXPANSION_SITES: ExpansionSite[] = [
@@ -84,45 +84,6 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     note: "Enfrente del Iberostar Bávaro",
     shortName: "Green One",
     landingLine: "Quick! · Frente al Iberostar",
-  },
-  {
-    id: "city-place",
-    name: "City Place",
-    brand: "quick",
-    status: "projected",
-    lat: 18.641,
-    lng: -68.4055,
-    area: "Downtown Punta Cana",
-    note: "Desarrollo residencial y comercial",
-    shortName: "City Place",
-    landingLine: "Quick! · Downtown Punta Cana",
-    pinOffset: "left",
-  },
-  {
-    id: "city-place-2",
-    name: "City Place 2",
-    brand: "quick",
-    status: "projected",
-    lat: 18.6404,
-    lng: -68.4028,
-    area: "Downtown Punta Cana",
-    note: "Segunda sucursal en City Place",
-    shortName: "City Place 2",
-    landingLine: "Quick! · Downtown Punta Cana",
-    pinOffset: "right",
-  },
-  {
-    id: "city-place-pharma",
-    name: "City Place",
-    brand: "pharmaquick",
-    status: "projected",
-    lat: 18.6388,
-    lng: -68.4045,
-    area: "Downtown Punta Cana",
-    note: "PharmaQuick! en City Place",
-    shortName: "City Place",
-    landingLine: "PharmaQuick! · Downtown Punta Cana",
-    pinOffset: "down",
   },
   {
     id: "doral-park",
