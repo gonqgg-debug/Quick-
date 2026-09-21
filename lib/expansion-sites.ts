@@ -73,7 +73,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
   },
   {
     id: "green-one",
-    name: "Green One Villas & Resort",
+    name: "Green One Village and Resort",
     brand: "quick",
     status: "projected",
     // Iberostar Waves Punta Cana: 18.71730, -68.45232 (playa).
