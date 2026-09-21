@@ -1,6 +1,6 @@
 export type ExpansionBrand = "quick" | "pharmaquick";
 export type ExpansionStatus = "open" | "projected";
-export type PinOffset = "left" | "right";
+export type PinOffset = "left" | "right" | "down";
 
 export type ExpansionSite = {
   id: string;
@@ -27,6 +27,8 @@ export const MAP_LANDMARKS = [
  * Los Robles / Green One follow the hotel strip (Hard Rock / Iberostar)
  * with the store on the inland side of Blvd. Turístico del Este.
  * Jardines 3–4 sit together in Pueblo Bávaro; pinOffset keeps both logos visible.
+ * City Place, Doral Park and The Beach cluster around Downtown Punta Cana
+ * (Downtown Mall / Coco Bongo); small lat/lng and pinOffset keep logos readable.
  */
 export const EXPANSION_SITES: ExpansionSite[] = [
   {
@@ -88,11 +90,78 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     name: "City Place",
     brand: "quick",
     status: "projected",
-    lat: 18.6405,
-    lng: -68.404,
+    lat: 18.641,
+    lng: -68.4055,
     area: "Downtown Punta Cana",
     note: "Desarrollo residencial y comercial",
     shortName: "City Place",
+    landingLine: "Quick! · Downtown Punta Cana",
+    pinOffset: "left",
+  },
+  {
+    id: "city-place-2",
+    name: "City Place 2",
+    brand: "quick",
+    status: "projected",
+    lat: 18.6404,
+    lng: -68.4028,
+    area: "Downtown Punta Cana",
+    note: "Segunda sucursal en City Place",
+    shortName: "City Place 2",
+    landingLine: "Quick! · Downtown Punta Cana",
+    pinOffset: "right",
+  },
+  {
+    id: "city-place-pharma",
+    name: "City Place",
+    brand: "pharmaquick",
+    status: "projected",
+    lat: 18.6388,
+    lng: -68.4045,
+    area: "Downtown Punta Cana",
+    note: "PharmaQuick! en City Place",
+    shortName: "City Place",
+    landingLine: "PharmaQuick! · Downtown Punta Cana",
+    pinOffset: "down",
+  },
+  {
+    id: "doral-park",
+    name: "Doral Park",
+    brand: "quick",
+    status: "projected",
+    // Downtown Mall Punta Cana: 18.63701, -68.39758. Doral Park is ~1 min away.
+    lat: 18.6378,
+    lng: -68.3992,
+    area: "Downtown Punta Cana",
+    note: "Junto a Downtown Mall",
+    shortName: "Doral Park",
+    landingLine: "Quick! · Downtown Punta Cana",
+    pinOffset: "left",
+  },
+  {
+    id: "doral-park-pharma",
+    name: "Doral Park",
+    brand: "pharmaquick",
+    status: "projected",
+    lat: 18.6368,
+    lng: -68.3978,
+    area: "Downtown Punta Cana",
+    note: "PharmaQuick! en Doral Park",
+    shortName: "Doral Park",
+    landingLine: "PharmaQuick! · Downtown Punta Cana",
+    pinOffset: "right",
+  },
+  {
+    id: "the-beach",
+    name: "The Beach",
+    brand: "quick",
+    status: "projected",
+    // Coco Bongo Punta Cana: 18.63518, -68.39500. The Beach sits next to Downtown.
+    lat: 18.6353,
+    lng: -68.3958,
+    area: "Downtown Punta Cana",
+    note: "The Beach at Punta Cana City Place",
+    shortName: "The Beach",
     landingLine: "Quick! · Downtown Punta Cana",
   },
   {

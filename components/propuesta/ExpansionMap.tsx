@@ -16,7 +16,8 @@ function escapeHtml(value: string): string {
 function pinHtml(site: ExpansionSite): string {
   const brandClass = site.brand === "pharmaquick" ? " is-pharma" : "";
   const statusClass = site.status === "projected" ? " is-projected" : "";
-  const offsetClass = site.pinOffset === "left" ? " is-left" : site.pinOffset === "right" ? " is-right" : "";
+  const offsetClass =
+    site.pinOffset === "left" ? " is-left" : site.pinOffset === "right" ? " is-right" : site.pinOffset === "down" ? " is-down" : "";
   const logo = siteLogoSrc(site.brand);
   const label = site.opening ? "Nov 2026" : site.status === "open" ? "Abierta" : "Próx.";
   return `
