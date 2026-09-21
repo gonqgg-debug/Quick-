@@ -61,7 +61,7 @@ export default function PharmaQuickPage() {
             </span>
             <h1 className="mt-3.5 font-display text-[clamp(32px,4.4vw,54px)] font-extrabold leading-[1.05] tracking-[-0.03em] text-[#123B7A]">
               La misma cercanía,{" "}
-              <Highlight className="bg-[#1F82C5]">para tu salud</Highlight>
+              <Highlight color={brand.blue}>para tu salud</Highlight>
             </h1>
             <p className="mt-[18px] max-w-[46ch] text-[17px] leading-relaxed">
               La misma conveniencia que ya conoces, ahora con un propósito dedicado a tu bienestar.

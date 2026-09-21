@@ -24,10 +24,19 @@ export function LandingSection({
   );
 }
 
-export function Highlight({ children, className = "" }: { children: ReactNode; className?: string }) {
+export function Highlight({
+  children,
+  className = "",
+  color = "#7EB341",
+}: {
+  children: ReactNode;
+  className?: string;
+  color?: string;
+}) {
   return (
     <span
-      className={`inline-block rounded-[18px] bg-[#7EB341] px-5 py-0.5 text-white ${className}`}
+      className={`inline-block rounded-[18px] px-5 py-0.5 text-white ${className}`}
+      style={{ backgroundColor: color }}
     >
       {children}
     </span>
