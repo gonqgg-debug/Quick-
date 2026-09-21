@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { EXPANSION_SITES, MAP_LANDMARKS, siteLogoSrc, type ExpansionSite } from "@/lib/expansion-sites";
 import "leaflet/dist/leaflet.css";
+import "./expansion-map.css";
 
 function escapeHtml(value: string): string {
   return value
@@ -29,7 +30,13 @@ function pinHtml(site: ExpansionSite): string {
   `;
 }
 
-export function ExpansionMap() {
+type ExpansionMapProps = {
+  className?: string;
+  scrollWheelZoom?: boolean;
+  focusId?: string | null;
+};
+
+export function ExpansionMap({ className = "", scrollWheelZoom = false, focusId = null }: ExpansionMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
 
@@ -53,7 +60,7 @@ export function ExpansionMap() {
       }
 
       const map = L.map(el, {
-        scrollWheelZoom: false,
+        scrollWheelZoom,
         zoomControl: true,
         attributionControl: true,
       });
@@ -102,7 +109,19 @@ export function ExpansionMap() {
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [scrollWheelZoom]);
 
-  return <div ref={containerRef} className="propuesta-map" data-map="expansion" />;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focusId) {
+      return;
+    }
+    const site = EXPANSION_SITES.find((item) => item.id === focusId);
+    if (!site) {
+      return;
+    }
+    map.flyTo([site.lat, site.lng], 15, { duration: 0.7 });
+  }, [focusId]);
+
+  return <div ref={containerRef} className={`propuesta-map ${className}`.trim()} data-map="expansion" />;
 }

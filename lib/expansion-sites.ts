@@ -12,6 +12,7 @@ export type ExpansionSite = {
   area: string;
   note: string;
   shortName: string;
+  landingLine: string;
   opening?: string;
   pinOffset?: PinOffset;
 };
@@ -38,6 +39,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     area: "Pueblo Bávaro",
     note: "Tienda piloto, en operación",
     shortName: "Jardines 3",
+    landingLine: "Quick! · Pueblo Bávaro",
     pinOffset: "left",
   },
   {
@@ -50,6 +52,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     area: "Pueblo Bávaro",
     note: "Junto a Jardines 3",
     shortName: "Jardines 4",
+    landingLine: "Quick! · Pueblo Bávaro",
     pinOffset: "right",
   },
   {
@@ -64,6 +67,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     area: "Macao / Arena Gorda",
     note: "A la altura del Hard Rock, lado interior de la carretera",
     shortName: "Los Robles",
+    landingLine: "Quick! · A la altura del Hard Rock",
   },
   {
     id: "green-one",
@@ -77,6 +81,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     area: "Arena Gorda / Bávaro",
     note: "Enfrente del Iberostar Bávaro",
     shortName: "Green One",
+    landingLine: "Quick! · Frente al Iberostar",
   },
   {
     id: "city-place",
@@ -88,6 +93,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     area: "Downtown Punta Cana",
     note: "Desarrollo residencial y comercial",
     shortName: "City Place",
+    landingLine: "Quick! · Downtown Punta Cana",
   },
   {
     id: "pharma-crisfer",
@@ -99,6 +105,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     area: "Pueblo Bávaro / Verón",
     note: "PharmaQuick! · apertura noviembre 2026",
     shortName: "PharmaQuick!",
+    landingLine: "PharmaQuick! · Verón",
     opening: "Noviembre 2026",
   },
 ];

@@ -5,13 +5,7 @@ import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
 import { brand } from "@/lib/theme";
 
-const NAV_LINKS = [
-  { href: "#muy-pronto", label: "Muy pronto" },
-  { href: "#donde-estamos", label: "Dónde estamos" },
-] as const;
-
-const NAV_LINK_CLASS =
-  "text-[13px] font-bold uppercase tracking-[0.12em] text-white transition hover:underline underline-offset-4";
+const NAV_LABELS = ["Muy pronto", "Bávaro y Verón"] as const;
 
 export function PharmaHeader() {
   const [open, setOpen] = useState(false);
@@ -22,14 +16,6 @@ export function PharmaHeader() {
       document.body.style.overflow = "";
     };
   }, [open]);
-
-  function goTo(href: string) {
-    setOpen(false);
-    if (href.startsWith("#")) {
-      const el = document.getElementById(href.slice(1));
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }
 
   return (
     <header className="sticky top-0 z-50">
@@ -56,19 +42,9 @@ export function PharmaHeader() {
         {open ? (
           <nav className="border-t bg-white px-6 py-4" aria-label="Menú móvil">
             <ul className="flex flex-col">
-              {NAV_LINKS.map((link) => (
-                <li key={link.href}>
-                  <a
-                    href={link.href}
-                    className="flex min-h-12 items-center text-base font-bold"
-                    style={{ color: brand.blue }}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      goTo(link.href);
-                    }}
-                  >
-                    {link.label}
-                  </a>
+              {NAV_LABELS.map((label) => (
+                <li key={label} className="flex min-h-12 items-center text-base font-bold" style={{ color: brand.blue }}>
+                  {label}
                 </li>
               ))}
               <li>
@@ -92,28 +68,20 @@ export function PharmaHeader() {
             <Logo variant="pharma" className="h-12 w-auto max-w-[320px]" />
           </Link>
         </div>
-        <div className="relative flex w-full items-center bg-[#1F82C5] py-3">
-          <nav
-            className="absolute left-1/2 flex -translate-x-1/2 items-center gap-8"
-            aria-label="Secciones"
-          >
-            {NAV_LINKS.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                className={NAV_LINK_CLASS}
-                onClick={(e) => {
-                  e.preventDefault();
-                  goTo(link.href);
-                }}
+        <div className="relative flex w-full items-center bg-[#1F82C5] px-6 py-3">
+          <nav className="mx-auto flex items-center gap-8" aria-label="Secciones">
+            {NAV_LABELS.map((label) => (
+              <span
+                key={label}
+                className="text-[13px] font-bold uppercase tracking-[0.12em] text-white"
               >
-                {link.label}
-              </a>
+                {label}
+              </span>
             ))}
           </nav>
           <Link
             href="/"
-            className="ml-auto mr-8 text-[13px] font-bold uppercase tracking-[0.12em] text-white underline-offset-4 hover:underline"
+            className="absolute right-8 top-1/2 -translate-y-1/2 text-[13px] font-bold uppercase tracking-[0.12em] text-white underline-offset-4 hover:underline"
           >
             Volver a Quick!
           </Link>

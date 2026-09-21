@@ -29,6 +29,8 @@ const config: Config = {
           orange: "#F79521",
           blue: "#1F82C5",
           white: "#FFFFFF",
+          cream: "#FFF6E8",
+          navy: "#123B7A",
           ink: "#1A1A1A",
           muted: "#6B7280",
           error: "#DC2626",
@@ -37,6 +39,7 @@ const config: Config = {
       fontFamily: {
         display: ["var(--font-brand-display)", "system-ui", "sans-serif"],
         sans: ["var(--font-brand-body)", "system-ui", "sans-serif"],
+        hand: ["var(--font-brand-hand)", "cursive"],
       },
     },
   },
