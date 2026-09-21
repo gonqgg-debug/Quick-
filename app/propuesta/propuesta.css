@@ -461,6 +461,10 @@ html.propuesta-html.is-exporting .leaflet-control-attribution {
   transform: translateX(58px);
 }
 
+.propuesta-pin-stack.is-down {
+  transform: translateY(42px);
+}
+
 .propuesta-pin-logo {
   display: flex;
   max-width: 92px;

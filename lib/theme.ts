@@ -4,8 +4,14 @@ export const brand = {
   blue: "#1F82C5",
   white: "#FFFFFF",
   cream: "#FFF6E8",
+  creamSoft: "#FDE9C8",
+  paleGreen: "#F1F7EA",
+  paleBlue: "#EAF4FB",
+  paleOrange: "#FDF1DE",
+  navy: "#123B7A",
   ink: "#1A1A1A",
   muted: "#6B7280",
+  body: "#4A5568",
   error: "#DC2626",
 } as const;
 

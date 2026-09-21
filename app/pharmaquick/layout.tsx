@@ -1,4 +1,5 @@
-import { PharmaFooter } from "@/components/pharmaquick/PharmaFooter";
+import { LandingFooter } from "@/components/landing/LandingFooter";
+import { WhatsAppFloat } from "@/components/landing/WhatsAppFloat";
 import { PharmaHeader } from "@/components/pharmaquick/PharmaHeader";
 
 export default function PharmaQuickLayout({
@@ -10,7 +11,8 @@ export default function PharmaQuickLayout({
     <>
       <PharmaHeader />
       {children}
-      <PharmaFooter />
+      <LandingFooter />
+      <WhatsAppFloat />
     </>
   );
 }

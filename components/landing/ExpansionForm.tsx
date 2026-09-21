@@ -1,7 +1,11 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { BrandButton } from "@/components/landing/BrandUi";
 import { whatsappHref } from "@/lib/theme";
+
+const FIELD_CLASS =
+  "mt-1.5 w-full rounded-[14px] border border-black/[0.12] bg-white px-3.5 py-3 text-base text-[#1A1A1A] outline-none transition focus:border-[#7EB341]";
 
 export function ExpansionForm() {
   const [sent, setSent] = useState(false);
@@ -11,13 +15,10 @@ export function ExpansionForm() {
     const data = new FormData(event.currentTarget);
     const lines = [
       "Hola! Quiero proponer un espacio para Quick! Mini Market.",
-      `Tipo de oportunidad: ${data.get("opportunity") || "-"}`,
-      `Nombre: ${data.get("firstName") || ""} ${data.get("lastName") || ""}`.trim(),
-      `Empresa: ${data.get("company") || "-"}`,
+      `Nombre: ${data.get("name") || "-"}`,
+      `Empresa o residencial: ${data.get("company") || "-"}`,
       `Teléfono: ${data.get("phone") || "-"}`,
       `Email: ${data.get("email") || "-"}`,
-      `Cantidad de espacios: ${data.get("siteCount") || "-"}`,
-      `Tipo de espacio: ${data.get("siteType") || "-"}`,
       `Información del espacio: ${data.get("details") || "-"}`,
     ];
     window.open(
@@ -28,114 +29,49 @@ export function ExpansionForm() {
     setSent(true);
   }
 
-  if (sent) {
-    return (
-      <p className="hint" role="status">
-        Gracias. Te redirigimos a WhatsApp para enviar la propuesta. Si no se abrió, vuelve a
-        intentar.
-      </p>
-    );
-  }
-
   return (
-    <form className="lead-form" onSubmit={onSubmit}>
-      <div className="form-grid">
-        <div className="form-field form-field-full">
-          <label htmlFor="opportunity">Tipo de oportunidad</label>
-          <select id="opportunity" name="opportunity" required defaultValue="">
-            <option value="" disabled>
-              Selecciona
-            </option>
-            <option value="Alquiler">Alquiler</option>
-            <option value="Venta">Venta</option>
-            <option value="Alianza">Alianza con el residencial</option>
-            <option value="Otro">Otro</option>
-          </select>
-        </div>
-
-        <div className="form-field">
-          <label htmlFor="firstName">Nombre</label>
-          <input id="firstName" name="firstName" type="text" required autoComplete="given-name" />
-        </div>
-        <div className="form-field">
-          <label htmlFor="lastName">Apellido</label>
-          <input id="lastName" name="lastName" type="text" required autoComplete="family-name" />
-        </div>
-
-        <div className="form-field form-field-full">
-          <label htmlFor="company">Empresa o residencial (si aplica)</label>
-          <input id="company" name="company" type="text" autoComplete="organization" />
-        </div>
-
-        <div className="form-field">
-          <label htmlFor="phone">Teléfono</label>
-          <input id="phone" name="phone" type="tel" required autoComplete="tel" />
-        </div>
-        <div className="form-field">
-          <label htmlFor="email">Correo electrónico</label>
-          <input id="email" name="email" type="email" required autoComplete="email" />
-        </div>
-
-        <div className="form-field form-field-full">
-          <label>Cantidad de espacios</label>
-          <div className="radio-row">
-            <label className="radio-option">
-              <input type="radio" name="siteCount" value="1" required />
-              1
-            </label>
-            <label className="radio-option">
-              <input type="radio" name="siteCount" value="2-10" />
-              2-10
-            </label>
-            <label className="radio-option">
-              <input type="radio" name="siteCount" value="10+" />
-              10+
-            </label>
-          </div>
-        </div>
-
-        <div className="form-field form-field-full">
-          <label htmlFor="siteType">Tipo de espacio</label>
-          <select id="siteType" name="siteType" required defaultValue="">
-            <option value="" disabled>
-              Selecciona
-            </option>
-            <option value="Local en residencial">Local en residencial</option>
-            <option value="Plaza comercial">Plaza comercial</option>
-            <option value="Local independiente">Local independiente</option>
-            <option value="Otro">Otro</option>
-          </select>
-        </div>
-
-        <div className="form-field form-field-full">
-          <label htmlFor="details">Información del espacio</label>
+    <form onSubmit={onSubmit}>
+      <div className="grid gap-[18px] sm:grid-cols-2">
+        <label className="block">
+          <span className="text-sm font-bold text-[#123B7A]">Nombre</span>
+          <input className={FIELD_CLASS} name="name" type="text" required autoComplete="name" />
+        </label>
+        <label className="block">
+          <span className="text-sm font-bold text-[#123B7A]">Empresa o residencial</span>
+          <input className={FIELD_CLASS} name="company" type="text" autoComplete="organization" />
+        </label>
+        <label className="block">
+          <span className="text-sm font-bold text-[#123B7A]">Teléfono</span>
+          <input className={FIELD_CLASS} name="phone" type="tel" required autoComplete="tel" />
+        </label>
+        <label className="block">
+          <span className="text-sm font-bold text-[#123B7A]">Correo electrónico</span>
+          <input className={FIELD_CLASS} name="email" type="email" required autoComplete="email" />
+        </label>
+        <label className="block sm:col-span-2">
+          <span className="text-sm font-bold text-[#123B7A]">Información del espacio</span>
           <textarea
-            id="details"
+            className={`${FIELD_CLASS} min-h-[120px] resize-y`}
             name="details"
+            rows={4}
             required
-            placeholder="Nombre del residencial, ubicación, tamaño del local, visibilidad, parqueo y cualquier restricción conocida."
+            placeholder="Ubicación, tamaño del local, visibilidad, parqueo y restricciones."
           />
-          <p className="hint">
-            Incluye lo que ayude a evaluar el espacio: tamaño, año de construcción o última
-            renovación, y si hay restricciones.
-          </p>
-        </div>
-
-        <div className="form-field form-field-full">
-          <label className="checkbox-row">
-            <input type="checkbox" name="disclaimer" required />
-            <span>
-              Acepto que Quick! Mini Market se comunique conmigo para evaluar esta propuesta.
-            </span>
-          </label>
-        </div>
-
-        <div className="form-field form-field-full">
-          <button className="submit-btn" type="submit">
-            Enviar
-          </button>
-        </div>
+        </label>
       </div>
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <BrandButton type="submit" variant="green">
+          Enviar
+        </BrandButton>
+        <BrandButton href={whatsappHref()} variant="outline">
+          Escribir por WhatsApp
+        </BrandButton>
+      </div>
+      {sent ? (
+        <p className="mt-5 rounded-[18px] bg-[#F1F7EA] px-5 py-4 text-[15px] text-[#123B7A]" role="status">
+          Gracias. Te contactamos por WhatsApp o correo para revisar la propuesta.
+        </p>
+      ) : null}
     </form>
   );
 }

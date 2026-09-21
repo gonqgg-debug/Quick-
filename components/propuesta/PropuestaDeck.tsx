@@ -538,7 +538,7 @@ export function PropuestaDeck() {
               ))}
               <p className="mt-2 text-xs leading-relaxed" style={{ color: brand.muted }}>
                 Punto sólido: abierta. Anillo: proyectada. Los Robles queda a la altura del Hard Rock,
-                al otro lado de la carretera. Green One Villas &amp; Resort, enfrente del Iberostar.
+                al otro lado de la carretera. Green One Village and Resort, enfrente del Iberostar.
               </p>
             </aside>
           </div>

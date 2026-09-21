@@ -1,140 +1,128 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import { PharmaHero } from "@/components/pharmaquick/PharmaHero";
-import { LandingInner, SectionWave, SoftCircles } from "@/components/landing/LandingSection";
-import { brand } from "@/lib/theme";
+import { BrandButton, Highlight, IconCircle, LandingSection, PhotoCard } from "@/components/landing/BrandUi";
+import { brand, whatsappHref } from "@/lib/theme";
 
 export const metadata: Metadata = {
   title: "PharmaQuick! | Muy pronto",
   description:
-    "Muy pronto abrimos PharmaQuick!, nuestra farmacia hermana. Salud y conveniencia, a pasos de tu casa.",
+    "La misma cercanía, ahora para tu salud. PharmaQuick! abre en noviembre 2026 en Bávaro y Verón.",
 };
-
-const STORE_ADDRESS =
-  "Plaza Crisfer, Local 11, Pueblo Bávaro, La Altagracia, República Dominicana";
-
-const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(STORE_ADDRESS)}`;
 
 const FEATURES = [
   {
-    title: "Medicamentos y cuidado personal",
-    text: "Lo esencial para tu salud del día a día: medicamentos, vitaminas y cuidado personal, sin dar vueltas por fuera del residencial.",
+    title: "Medicamentos y salud integral",
+    text: "Lo esencial para el cuidado diario, medicamentos con receta y productos de bienestar, sin salir de tu comunidad.",
+    background: brand.paleGreen,
+    color: brand.green,
+    icon: (
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round">
+        <rect x="3" y="8.5" width="18" height="7" rx="3.5" transform="rotate(-45 12 12)" />
+        <path d="m9.5 9.5 5 5" />
+      </svg>
+    ),
   },
   {
-    title: "La misma cercanía de Quick!",
-    text: "Calidad de cadena, trato de vecino. Si ya conoces Quick!, vas a reconocer cómo se siente PharmaQuick!.",
+    title: "El estándar que te da tranquilidad",
+    text: "La misma garantía de servicio, organización y atención personalizada que caracteriza a la marca.",
+    background: brand.paleBlue,
+    color: brand.blue,
+    icon: (
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3.5 5 6v5.5c0 4.2 2.9 7.6 7 9 4.1-1.4 7-4.8 7-9V6z" />
+        <path d="m9 12 2 2 4-4" />
+      </svg>
+    ),
   },
   {
-    title: "Un espacio de confianza",
-    text: "Estamos armando cada detalle para que pedir, consultar y volver sea simple — la farmacia de tu comunidad, no una más en la carretera.",
+    title: "Todo en una sola plataforma",
+    text: "Donde haya Quick! y PharmaQuick!, combinas productos de ambas tiendas en un solo pedido y una sola entrega.",
+    background: brand.paleOrange,
+    color: brand.orange,
+    icon: (
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round">
+        <rect x="7" y="3" width="10" height="18" rx="2.4" />
+        <path d="M11 18h2" />
+      </svg>
+    ),
   },
 ] as const;
 
 export default function PharmaQuickPage() {
   return (
-    <main style={{ color: brand.ink }}>
-      <PharmaHero />
-
-      <section
-        id="muy-pronto"
-        className="scroll-mt-20 md:scroll-mt-24"
-        style={{ backgroundColor: brand.blue }}
-      >
-        <LandingInner className="py-16 md:py-20">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/75">Muy pronto</p>
-          <h2
-            className="font-display mt-3 text-4xl font-black uppercase leading-[1.05] md:text-6xl"
-            style={{ color: "#EAF4FB" }}
-          >
-            Abrimos PharmaQuick!
-          </h2>
-          <p className="mt-5 max-w-2xl text-base text-white/90 md:text-lg">
-            Estamos preparando una farmacia pensada para el día a día: medicamentos, cuidado
-            personal y lo que necesitas para tu bienestar, con la misma cercanía y consistencia que
-            ya conoces de Quick!. Un espacio de confianza, a pasos de casa.
-          </p>
-        </LandingInner>
-      </section>
-
-      <section className="bg-[#EAF4FB] pt-20 md:pt-28">
-        <LandingInner className="pb-20 md:pb-28">
-          <h2 className="font-display text-4xl font-extrabold leading-tight md:text-5xl">
-            La misma conveniencia.
-            <br />
-            Un propósito distinto.
-          </h2>
-          <p className="mt-5 max-w-2xl text-base leading-relaxed md:text-lg" style={{ color: brand.muted }}>
-            Nacimos para que no tengas que ir lejos por lo básico. PharmaQuick! lleva esa idea a la
-            farmacia: un lugar cercano, claro y de confianza para lo que tu familia necesita. Misma
-            forma de atenderte. Un propósito distinto — tu salud.
-          </p>
-          <ul className="mt-10 grid gap-8 md:grid-cols-3">
-            {FEATURES.map((feature) => (
-              <li key={feature.title}>
-                <span
-                  className="mb-3 block h-2 w-2 rounded-full"
-                  style={{ backgroundColor: brand.blue }}
-                  aria-hidden="true"
-                />
-                <h3 className="font-display text-lg font-bold">{feature.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed md:text-base" style={{ color: brand.muted }}>
-                  {feature.text}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </LandingInner>
-        <SectionWave fill={brand.blue} />
-      </section>
-
-      <section
-        id="donde-estamos"
-        className="relative scroll-mt-20 md:scroll-mt-24"
-        style={{ backgroundColor: brand.blue }}
-      >
-        <SoftCircles />
-        <LandingInner className="relative z-10 py-20 md:py-28">
-          <div className="grid items-center gap-12 md:grid-cols-2 md:gap-16">
-            <div className="text-white">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/80">
-                Ubicación
-              </p>
-              <h2 className="font-display mt-3 text-4xl font-extrabold md:text-5xl">
-                Dónde vamos a estar
-              </h2>
-              <p className="mt-5 text-base leading-relaxed text-white/90 md:text-lg">
-                PharmaQuick! abre en Plaza Crisfer, Local 11, Pueblo Bávaro. Cerca de casa, fácil de
-                llegar y pensada para que resolver lo de la farmacia no se vuelva un viaje.
-              </p>
-              <div className="mt-6 rounded-2xl bg-white/15 px-5 py-4 font-semibold leading-relaxed">
-                {STORE_ADDRESS}
-              </div>
-              <a
-                href={mapsHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-6 inline-flex min-h-12 items-center justify-center rounded-full bg-white px-7 py-3 text-base font-bold"
-                style={{ color: brand.blue }}
-              >
-                Cómo llegar
-              </a>
+    <main style={{ color: brand.body, backgroundColor: brand.white }}>
+      <LandingSection background={brand.white} id="inicio">
+        <div className="grid items-center gap-10 md:grid-cols-2 md:gap-14">
+          <div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/pharma-logo.png" alt="PharmaQuick!" className="block h-10 w-auto" />
+            <span className="mt-3 block text-xs font-bold uppercase tracking-[0.18em] text-[#1F82C5]">
+              Próximamente · Nov 2026
+            </span>
+            <h1 className="mt-3.5 font-display text-[clamp(32px,4.4vw,54px)] font-extrabold leading-[1.05] tracking-[-0.03em] text-[#123B7A]">
+              La misma cercanía,{" "}
+              <Highlight color={brand.blue}>para tu salud</Highlight>
+            </h1>
+            <p className="mt-[18px] max-w-[46ch] text-[17px] leading-relaxed">
+              La misma conveniencia que ya conoces, ahora con un propósito dedicado a tu bienestar.
+              Una propuesta diseñada para cuidar de ti y de tu familia con acceso fácil, seguridad y
+              total tranquilidad.
+            </p>
+            <div className="mt-[26px] grid gap-3">
+              {FEATURES.map((feature) => (
+                <article
+                  key={feature.title}
+                  className="flex gap-3.5 rounded-[20px] px-5 py-4"
+                  style={{ backgroundColor: feature.background }}
+                >
+                  <IconCircle color={feature.color} size={42}>
+                    {feature.icon}
+                  </IconCircle>
+                  <span>
+                    <span className="block font-display text-[19px] font-extrabold text-[#123B7A]">
+                      {feature.title}
+                    </span>
+                    <span className="mt-1 block text-sm leading-relaxed">{feature.text}</span>
+                  </span>
+                </article>
+              ))}
             </div>
-            <div className="mx-auto w-full max-w-sm rotate-[2deg] bg-white p-3 shadow-[0_24px_50px_rgba(26,26,26,0.28)] md:p-4">
-              <div className="relative aspect-[4/5] overflow-hidden">
-                <Image
-                  src="/images/pharmaquick-storefront.jpeg"
-                  alt="Fachada de PharmaQuick! en Plaza Crisfer"
-                  fill
-                  unoptimized
-                  className="object-cover object-center"
-                  sizes="(min-width: 768px) 380px, 90vw"
-                />
-              </div>
+            <div className="mt-7">
+              <BrandButton href={whatsappHref()} variant="blue">
+                Escríbenos
+              </BrandButton>
             </div>
           </div>
-        </LandingInner>
-        <SectionWave fill={brand.ink} />
-      </section>
+          <PhotoCard className="h-[clamp(340px,40vw,500px)] self-stretch">
+            <Image
+              src="/images/pharmaquick-storefront.jpeg"
+              alt="Fachada de PharmaQuick!"
+              fill
+              priority
+              unoptimized
+              className="object-cover object-center"
+              sizes="(min-width: 768px) 520px, 100vw"
+            />
+          </PhotoCard>
+        </div>
+      </LandingSection>
+
+      <LandingSection background={brand.paleBlue} id="muy-pronto">
+        <div className="grid items-center gap-10 md:grid-cols-2">
+          <h2 className="font-display text-[clamp(26px,3.2vw,40px)] font-extrabold leading-tight tracking-[-0.03em] text-[#123B7A]">
+            ¿Quieres PharmaQuick! en tu comunidad?
+          </h2>
+          <div>
+            <p className="mb-6 text-[17px] leading-relaxed">
+              Estamos evaluando ubicaciones para las próximas aperturas en el área de Bávaro y Verón.
+              Escríbenos y conversamos.
+            </p>
+            <BrandButton href={whatsappHref()} variant="blue">
+              Escribir por WhatsApp
+            </BrandButton>
+          </div>
+        </div>
+      </LandingSection>
     </main>
   );
 }

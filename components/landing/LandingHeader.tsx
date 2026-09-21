@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Logo } from "@/components/brand/Logo";
+import { BrandButton } from "@/components/landing/BrandUi";
 import { brand } from "@/lib/theme";
 
 type NavLink = {
@@ -13,14 +14,11 @@ type NavLink = {
 };
 
 const NAV_LINKS: NavLink[] = [
+  { href: "/", label: "Inicio" },
   { href: "/quienes-somos", label: "Quiénes somos" },
   { href: "/expansion", label: "Expansión" },
-  { href: "/#donde-estamos", label: "Dónde estamos" },
   { href: "/pharmaquick", label: "PharmaQuick!", accent: "pharma" },
 ];
-
-const NAV_LINK_CLASS =
-  "text-[13px] font-bold uppercase tracking-[0.12em] text-white transition hover:text-white hover:underline underline-offset-4";
 
 function NavLabel({ link }: { link: NavLink }) {
   if (link.accent !== "pharma") return <>{link.label}</>;
@@ -35,6 +33,11 @@ function NavLabel({ link }: { link: NavLink }) {
       {link.label}
     </span>
   );
+}
+
+function isActive(pathname: string, href: string) {
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 export function LandingHeader() {
@@ -59,24 +62,12 @@ export function LandingHeader() {
 
   function goTo(href: string) {
     setOpen(false);
-    if (href.startsWith("/#") || href.startsWith("#")) {
-      const id = href.replace(/^\/?#/, "");
-      if (pathname === "/") {
-        const el = document.getElementById(id);
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "start" });
-          return;
-        }
-      }
-      window.location.href = `/#${id}`;
-      return;
-    }
     router.push(href);
   }
 
   return (
     <header
-      className={`sticky top-0 z-50 transition-shadow duration-300 ${
+      className={`sticky top-0 z-[1100] transition-shadow duration-300 ${
         scrolled ? "shadow-[0_4px_24px_rgba(26,26,26,0.12)]" : ""
       }`}
     >
@@ -124,14 +115,9 @@ export function LandingHeader() {
                 </li>
               ))}
               <li>
-                <Link
-                  href="/empleados"
-                  className="mt-2 inline-flex min-h-11 items-center justify-center rounded-full px-5 text-base font-bold text-white"
-                  style={{ backgroundColor: brand.orange }}
-                  onClick={() => setOpen(false)}
-                >
-                  Empleados
-                </Link>
+            <BrandButton href="/empleados" variant="orange" size="sm" uppercase className="mt-2" onClick={() => setOpen(false)}>
+              Empleados
+            </BrandButton>
               </li>
             </ul>
           </nav>
@@ -145,16 +131,18 @@ export function LandingHeader() {
           </Link>
         </div>
 
-        <div className="relative flex w-full items-center bg-[#7EB341] py-3">
+        <div className="relative flex w-full items-center bg-[#7EB341] py-3 pr-40 pl-6">
           <nav
-            className="absolute left-1/2 flex -translate-x-1/2 items-center gap-5 lg:gap-8"
+            className="mx-auto flex flex-wrap items-center justify-center gap-5 lg:gap-8"
             aria-label="Secciones"
           >
             {NAV_LINKS.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
-                className={NAV_LINK_CLASS}
+                className={`inline-flex items-center text-[13px] font-bold uppercase tracking-[0.12em] text-white underline-offset-4 ${
+                  isActive(pathname, link.href) ? "underline" : "hover:underline"
+                }`}
                 onClick={(e) => {
                   e.preventDefault();
                   goTo(link.href);
@@ -164,13 +152,9 @@ export function LandingHeader() {
               </a>
             ))}
           </nav>
-          <Link
-            href="/empleados"
-            className="ml-auto mr-8 inline-flex min-h-9 items-center justify-center rounded-full px-5 py-1.5 text-sm font-bold text-white"
-            style={{ backgroundColor: brand.orange }}
-          >
+          <BrandButton href="/empleados" variant="orange" size="sm" uppercase className="absolute right-8 top-1/2 -translate-y-1/2">
             Empleados
-          </Link>
+          </BrandButton>
         </div>
       </div>
     </header>

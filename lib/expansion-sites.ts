@@ -1,6 +1,6 @@
 export type ExpansionBrand = "quick" | "pharmaquick";
 export type ExpansionStatus = "open" | "projected";
-export type PinOffset = "left" | "right";
+export type PinOffset = "left" | "right" | "down";
 
 export type ExpansionSite = {
   id: string;
@@ -12,6 +12,7 @@ export type ExpansionSite = {
   area: string;
   note: string;
   shortName: string;
+  landingLine: string;
   opening?: string;
   pinOffset?: PinOffset;
 };
@@ -26,6 +27,8 @@ export const MAP_LANDMARKS = [
  * Los Robles / Green One follow the hotel strip (Hard Rock / Iberostar)
  * with the store on the inland side of Blvd. Turístico del Este.
  * Jardines 3–4 sit together in Pueblo Bávaro; pinOffset keeps both logos visible.
+ * Doral Park and The Beach cluster around Downtown Punta Cana
+ * (Downtown Mall / Coco Bongo); small lat/lng and pinOffset keep logos readable.
  */
 export const EXPANSION_SITES: ExpansionSite[] = [
   {
@@ -38,6 +41,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     area: "Pueblo Bávaro",
     note: "Tienda piloto, en operación",
     shortName: "Jardines 3",
+    landingLine: "Quick! · Pueblo Bávaro",
     pinOffset: "left",
   },
   {
@@ -50,6 +54,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     area: "Pueblo Bávaro",
     note: "Junto a Jardines 3",
     shortName: "Jardines 4",
+    landingLine: "Quick! · Pueblo Bávaro",
     pinOffset: "right",
   },
   {
@@ -64,10 +69,11 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     area: "Macao / Arena Gorda",
     note: "A la altura del Hard Rock, lado interior de la carretera",
     shortName: "Los Robles",
+    landingLine: "Quick! · A la altura del Hard Rock",
   },
   {
     id: "green-one",
-    name: "Green One Villas & Resort",
+    name: "Green One Village and Resort",
     brand: "quick",
     status: "projected",
     // Iberostar Waves Punta Cana: 18.71730, -68.45232 (playa).
@@ -77,17 +83,47 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     area: "Arena Gorda / Bávaro",
     note: "Enfrente del Iberostar Bávaro",
     shortName: "Green One",
+    landingLine: "Quick! · Frente al Iberostar",
   },
   {
-    id: "city-place",
-    name: "City Place",
+    id: "doral-park",
+    name: "Doral Park",
     brand: "quick",
     status: "projected",
-    lat: 18.6405,
-    lng: -68.404,
+    // Downtown Mall Punta Cana: 18.63701, -68.39758. Doral Park is ~1 min away.
+    lat: 18.6378,
+    lng: -68.3992,
     area: "Downtown Punta Cana",
-    note: "Desarrollo residencial y comercial",
-    shortName: "City Place",
+    note: "Junto a Downtown Mall",
+    shortName: "Doral Park",
+    landingLine: "Quick! · Downtown Punta Cana",
+    pinOffset: "left",
+  },
+  {
+    id: "doral-park-pharma",
+    name: "Doral Park",
+    brand: "pharmaquick",
+    status: "projected",
+    lat: 18.6368,
+    lng: -68.3978,
+    area: "Downtown Punta Cana",
+    note: "PharmaQuick! en Doral Park",
+    shortName: "Doral Park",
+    landingLine: "PharmaQuick! · Downtown Punta Cana",
+    pinOffset: "right",
+  },
+  {
+    id: "the-beach",
+    name: "The Beach",
+    brand: "quick",
+    status: "projected",
+    // Coco Bongo Punta Cana: 18.63518, -68.39500. The Beach sits next to Downtown.
+    lat: 18.6353,
+    lng: -68.3958,
+    area: "Downtown Punta Cana",
+    note: "The Beach at Punta Cana City Place",
+    shortName: "The Beach",
+    landingLine: "Quick! · Downtown Punta Cana",
   },
   {
     id: "pharma-crisfer",
@@ -99,6 +135,7 @@ export const EXPANSION_SITES: ExpansionSite[] = [
     area: "Pueblo Bávaro / Verón",
     note: "PharmaQuick! · apertura noviembre 2026",
     shortName: "PharmaQuick!",
+    landingLine: "PharmaQuick! · Verón",
     opening: "Noviembre 2026",
   },
 ];
