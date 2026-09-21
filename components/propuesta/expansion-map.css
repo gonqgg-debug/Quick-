@@ -1,4 +1,7 @@
 .propuesta-map {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
   min-height: 0;
   width: 100%;
   height: 100%;
@@ -7,6 +10,7 @@
 }
 
 .propuesta-map .leaflet-container {
+  z-index: 0;
   height: 100%;
   width: 100%;
   font-family: var(--font-brand-body), system-ui, sans-serif;
@@ -118,6 +122,9 @@
 }
 
 .expansion-map-frame {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
   height: min(560px, 70vw);
   min-height: 360px;
   overflow: hidden;

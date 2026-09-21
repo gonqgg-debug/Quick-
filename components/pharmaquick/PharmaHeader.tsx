@@ -18,7 +18,7 @@ export function PharmaHeader() {
   }, [open]);
 
   return (
-    <header className="sticky top-0 z-50">
+    <header className="sticky top-0 z-[1100]">
       <div className="md:hidden">
         <div className="flex h-14 overflow-hidden">
           <Link

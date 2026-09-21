@@ -67,7 +67,7 @@ export function LandingHeader() {
 
   return (
     <header
-      className={`sticky top-0 z-50 transition-shadow duration-300 ${
+      className={`sticky top-0 z-[1100] transition-shadow duration-300 ${
         scrolled ? "shadow-[0_4px_24px_rgba(26,26,26,0.12)]" : ""
       }`}
     >
