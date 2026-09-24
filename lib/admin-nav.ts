@@ -14,7 +14,8 @@ export type AdminNavIcon =
   | "goals"
   | "settings"
   | "customers"
-  | "broadcast";
+  | "broadcast"
+  | "report";
 
 export type AdminNavChild = {
   href: string;
@@ -90,7 +91,15 @@ export const ADMIN_CATALOGO_NAV: AdminNavItem[] = [
   { href: "/admin/catalogo/solicitudes", label: "Solicitudes", icon: "requests", status: "live" },
 ];
 
+export const ADMIN_REPORTE: AdminNavItem = {
+  href: "/admin/reporte",
+  label: "Reporte",
+  icon: "report",
+  status: "live",
+};
+
 export const ADMIN_FINANZAS_NAV: AdminNavItem[] = [
+  ADMIN_REPORTE,
   ADMIN_CAJA,
   { href: "/admin/ventas", label: "Ventas", icon: "sales", status: "live" },
   ADMIN_VENTAS_HISTORICO,
