@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Bar,
@@ -134,13 +135,22 @@ export function AdminReporte() {
             delivery no se suma a la venta diaria.
           </p>
         </div>
-        <a
-          href="/api/admin/reporte/export"
-          className="rounded-full px-4 py-2 text-sm font-semibold text-white"
-          style={{ backgroundColor: brand.green }}
-        >
-          Descargar Excel
-        </a>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={mes ? `/admin/reporte/contable?mes=${encodeURIComponent(mes)}` : "/admin/reporte/contable"}
+            className="rounded-full border px-4 py-2 text-sm font-semibold"
+            style={{ borderColor: brand.green, color: brand.green }}
+          >
+            Detalle contable
+          </Link>
+          <a
+            href="/api/admin/reporte/export"
+            className="rounded-full px-4 py-2 text-sm font-semibold text-white"
+            style={{ backgroundColor: brand.green }}
+          >
+            Descargar Excel
+          </a>
+        </div>
       </div>
 
       {error ? (

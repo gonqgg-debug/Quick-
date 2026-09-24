@@ -98,8 +98,16 @@ export const ADMIN_REPORTE: AdminNavItem = {
   status: "live",
 };
 
+export const ADMIN_REPORTE_CONTABLE: AdminNavItem = {
+  href: "/admin/reporte/contable",
+  label: "Contable",
+  icon: "report",
+  status: "live",
+};
+
 export const ADMIN_FINANZAS_NAV: AdminNavItem[] = [
   ADMIN_REPORTE,
+  ADMIN_REPORTE_CONTABLE,
   ADMIN_CAJA,
   { href: "/admin/ventas", label: "Ventas", icon: "sales", status: "live" },
   ADMIN_VENTAS_HISTORICO,

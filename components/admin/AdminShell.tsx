@@ -26,7 +26,7 @@ type OpenState = Record<AdminNavSectionId | "caja", boolean>;
 const NAV_STORAGE_KEY = "quick-admin-nav-open";
 
 function isActivePath(pathname: string, href: string): boolean {
-  if (href === "/admin" || href === "/admin/ventas") {
+  if (href === "/admin" || href === "/admin/ventas" || href === "/admin/reporte") {
     return pathname === href;
   }
   if (href === "/admin/clientes") {
