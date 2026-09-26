@@ -37,9 +37,10 @@ function mesFromRecurso(recurso: Record<string, unknown>): string | null {
   return match ? match[1] : null;
 }
 
-function webhookTarget(): { url: string; secret: string } | null {
+function webhookTarget(): { url: string; secret: string; bearer: string } | null {
   const rawUrl = process.env.AGENT_WEBHOOK_URL?.trim() ?? "";
   const secret = process.env.AGENT_WEBHOOK_SECRET?.trim() ?? "";
+  const bearer = process.env.AGENT_WEBHOOK_KEY?.trim() ?? "";
   if (!rawUrl) {
     return null;
   }
@@ -60,7 +61,11 @@ function webhookTarget(): { url: string; secret: string } | null {
     console.error("[agent] AGENT_WEBHOOK_SECRET falta o es demasiado corta; no se envió el evento");
     return null;
   }
-  return { url: url.toString(), secret };
+  if (!bearer) {
+    console.error("[agent] AGENT_WEBHOOK_KEY falta; no se envió el evento");
+    return null;
+  }
+  return { url: url.toString(), secret, bearer };
 }
 
 /** Notifies the configured agent URL. Failures never break the admin save. */
@@ -85,6 +90,7 @@ export async function publishAgentEvent(tipo: AgentEventType, recurso: Record<st
       signal: AbortSignal.timeout(TIMEOUT_MS),
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${target.bearer}`,
         "User-Agent": "Quick-Agent-Webhook",
         "X-Quick-Signature": agentSignatureHeader(target.secret, timestamp, body),
       },

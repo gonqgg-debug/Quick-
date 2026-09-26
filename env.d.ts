@@ -19,5 +19,6 @@ declare namespace NodeJS {
     AGENT_API_TOKEN?: string;
     AGENT_WEBHOOK_URL?: string;
     AGENT_WEBHOOK_SECRET?: string;
+    AGENT_WEBHOOK_KEY?: string;
   }
 }

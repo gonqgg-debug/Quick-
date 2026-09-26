@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     auth: "Authorization: Bearer <AGENT_API_TOKEN>",
     webhook: {
       configurado: Boolean(process.env.AGENT_WEBHOOK_URL?.trim()),
-      firma: "Header X-Quick-Signature: t=<unix>,v1=<hex>. HMAC-SHA256 de `${timestamp}.${body}` con AGENT_WEBHOOK_SECRET. Rechaza si el timestamp tiene más de 5 minutos.",
+      firma: "Header X-Quick-Signature: t=<unix>,v1=<hex>. HMAC-SHA256 de `${timestamp}.${body}` con AGENT_WEBHOOK_SECRET. El POST también manda Authorization: Bearer <AGENT_WEBHOOK_KEY>, distinta del secreto de la firma.",
       eventos: [
         "venta.guardada",
         "compra.creada",
