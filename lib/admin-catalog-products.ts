@@ -1,3 +1,4 @@
+import { publishAgentEvent } from "@/lib/agent-events";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import { toMoney } from "@/lib/money";
 import { parsePrice } from "@/lib/catalog-import";
@@ -259,7 +260,18 @@ export async function updateAdminCatalogProduct(input: {
   if (error || !data) {
     throw error ?? new Error("No pudimos guardar el producto");
   }
-  return mapRow(data as Parameters<typeof mapRow>[0]);
+  const product = mapRow(data as Parameters<typeof mapRow>[0]);
+  await publishAgentEvent("producto.actualizado", {
+    id: product.id,
+    nombre: product.nombre,
+    marca: product.marca,
+    categoria: product.categoria,
+    precio: product.precio,
+    codigoOdoo: product.codigoOdoo,
+    codigoBarras: product.codigoBarras,
+    activo: product.activo,
+  });
+  return product;
 }
 
 export async function batchUpdateAdminCatalogProducts(input: {
@@ -302,5 +314,6 @@ export async function batchUpdateAdminCatalogProducts(input: {
     }
     updated += count ?? chunk.length;
   }
+  await publishAgentEvent("productos.actualizados", { updated, ...patch });
   return { updated };
 }

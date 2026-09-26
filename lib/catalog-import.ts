@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { publishAgentEvent } from "@/lib/agent-events";
 import { formatPrice, parsePrice, toMoney } from "@/lib/money";
 import { normalizeBarcode } from "@/lib/barcode";
 import { parseSpreadsheet } from "@/lib/read-spreadsheet";
@@ -458,10 +459,12 @@ export async function applyImportPreview(
     }
   }
 
-  return {
+  const result = {
     created: preview.created.length,
     updated: preview.updated.length,
     unchanged: preview.unchanged.length,
     missing: preview.missing.length,
   };
+  await publishAgentEvent("catalogo.importado", result);
+  return result;
 }

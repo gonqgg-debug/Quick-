@@ -16,5 +16,8 @@ declare namespace NodeJS {
     SERPER_API_KEY?: string;
     ANTHROPIC_API_KEY?: string;
     ANTHROPIC_MODEL?: string;
+    AGENT_API_TOKEN?: string;
+    AGENT_WEBHOOK_URL?: string;
+    AGENT_WEBHOOK_SECRET?: string;
   }
 }
