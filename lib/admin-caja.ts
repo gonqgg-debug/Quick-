@@ -1,3 +1,4 @@
+import { publishAgentEvent } from "@/lib/agent-events";
 import { parsePrice } from "@/lib/catalog-import";
 import { calendarDayKey, isDayKey, yesterdayDayKey } from "@/lib/local-day";
 import { toMoney } from "@/lib/money";
@@ -172,7 +173,9 @@ export async function createCajaTurno(body: CajaTurnoBody): Promise<CajaTurnoLis
   if (error) {
     throwCajaTurnoWriteError(error);
   }
-  return mapSavedTurno(data as TurnoRow);
+  const turno = await mapSavedTurno(data as TurnoRow);
+  await publishAgentEvent("turno.creado", { ...turno });
+  return turno;
 }
 
 export async function updateCajaTurno(id: string, body: CajaTurnoBody): Promise<CajaTurnoListItem> {
@@ -194,7 +197,9 @@ export async function updateCajaTurno(id: string, body: CajaTurnoBody): Promise<
   if (!data) {
     throw new Error("No encontramos el turno");
   }
-  return mapSavedTurno(data as TurnoRow);
+  const turno = await mapSavedTurno(data as TurnoRow);
+  await publishAgentEvent("turno.actualizado", { ...turno });
+  return turno;
 }
 
 export async function listCajaLedger(filters: {
@@ -268,7 +273,9 @@ export async function createCajaLedger(body: CajaLedgerBody): Promise<CajaLedger
   if (error) {
     throw error;
   }
-  return mapSavedLedger(data as LedgerRow);
+  const ledger = mapSavedLedger(data as LedgerRow);
+  await publishAgentEvent("ledger.creado", { ...ledger });
+  return ledger;
 }
 
 export async function updateCajaLedger(id: string, body: CajaLedgerBody): Promise<CajaLedgerItem> {
@@ -290,7 +297,9 @@ export async function updateCajaLedger(id: string, body: CajaLedgerBody): Promis
   if (!data) {
     throw new Error("No encontramos el movimiento");
   }
-  return mapSavedLedger(data as LedgerRow);
+  const ledger = mapSavedLedger(data as LedgerRow);
+  await publishAgentEvent("ledger.actualizado", { ...ledger });
+  return ledger;
 }
 
 export async function deleteCajaLedger(id: string): Promise<void> {
@@ -306,4 +315,5 @@ export async function deleteCajaLedger(id: string): Promise<void> {
   if (!data) {
     throw new Error("No encontramos el movimiento");
   }
+  await publishAgentEvent("ledger.eliminado", { id: ledgerId });
 }

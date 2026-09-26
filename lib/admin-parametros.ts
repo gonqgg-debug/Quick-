@@ -1,3 +1,4 @@
+import { publishAgentEvent } from "@/lib/agent-events";
 import { parsePrice } from "@/lib/catalog-import";
 import { toMoney } from "@/lib/money";
 import {
@@ -152,7 +153,9 @@ export async function updateParametrosConfig(input: ParametrosConfig): Promise<P
   if (error) {
     throw error;
   }
-  return mapParametros(data as Record<string, unknown> | null);
+  const mapped = mapParametros(data as Record<string, unknown> | null);
+  await publishAgentEvent("parametros.actualizados", { ...mapped });
+  return mapped;
 }
 
 export async function listMetasMensuales(): Promise<MetaMensual[]> {
@@ -199,6 +202,7 @@ export async function createMetaMensual(mes: string, meta: number): Promise<Meta
   if (!mapped) {
     throw new Error("No pudimos guardar la meta");
   }
+  await publishAgentEvent("meta.guardada", { ...mapped });
   return mapped;
 }
 
@@ -216,5 +220,6 @@ export async function updateMetaMensual(mes: string, meta: number): Promise<Meta
   if (!mapped) {
     throw new Error("No encontramos la meta de ese mes");
   }
+  await publishAgentEvent("meta.guardada", { ...mapped });
   return mapped;
 }

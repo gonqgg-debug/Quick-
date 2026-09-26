@@ -1,3 +1,4 @@
+import { publishAgentEvent } from "@/lib/agent-events";
 import { parsePrice } from "@/lib/catalog-import";
 import { isDayKey, todayDayKey } from "@/lib/local-day";
 import { toMoney } from "@/lib/money";
@@ -165,6 +166,7 @@ export async function createProveedor(input: Omit<Proveedor, "id">): Promise<Pro
   if (!mapped) {
     throw new Error("No pudimos guardar el proveedor");
   }
+  await publishAgentEvent("proveedor.creado", { ...mapped });
   return mapped;
 }
 
@@ -206,6 +208,7 @@ export async function updateProveedor(id: string, patch: Partial<Omit<Proveedor,
   if (!mapped) {
     throw new Error("No encontramos ese proveedor");
   }
+  await publishAgentEvent("proveedor.actualizado", { ...mapped });
   return mapped;
 }
 
@@ -425,6 +428,7 @@ export async function createCompra(input: CompraInput): Promise<Compra> {
   if (!mapped) {
     throw new Error("No pudimos guardar la compra");
   }
+  await publishAgentEvent("compra.creada", { ...mapped });
   return mapped;
 }
 
@@ -510,6 +514,7 @@ export async function updateCompra(id: string, input: CompraInput): Promise<Comp
   if (!mapped) {
     throw new Error("No encontramos esa compra");
   }
+  await publishAgentEvent("compra.actualizada", { ...mapped });
   return mapped;
 }
 

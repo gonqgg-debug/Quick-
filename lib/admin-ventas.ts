@@ -1,3 +1,4 @@
+import { publishAgentEvent } from "@/lib/agent-events";
 import { parsePrice } from "@/lib/catalog-import";
 import { calendarDayKey, isDayKey, yesterdayDayKey } from "@/lib/local-day";
 import { toMoney } from "@/lib/money";
@@ -104,6 +105,7 @@ export async function upsertVentaDiaria(fecha: string, monto: number): Promise<V
   if (!upsertError) {
     const mapped = mapVenta(upserted);
     if (mapped) {
+      await publishAgentEvent("venta.guardada", { ...mapped });
       return mapped;
     }
   } else if (!isMissingConflictTarget(upsertError)) {
@@ -121,6 +123,7 @@ export async function upsertVentaDiaria(fecha: string, monto: number): Promise<V
   }
   const updatedMapped = mapVenta(updated);
   if (updatedMapped) {
+    await publishAgentEvent("venta.guardada", { ...updatedMapped });
     return updatedMapped;
   }
 
@@ -136,6 +139,7 @@ export async function upsertVentaDiaria(fecha: string, monto: number): Promise<V
   if (!insertedMapped) {
     throw new Error("No pudimos guardar la venta");
   }
+  await publishAgentEvent("venta.guardada", { ...insertedMapped });
   return insertedMapped;
 }
 
@@ -198,5 +202,6 @@ export async function updateVentaDiaria(id: string, patch: VentaPatch): Promise<
   if (!updated) {
     throw new Error("No encontramos esa venta");
   }
+  await publishAgentEvent("venta.guardada", { ...updated });
   return updated;
 }
