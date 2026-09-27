@@ -268,7 +268,7 @@ export function AdminReporteContable() {
           <Section title="Compras del mes" count={compras.length}>
             <LineTable
               empty="No hay facturas con fecha en este mes"
-              headers={["Fecha", "Proveedor", "Monto", "Vence", "Pago", "Id"]}
+              headers={["Fecha", "Proveedor", "RNC", "NCF", "Monto", "Vence", "Pago", "Id"]}
               rows={compras.map((compra) => (
                 <CompraRow key={compra.id} compra={compra} />
               ))}
@@ -456,6 +456,8 @@ function CompraRow({ compra }: { compra: ContableCompra }) {
     <DataTableRow>
       <DataTableCell className="whitespace-nowrap">{compra.fecha}</DataTableCell>
       <DataTableCell className="font-semibold">{compra.proveedorNombre}</DataTableCell>
+      <DataTableCell className="whitespace-nowrap">{compra.rnc ?? ""}</DataTableCell>
+      <DataTableCell className="whitespace-nowrap">{compra.ncf ?? ""}</DataTableCell>
       <DataTableCell numeric>{formatPrice(compra.monto)}</DataTableCell>
       <DataTableCell className="whitespace-nowrap">
         {compra.dueDate}

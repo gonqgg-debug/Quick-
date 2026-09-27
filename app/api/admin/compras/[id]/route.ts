@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
-import { updateCompra, type CompraInput } from "@/lib/admin-compras";
+import { compraFailure, updateCompra } from "@/lib/admin-compras";
+import { readCompraBody } from "@/lib/compra-request";
 
 export const dynamic = "force-dynamic";
 
@@ -10,20 +11,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return auth;
   }
 
-  let body: CompraInput;
   try {
-    body = (await request.json()) as CompraInput;
-  } catch {
-    return NextResponse.json({ error: "El cuerpo no es un JSON válido." }, { status: 400 });
-  }
-
-  try {
-    const compra = await updateCompra(params.id, body);
+    const compra = await updateCompra(params.id, await readCompraBody(request));
     return NextResponse.json({ compra });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "No pudimos guardar la compra";
     console.error("[admin] compras update", error);
-    const status = message.includes("No encontramos") ? 404 : 400;
-    return NextResponse.json({ error: message }, { status });
+    const failure = compraFailure(error, "No pudimos guardar la compra");
+    return NextResponse.json({ error: failure.error, compra: failure.compra }, { status: failure.status });
   }
 }

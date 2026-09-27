@@ -17,6 +17,9 @@ export type Compra = {
   dueDate: string;
   pagado: boolean;
   pagadoEn: string | null;
+  rnc: string | null;
+  ncf: string | null;
+  tieneCaptura: boolean;
 };
 
 export type ComprasSummary = {

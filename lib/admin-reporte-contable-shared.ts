@@ -47,6 +47,9 @@ export type ContableCompra = {
   dueDate: string;
   pagado: boolean;
   pagadoEn: string | null;
+  rnc: string | null;
+  ncf: string | null;
+  tieneCaptura: boolean;
   vencida: boolean;
   vencimientoEsperado: string;
   vencimientoCoincide: boolean;
@@ -233,6 +236,9 @@ export type ContableCompraInput = {
   dueDate: string;
   pagado: boolean;
   pagadoEn: string | null;
+  rnc: string | null;
+  ncf: string | null;
+  tieneCaptura: boolean;
 };
 
 export type ContableProveedorInput = {
@@ -312,7 +318,7 @@ export const REPORTE_CONTABLE_DEFINICIONES: ContableDefinicion[] = [
   {
     campo: "compras",
     significado:
-      "Facturas de compras con fecha dentro del mes. El monto es el de la factura, no el costo de lo vendido. pagado y pagadoEn son el estado actual, no un cierre histórico.",
+      "Facturas de compras con fecha dentro del mes. El monto es el de la factura, no el costo de lo vendido. pagado y pagadoEn son el estado actual, no un cierre histórico. rnc y ncf identifican el comprobante. tieneCaptura dice si hay foto o PDF; el archivo se baja en /api/agent/compras/{id}/captura.",
   },
   {
     campo: "pagosProveedores",
@@ -856,6 +862,9 @@ function mapCompra(
     dueDate: compra.dueDate,
     pagado: compra.pagado,
     pagadoEn,
+    rnc: compra.rnc,
+    ncf: compra.ncf,
+    tieneCaptura: compra.tieneCaptura,
     vencida: !compra.pagado && isDayKey(compra.dueDate) && isDayKey(today) && compra.dueDate < today,
     vencimientoEsperado,
     vencimientoCoincide: vencimientoEsperado === compra.dueDate,
