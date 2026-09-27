@@ -27,6 +27,7 @@ import {
   referenciaFactura,
   type DuplicadoCandidato,
   type FacturaCampos,
+  type FacturaCatalogoRef,
   type FacturaDetalle,
   type FacturaDocumento,
   type FacturaEstadoLinea,
@@ -34,6 +35,7 @@ import {
   type FacturaLinea,
   type FacturaLineaInput,
   type FacturaMoneda,
+  type FacturaProductoCatalogo,
   type FacturaPregunta,
   type FacturaPreguntaInput,
   type FacturaPresentacion,
@@ -194,6 +196,8 @@ function mapLinea(row: Record<string, unknown>): FacturaLinea | null {
     estado,
     estadoLabel: labelOf(FACTURA_ESTADOS_LINEA, estado),
     observacion: textOrNull(row.observacion, 1000),
+    productoId: typeof row.producto_id === "string" && isUuid(row.producto_id) ? row.producto_id : null,
+    productoCatalogo: null,
   };
 }
 
@@ -499,6 +503,49 @@ async function duplicadoReferenciaDe(duplicadoDe: unknown): Promise<string | nul
   return otro?.referencia ?? null;
 }
 
+async function buscarProductoCatalogo(ref: Exclude<FacturaCatalogoRef, { accion: "omitir" | "quitar" }>): Promise<string> {
+  const supabase = getSupabaseAdminClient();
+  if (ref.accion === "id") {
+    const { data, error } = await supabase.from("products").select("id").eq("id", ref.id).maybeSingle();
+    if (error) {
+      throw error;
+    }
+    if (!data?.id) {
+      throw new Error("No encontramos ese producto en el catálogo");
+    }
+    return String(data.id);
+  }
+  const codigo = ref.codigo.trim();
+  const porCodigo = await supabase.from("products").select("id").eq("codigo_odoo", codigo).limit(2);
+  if (porCodigo.error) {
+    throw porCodigo.error;
+  }
+  const porBarras = porCodigo.data?.length
+    ? porCodigo
+    : await supabase.from("products").select("id").eq("codigo_barras", codigo).limit(2);
+  if (porBarras.error) {
+    throw porBarras.error;
+  }
+  const matches = porBarras.data ?? [];
+  if (matches.length > 1) {
+    throw new Error("Hay más de un producto con ese código. Manda productoId");
+  }
+  if (!matches[0]?.id) {
+    throw new Error("No encontramos ese producto en el catálogo");
+  }
+  return String(matches[0].id);
+}
+
+async function productoIdDeLinea(linea: FacturaLineaInput, actuales: Map<number, string | null>): Promise<string | null> {
+  if (linea.catalogo.accion === "omitir") {
+    return actuales.get(linea.numeroLinea) ?? null;
+  }
+  if (linea.catalogo.accion === "quitar") {
+    return null;
+  }
+  return buscarProductoCatalogo(linea.catalogo);
+}
+
 async function upsertLineas(id: string, lineas: FacturaLineaInput[], reemplazar: boolean): Promise<void> {
   const supabase = getSupabaseAdminClient();
   if (reemplazar) {
@@ -518,10 +565,24 @@ async function upsertLineas(id: string, lineas: FacturaLineaInput[], reemplazar:
   if (!lineas.length) {
     return;
   }
-  const { error } = await supabase.from("factura_lineas").upsert(
-    lineas.map((linea) => lineaRow(id, linea)),
-    { onConflict: "factura_id,numero_linea" }
-  );
+  const actuales = new Map<number, string | null>();
+  const { data: existentes, error: existentesError } = await supabase.from("factura_lineas").select("numero_linea, producto_id").eq("factura_id", id);
+  if (existentesError) {
+    throw existentesError;
+  }
+  for (const row of existentes ?? []) {
+    const numero = int((row as { numero_linea?: unknown }).numero_linea);
+    const productoId = (row as { producto_id?: unknown }).producto_id;
+    actuales.set(numero, typeof productoId === "string" && isUuid(productoId) ? productoId : null);
+  }
+  const rows = [];
+  for (const linea of lineas) {
+    rows.push({
+      ...lineaRow(id, linea),
+      producto_id: await productoIdDeLinea(linea, actuales),
+    });
+  }
+  const { error } = await supabase.from("factura_lineas").upsert(rows, { onConflict: "factura_id,numero_linea" });
   if (error) {
     throw error;
   }
@@ -637,6 +698,37 @@ export async function resumenFacturas(): Promise<FacturasResumen> {
   };
 }
 
+async function adjuntarCatalogo(lineas: FacturaLinea[]): Promise<FacturaLinea[]> {
+  const ids = Array.from(new Set(lineas.map((linea) => linea.productoId).filter((id): id is string => Boolean(id))));
+  if (!ids.length) {
+    return lineas;
+  }
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.from("products").select("id, nombre, marca, codigo_odoo, codigo_barras").in("id", ids);
+  if (error) {
+    throw error;
+  }
+  const porId = new Map<string, FacturaProductoCatalogo>();
+  for (const row of data ?? []) {
+    const id = String((row as { id?: unknown }).id ?? "");
+    const nombre = textOrNull((row as { nombre?: unknown }).nombre, 200);
+    if (!id || !nombre) {
+      continue;
+    }
+    porId.set(id, {
+      id,
+      nombre,
+      marca: textOrNull((row as { marca?: unknown }).marca, 120),
+      codigoOdoo: textOrNull((row as { codigo_odoo?: unknown }).codigo_odoo, 80),
+      codigoBarras: textOrNull((row as { codigo_barras?: unknown }).codigo_barras, 40),
+    });
+  }
+  return lineas.map((linea) => ({
+    ...linea,
+    productoCatalogo: linea.productoId ? porId.get(linea.productoId) ?? null : null,
+  }));
+}
+
 export async function getFactura(idOrClave: string): Promise<FacturaDetalle | null> {
   const id = await findFacturaId(idOrClave);
   if (!id) {
@@ -678,7 +770,9 @@ export async function getFactura(idOrClave: string): Promise<FacturaDetalle | nu
     .filter((row): row is FacturaValidacion => Boolean(row));
   return {
     ...resumen,
-    lineas: (lineas.data ?? []).map((row) => mapLinea(row as Record<string, unknown>)).filter((row): row is FacturaLinea => Boolean(row)),
+    lineas: await adjuntarCatalogo(
+      (lineas.data ?? []).map((row) => mapLinea(row as Record<string, unknown>)).filter((row): row is FacturaLinea => Boolean(row))
+    ),
     validaciones: completarValidaciones(stored),
     preguntas: (preguntas.data ?? []).map((row) => mapPregunta(row as Record<string, unknown>)).filter((row): row is FacturaPregunta => Boolean(row)),
     documentos: (documentos.data ?? [])
@@ -785,6 +879,34 @@ export async function updateFactura(idOrClave: string, body: Record<string, unkn
   await revisarDuplicado(id, estadoExplicito);
   await syncCounters(id);
   const factura = await getFactura(id);
+  if (!factura) {
+    throw new Error("No encontramos esa factura");
+  }
+  return factura;
+}
+
+export async function asignarProductoLinea(idOrClave: string, lineaId: string, productoId: unknown): Promise<FacturaDetalle> {
+  if (!isUuid(lineaId)) {
+    throw new Error("No encontramos esa línea");
+  }
+  const facturaId = await requireFacturaId(idOrClave);
+  let next: string | null = null;
+  if (productoId != null && productoId !== "") {
+    if (typeof productoId !== "string" || !isUuid(productoId.trim())) {
+      throw new Error("El producto del catálogo no es válido");
+    }
+    next = await buscarProductoCatalogo({ accion: "id", id: productoId.trim() });
+  }
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.from("factura_lineas").update({ producto_id: next }).eq("id", lineaId).eq("factura_id", facturaId).select("id").maybeSingle();
+  if (error) {
+    throw error;
+  }
+  if (!data) {
+    throw new Error("No encontramos esa línea");
+  }
+  await supabase.from("facturas").update({ updated_at: new Date().toISOString() }).eq("id", facturaId);
+  const factura = await getFactura(facturaId);
   if (!factura) {
     throw new Error("No encontramos esa factura");
   }
