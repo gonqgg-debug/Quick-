@@ -401,7 +401,7 @@ function FacturaDrawer({ facturaId, onClose, onChanged }: { facturaId: string; o
           ) : null}
           {!factura ? <div className="h-40 animate-pulse rounded-2xl bg-[#F3F4F6]" /> : null}
           {factura && tab === "resumen" ? <Resumen factura={factura} saving={saving} onSave={guardarRevision} /> : null}
-          {factura && tab === "productos" ? <Productos factura={factura} /> : null}
+          {factura && tab === "productos" ? <Productos factura={factura} onChanged={load} /> : null}
           {factura && tab === "validaciones" ? <Validaciones factura={factura} /> : null}
           {factura && tab === "preguntas" ? <Preguntas factura={factura} onAnswered={async () => { await load(); onChanged(); }} /> : null}
           {factura && tab === "documento" ? <Documento factura={factura} /> : null}
@@ -503,7 +503,7 @@ function Dato({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-function Productos({ factura }: { factura: FacturaDetalle }) {
+function Productos({ factura, onChanged }: { factura: FacturaDetalle; onChanged: () => Promise<void> }) {
   if (!factura.lineas.length) {
     return <p className="text-sm text-brand-muted">Phillip todavía no extrajo productos.</p>;
   }
@@ -529,6 +529,7 @@ function Productos({ factura }: { factura: FacturaDetalle }) {
                 {[linea.productoNormalizado, linea.marca, linea.variante, linea.tamano, linea.codigoSku].filter(Boolean).join(" · ") || "Sin normalizar"}
               </p>
               {linea.observacion ? <p className="mt-1 text-xs" style={{ color: "#9A3412" }}>{linea.observacion}</p> : null}
+              <CatalogoLinea facturaId={factura.id} linea={linea} onChanged={onChanged} />
             </DataTableCell>
             <DataTableCell>{linea.presentacionLabel || "—"}</DataTableCell>
             <DataTableCell numeric>{linea.cantidadComprada ?? "—"}</DataTableCell>
@@ -540,6 +541,151 @@ function Productos({ factura }: { factura: FacturaDetalle }) {
         ))}
       </tbody>
     </DataTable>
+  );
+}
+
+type CatalogoOpcion = {
+  id: string;
+  nombre: string;
+  marca: string | null;
+  codigoOdoo: string | null;
+};
+
+function CatalogoLinea({
+  facturaId,
+  linea,
+  onChanged,
+}: {
+  facturaId: string;
+  linea: FacturaDetalle["lineas"][number];
+  onChanged: () => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState(linea.codigoBarras || linea.productoNormalizado || linea.descripcionOriginal || "");
+  const [opciones, setOpciones] = useState<CatalogoOpcion[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const vinculado = linea.productoCatalogo;
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const query = q.trim();
+    if (query.length < 2) {
+      setOpciones([]);
+      setBuscando(false);
+      return;
+    }
+    let cancelled = false;
+    const handle = window.setTimeout(() => {
+      setBuscando(true);
+      void fetch(`/api/admin/catalogo/productos?q=${encodeURIComponent(query)}&estado=activo`, { credentials: "include" })
+        .then(async (response) => {
+          const body = (await response.json()) as { products?: CatalogoOpcion[]; error?: string };
+          if (!response.ok) {
+            throw new Error(body.error || "No pudimos buscar en el catálogo");
+          }
+          if (!cancelled) {
+            setOpciones(body.products ?? []);
+            setError(null);
+          }
+        })
+        .catch((reason: unknown) => {
+          if (!cancelled) {
+            setError(reason instanceof Error ? reason.message : "No pudimos buscar en el catálogo");
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setBuscando(false);
+          }
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [open, q]);
+
+  async function elegir(productoId: string | null) {
+    setGuardando(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/facturas/${facturaId}/lineas/${linea.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productoId }),
+      });
+      const body = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(body.error || "No pudimos enlazar el producto");
+      }
+      setOpen(false);
+      await onChanged();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No pudimos enlazar el producto");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="mt-2">
+      {vinculado ? (
+        <p className="text-xs font-semibold" style={{ color: "#3F6212" }}>
+          Catálogo: {vinculado.nombre}
+          {vinculado.codigoOdoo ? ` · ${vinculado.codigoOdoo}` : ""}
+        </p>
+      ) : (
+        <p className="text-xs font-semibold" style={{ color: "#9A3412" }}>
+          Sin producto del catálogo
+        </p>
+      )}
+      <div className="mt-1 flex flex-wrap gap-2">
+        <button type="button" className="text-xs font-bold" style={{ color: brand.blue }} onClick={() => setOpen((current) => !current)}>
+          {vinculado ? "Cambiar" : "Elegir"}
+        </button>
+        {vinculado ? (
+          <button type="button" className="text-xs font-bold text-brand-muted" disabled={guardando} onClick={() => void elegir(null)}>
+            Quitar
+          </button>
+        ) : null}
+      </div>
+      {open ? (
+        <div className="mt-2 rounded-xl border border-[#E7EBE4] bg-white p-2">
+          <AdminInput
+            bare
+            value={q}
+            onChange={(event) => setQ(event.target.value)}
+            placeholder="Nombre, código o barras"
+            aria-label={`Buscar producto del catálogo para la línea ${linea.numeroLinea}`}
+          />
+          {buscando ? <p className="mt-2 text-xs text-brand-muted">Buscando…</p> : null}
+          {error ? <p className="mt-2 text-xs" style={{ color: brand.error }}>{error}</p> : null}
+          <ul className="mt-1 max-h-48 overflow-y-auto">
+            {opciones.map((opcion) => (
+              <li key={opcion.id}>
+                <button
+                  type="button"
+                  disabled={guardando}
+                  onClick={() => void elegir(opcion.id)}
+                  className="block w-full rounded-lg px-2 py-1.5 text-left text-xs hover:bg-[#F7F8F6]"
+                >
+                  <span className="font-semibold">{opcion.nombre}</span>
+                  <span className="mt-0.5 block text-brand-muted">{[opcion.marca, opcion.codigoOdoo].filter(Boolean).join(" · ") || "Sin código"}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {!buscando && q.trim().length >= 2 && opciones.length === 0 && !error ? <p className="mt-2 text-xs text-brand-muted">Ningún producto coincide.</p> : null}
+        </div>
+      ) : error ? (
+        <p className="mt-1 text-xs" style={{ color: brand.error }}>{error}</p>
+      ) : null}
+    </div>
   );
 }
 

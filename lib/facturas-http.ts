@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { abrirDocumento, leerPeticionFactura } from "@/lib/factura-documentos";
 import {
+  asignarProductoLinea,
   createFactura,
   filtroDesdeParams,
   getFactura,
@@ -34,7 +35,8 @@ function statusFor(message: string): number {
     message.startsWith("Las ") ||
     message.startsWith("Manda ") ||
     message.startsWith("Esa clave") ||
-    message.startsWith("Cada foto")
+    message.startsWith("Cada foto") ||
+    message.startsWith("Hay ")
   ) {
     return 400;
   }
@@ -186,6 +188,15 @@ export async function handleGetDocumento(idOrClave: string, documentoId: string)
     return NextResponse.json({ error: "No encontramos esa foto" }, { status: 404 });
   }
   return documentoResponse(file);
+}
+
+export async function handleAsignarProducto(idOrClave: string, lineaId: string, request: NextRequest) {
+  const { body } = await leerPeticionFactura(request);
+  if (!("productoId" in body)) {
+    throw new Error("Manda productoId del catálogo, o null para quitarlo");
+  }
+  const factura = await asignarProductoLinea(idOrClave, lineaId, body.productoId);
+  return NextResponse.json({ factura });
 }
 
 export async function handleAdminPatch(id: string, request: NextRequest) {

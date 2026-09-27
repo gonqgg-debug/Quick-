@@ -71,6 +71,12 @@ const linea = leerLinea(
 );
 assert(linea.unidadesTotales === null && linea.costoUnitario === null, "la línea no guarda unidades dudosas");
 assert(linea.observacion?.includes("no está confirmado"), "la observación explica por qué");
+assert(linea.catalogo.accion === "omitir", "sin productoId no toca el catálogo");
+
+const conCodigo = leerLinea({ descripcion: "Agua", codigoOdoo: "OD-1" }, 0);
+assert(conCodigo.catalogo.accion === "codigo" && conCodigo.catalogo.codigo === "OD-1", "codigoOdoo enlaza el catálogo");
+const quitado = leerLinea({ descripcion: "Agua", productoId: "" }, 0);
+assert(quitado.catalogo.accion === "quitar", "productoId vacío quita el vínculo");
 
 const leida = leerCamposFactura({ estado: "Completa", moneda: "RD$", tipo: "Nota de crédito", total: "1.234,50" }, "create");
 assert(leida.campos.estado === "completa", "acepta la etiqueta del estado");

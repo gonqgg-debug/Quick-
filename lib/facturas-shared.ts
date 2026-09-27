@@ -114,7 +114,23 @@ export type FacturaLinea = {
   estado: FacturaEstadoLinea;
   estadoLabel: string;
   observacion: string | null;
+  productoId: string | null;
+  productoCatalogo: FacturaProductoCatalogo | null;
 };
+
+export type FacturaProductoCatalogo = {
+  id: string;
+  nombre: string;
+  marca: string | null;
+  codigoOdoo: string | null;
+  codigoBarras: string | null;
+};
+
+export type FacturaCatalogoRef =
+  | { accion: "omitir" }
+  | { accion: "quitar" }
+  | { accion: "id"; id: string }
+  | { accion: "codigo"; codigo: string };
 
 export type FacturaValidacion = {
   codigo: FacturaValidacionCodigo;
@@ -247,6 +263,7 @@ export type FacturaLineaInput = {
   totalLinea: number | null;
   estado: FacturaEstadoLinea;
   observacion: string | null;
+  catalogo: FacturaCatalogoRef;
 };
 
 export type FacturaValidacionInput = {
@@ -281,7 +298,7 @@ export type DuplicadoCandidato = {
 };
 
 export const FACTURAS_AGENT_USO =
-  "Guarda cada factura en cuanto llegue, con la foto original. POST /api/agent/facturas manda proveedor, tienda, fechas, montos, lineas (o productos), validaciones, preguntas y la foto: en JSON usa fotoBase64 o documentos[{ pagina, base64 }]; en multipart adjunta el archivo en el campo foto (también vale captura o documento). JPG, PNG, WebP o PDF, hasta 4 MB por archivo. Si hay varias páginas, mándalas todas. Identifica la factura con referencia (proveedor, fecha, monto y tienda): el id es interno y no se menciona en la conversación. Si no sabes cuántas unidades trae la caja, el paquete o el fardo, no mandes unidadesPorPresentacion ni calcules unidadesTotales o costoUnitario. Repetir el POST con la misma clave no pisa la factura y responde creado: false; una foto nueva de esa clave sí se guarda. Para corregir usa PATCH. Completa significa que terminaste de capturar y validar, no que la factura esté en Odoo.";
+  "Guarda cada factura en cuanto llegue, con la foto original. POST /api/agent/facturas manda proveedor, tienda, fechas, montos, lineas (o productos), validaciones, preguntas y la foto: en JSON usa fotoBase64 o documentos[{ pagina, base64 }]; en multipart adjunta el archivo en el campo foto (también vale captura o documento). JPG, PNG, WebP o PDF, hasta 4 MB por archivo. Si hay varias páginas, mándalas todas. Identifica la factura con referencia (proveedor, fecha, monto y tienda): el id es interno y no se menciona en la conversación. Si no sabes cuántas unidades trae la caja, el paquete o el fardo, no mandes unidadesPorPresentacion ni calcules unidadesTotales o costoUnitario. Para cruzar una línea con el catálogo manda productoId o codigoOdoo; si no lo mandas, el producto ya elegido se conserva. Repetir el POST con la misma clave no pisa la factura y responde creado: false; una foto nueva de esa clave sí se guarda. Para corregir usa PATCH. Completa significa que terminaste de capturar y validar, no que la factura esté en Odoo.";
 
 export const FACTURAS_AGENT_ENDPOINTS = [
   {
@@ -305,7 +322,7 @@ export const FACTURAS_AGENT_ENDPOINTS = [
   {
     method: "POST",
     path: "/api/agent/facturas/{id-o-clave}/lineas",
-    describe: "Agrega o corrige productos. El mismo numeroLinea actualiza la fila. No calcules unidades si no conoces las unidades por presentación.",
+    describe: "Agrega o corrige productos. El mismo numeroLinea actualiza la fila. Para enlazar el catálogo manda productoId o codigoOdoo. No calcules unidades si no conoces las unidades por presentación.",
   },
   {
     method: "POST",
@@ -907,6 +924,35 @@ function unirObservacion(propia: string | null, aviso: string | null): string | 
   return `${propia} ${aviso}`;
 }
 
+export function leerCatalogoRef(raw: Record<string, unknown>, donde: string): FacturaCatalogoRef {
+  const idKeys = ["productoId", "producto_id", "catalogoId"];
+  const codeKeys = ["codigoOdoo", "codigo_odoo", "codigoCatalogo", "codigo_catalogo"];
+  const hasId = idKeys.some((key) => Object.prototype.hasOwnProperty.call(raw, key));
+  const hasCode = codeKeys.some((key) => Object.prototype.hasOwnProperty.call(raw, key));
+  if (!hasId && !hasCode) {
+    return { accion: "omitir" };
+  }
+  if (hasId) {
+    const value = pick(raw, idKeys);
+    if (value == null || value === "") {
+      return { accion: "quitar" };
+    }
+    if (typeof value !== "string" || !isUuid(value.trim())) {
+      throw new Error(`${donde}: productoId tiene que ser el id del producto en el catálogo`);
+    }
+    return { accion: "id", id: value.trim() };
+  }
+  const value = pick(raw, codeKeys);
+  if (value == null || value === "") {
+    return { accion: "quitar" };
+  }
+  const codigo = textOrNull(value, 80);
+  if (!codigo) {
+    return { accion: "quitar" };
+  }
+  return { accion: "codigo", codigo };
+}
+
 export function leerLinea(raw: Record<string, unknown>, index: number): FacturaLineaInput {
   const donde = `La línea ${index + 1}`;
   const numeroRaw = pick(raw, ["numeroLinea", "numero_linea", "numero", "linea"]);
@@ -971,6 +1017,7 @@ export function leerLinea(raw: Record<string, unknown>, index: number): FacturaL
     totalLinea: requireMoney(pick(raw, ["totalLinea", "total_linea", "total"]), `${donde}: el total`),
     estado,
     observacion: unirObservacion(textOrNull(pick(raw, ["observacion", "observaciones"]), 1000), unidades.aviso),
+    catalogo: leerCatalogoRef(raw, donde),
   };
 }
 
