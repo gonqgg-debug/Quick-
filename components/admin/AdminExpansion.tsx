@@ -665,7 +665,7 @@ function ModalFrame({
       : "relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[28px] bg-white p-6";
 
   return (
-    <div className={layout === "drawer" ? "fixed inset-0 z-50 flex justify-end" : "fixed inset-0 z-50 flex items-end justify-center px-4 py-6 sm:items-center"}>
+    <div className={layout === "drawer" ? "fixed inset-0 z-[1200] flex justify-end" : "fixed inset-0 z-[1200] flex items-end justify-center px-4 py-6 sm:items-center"}>
       <button type="button" className="absolute inset-0 bg-black/35" aria-label="Cerrar" onClick={onClose} />
       <div
         role="dialog"

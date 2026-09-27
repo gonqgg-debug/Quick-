@@ -93,8 +93,12 @@ export function AdminExpansionMap({ sitios, focusId = null, onSelect }: AdminExp
   }, [signature, focusId]);
 
   return (
-    <div className="h-[440px] overflow-hidden rounded-lg border border-[#E5E7EB] bg-[#E8EEF2]">
-      <style>{".expansion-crm-pin{background:transparent !important;border:0 !important;}"}</style>
+    <div className="expansion-crm-map relative z-0 h-[440px] overflow-hidden rounded-lg border border-[#E5E7EB] bg-[#E8EEF2]">
+      <style>{`
+        .expansion-crm-pin{background:transparent !important;border:0 !important;}
+        .expansion-crm-map{isolation:isolate;}
+        .expansion-crm-map .leaflet-container{z-index:0;}
+      `}</style>
       <div ref={containerRef} className="h-full w-full" />
     </div>
   );
