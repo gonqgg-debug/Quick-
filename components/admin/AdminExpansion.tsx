@@ -35,7 +35,7 @@ type Board = {
   contactos: ExpansionContacto[];
 };
 
-type Tab = "sitios" | "mapa" | "contactos";
+type Tab = "tablero" | "lista" | "mapa" | "personas";
 type EtapaFilter = "todas" | ExpansionEtapa;
 
 function fechaCorta(value: string | null): string {
@@ -73,7 +73,7 @@ export function AdminExpansion() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("sitios");
+  const [tab, setTab] = useState<Tab>("tablero");
   const [etapa, setEtapa] = useState<EtapaFilter>("todas");
   const [soloVencidos, setSoloVencidos] = useState(false);
   const [q, setQ] = useState("");
@@ -164,40 +164,28 @@ export function AdminExpansion() {
 
   const pipeline = board?.pipeline;
 
+  const sinMapa = (board?.sitios ?? []).filter((sitio) => !sitio.enMapa);
+
   return (
-    <div className="mx-auto max-w-6xl">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="mx-auto max-w-[1440px]">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Expansión</p>
-          <h1 className="font-display mt-1 text-2xl font-bold">Pipeline</h1>
-          <p className="mt-1 max-w-xl text-sm text-brand-muted">
-            Sitios, contactos y el próximo paso. El mapa muestra cada oportunidad con latitud y longitud. El bot escribe en esta misma lista.
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-muted">Expansión</p>
+          <h1 className="font-display mt-1 text-3xl font-bold tracking-tight">Pipeline</h1>
+          <p className="mt-1 text-sm text-brand-muted">
+            {pipeline ? `${pipeline.activos} en curso` : "Oportunidades, personas y el próximo paso"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setEditingMetas(true)}
-            className="rounded-full px-4 text-sm font-bold"
-            style={{ minHeight: 44, border: "1px solid #E5E7EB", color: brand.ink }}
-          >
-            Ajustar metas
-          </button>
-          <button
-            type="button"
-            onClick={() => setEditingContacto("new")}
-            className="rounded-full px-4 text-sm font-bold"
-            style={{ minHeight: 44, border: "1px solid #E5E7EB", color: brand.ink }}
-          >
-            Nuevo contacto
-          </button>
+          <GhostButton onClick={() => setEditingMetas(true)}>Metas</GhostButton>
+          <GhostButton onClick={() => setEditingContacto("new")}>Persona</GhostButton>
           <button
             type="button"
             onClick={() => setEditingSitio("new")}
             className="rounded-full px-4 text-sm font-bold text-white"
-            style={{ minHeight: 44, backgroundColor: brand.green }}
+            style={{ minHeight: 40, backgroundColor: brand.green }}
           >
-            Nuevo sitio
+            Oportunidad
           </button>
         </div>
       </div>
@@ -214,213 +202,234 @@ export function AdminExpansion() {
       ) : null}
 
       {loading ? (
-        <div className="mt-6 h-48 animate-pulse rounded-lg bg-gray-100" />
+        <div className="mt-6 h-64 animate-pulse rounded-2xl bg-[#F3F4F6]" />
       ) : pipeline ? (
         <>
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-5 grid grid-cols-2 divide-x divide-y divide-[#E7EBE4] overflow-hidden rounded-2xl border border-[#E7EBE4] bg-white md:grid-cols-4 md:divide-y-0">
             {pipeline.metas.map((meta) => (
-              <article key={meta.id} className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">{meta.etiqueta}</p>
-                <p className="font-display mt-2 text-3xl font-bold tabular-nums">{meta.actual}</p>
-                <p className="mt-1 text-sm text-brand-muted">
-                  {meta.meta > 0 ? `Meta ${meta.meta} · ${metaEstado(meta)}` : metaEstado(meta)}
-                </p>
-              </article>
+              <div key={meta.id} className="px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted">{meta.etiqueta}</p>
+                <p className="font-display mt-1 text-2xl font-bold tabular-nums">{meta.actual}</p>
+                <p className="text-xs text-brand-muted">{meta.meta > 0 ? `Meta ${meta.meta} · ${metaEstado(meta)}` : metaEstado(meta)}</p>
+              </div>
             ))}
             <button
               type="button"
               onClick={() => {
-                setTab("sitios");
                 setSoloVencidos((current) => !current);
                 setEtapa("todas");
+                setTab("tablero");
               }}
-              className="rounded-lg border px-4 py-4 text-left"
-              style={{
-                borderColor: soloVencidos ? brand.orange : "#E5E7EB",
-                backgroundColor: soloVencidos ? brand.paleOrange : "#fff",
-              }}
+              className="px-4 py-3 text-left"
+              style={{ backgroundColor: soloVencidos || pipeline.seguimientosVencidos > 0 ? brand.paleOrange : "#fff" }}
             >
-              <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Seguimientos vencidos</p>
-              <p className="font-display mt-2 text-3xl font-bold tabular-nums" style={{ color: pipeline.seguimientosVencidos > 0 ? brand.orange : brand.ink }}>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted">Atrasados</p>
+              <p className="font-display mt-1 text-2xl font-bold tabular-nums" style={{ color: pipeline.seguimientosVencidos > 0 ? "#9A3412" : brand.ink }}>
                 {pipeline.seguimientosVencidos}
               </p>
-              <p className="mt-1 text-sm text-brand-muted">{soloVencidos ? "Mostrando solo estos" : "Toca para filtrarlos"}</p>
+              <p className="text-xs text-brand-muted">{soloVencidos ? "Filtro activo" : "El trabajo de hoy"}</p>
             </button>
           </div>
 
-          <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-            <FilterChip active={etapa === "todas" && !soloVencidos} onClick={() => { setEtapa("todas"); setSoloVencidos(false); }}>
-              Todos
-            </FilterChip>
-            {pipeline.etapas.map((item) => (
-              <FilterChip
-                key={item.id}
-                active={etapa === item.id}
-                onClick={() => {
-                  setEtapa(item.id);
-                  setSoloVencidos(false);
-                  setTab("sitios");
-                }}
-              >
-                {item.label} {item.sitios}
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="inline-flex rounded-full bg-[#EEF2EA] p-1" role="tablist" aria-label="Vista del pipeline">
+              {(
+                [
+                  ["tablero", "Tablero"],
+                  ["lista", "Lista"],
+                  ["mapa", "Mapa"],
+                  ["personas", "Personas"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === id}
+                  onClick={() => setTab(id)}
+                  className="rounded-full px-3 text-sm font-semibold"
+                  style={{
+                    minHeight: 34,
+                    backgroundColor: tab === id ? "#fff" : "transparent",
+                    color: brand.ink,
+                    boxShadow: tab === id ? "0 1px 2px rgba(26,26,26,0.08)" : "none",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {tab !== "personas" ? (
+              <div className="w-full max-w-sm">
+                <AdminInput
+                  bare
+                  value={q}
+                  onChange={(event) => setQ(event.target.value)}
+                  placeholder="Buscar oportunidad, zona o persona"
+                  aria-label="Buscar oportunidades"
+                />
+              </div>
+            ) : null}
+          </div>
+
+          {tab !== "personas" && tab !== "mapa" ? (
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+              <FilterChip active={etapa === "todas" && !soloVencidos} onClick={() => { setEtapa("todas"); setSoloVencidos(false); }}>
+                Todas
               </FilterChip>
-            ))}
-          </div>
+              {pipeline.etapas.map((item) => (
+                <FilterChip
+                  key={item.id}
+                  active={etapa === item.id}
+                  onClick={() => {
+                    setEtapa(item.id);
+                    setSoloVencidos(false);
+                  }}
+                >
+                  {item.label}
+                  <span className="ml-1 tabular-nums opacity-70">{item.sitios}</span>
+                </FilterChip>
+              ))}
+            </div>
+          ) : null}
 
-          <div className="mt-5 flex gap-2">
-            <TabButton active={tab === "sitios"} onClick={() => setTab("sitios")}>
-              Sitios
-            </TabButton>
-            <TabButton active={tab === "mapa"} onClick={() => setTab("mapa")}>
-              Mapa
-            </TabButton>
-            <TabButton active={tab === "contactos"} onClick={() => setTab("contactos")}>
-              Contactos
-            </TabButton>
-          </div>
-
-          {tab === "mapa" ? (
-            <section className="mt-4">
-              <AdminExpansionMap sitios={board?.sitios ?? []} onSelect={(id) => setOpenSitioId(id)} />
-              <p className="mt-3 text-sm text-brand-muted">
-                {(board?.sitios ?? []).filter((sitio) => sitio.enMapa).length} en el mapa
-                {(board?.sitios ?? []).some((sitio) => !sitio.enMapa)
-                  ? ` · ${(board?.sitios ?? []).filter((sitio) => !sitio.enMapa).length} sin latitud y longitud`
-                  : ""}
-              </p>
-              {(board?.sitios ?? []).some((sitio) => !sitio.enMapa) ? (
-                <ul className="mt-3 space-y-2">
-                  {(board?.sitios ?? [])
-                    .filter((sitio) => !sitio.enMapa)
-                    .map((sitio) => (
-                      <li key={sitio.id}>
-                        <button type="button" onClick={() => setOpenSitioId(sitio.id)} className="text-left text-sm font-semibold" style={{ color: brand.navy }}>
-                          {sitio.nombre}
-                        </button>
-                        <span className="text-sm text-brand-muted"> · {sitio.zona || "sin zona"} · falta ubicación</span>
-                      </li>
-                    ))}
-                </ul>
-              ) : null}
-            </section>
-          ) : tab === "sitios" ? (
-            <section className="mt-4">
-              <AdminInput
-                value={q}
-                onChange={(event) => setQ(event.target.value)}
-                placeholder="Buscar sitio, zona, contacto o próximo paso"
-                aria-label="Buscar sitios"
+          {tab === "tablero" ? (
+            sitios.length === 0 ? (
+              <Empty
+                title={board?.sitios.length ? "Nada en este filtro" : "El pipeline está vacío"}
+                body={board?.sitios.length ? "Quita el filtro para ver el resto de las etapas." : "Crea la primera oportunidad, o deja que el bot la suba."}
               />
+            ) : (
+              <PipelineBoard sitios={sitios} etapas={pipeline.etapas} etapa={etapa} soloVencidos={soloVencidos} onOpen={setOpenSitioId} />
+            )
+          ) : null}
+
+          {tab === "lista" ? (
+            <section className="mt-4">
               {sitios.length === 0 ? (
                 <Empty
-                  title={board?.sitios.length ? "Ningún sitio con ese filtro" : "Todavía no hay sitios"}
-                  body={board?.sitios.length ? "Prueba otra etapa o limpia la búsqueda." : "Agrega el primero, o deja que el bot lo cree por la API."}
+                  title={board?.sitios.length ? "Ninguna oportunidad con ese filtro" : "Todavía no hay oportunidades"}
+                  body={board?.sitios.length ? "Prueba otra etapa o limpia la búsqueda." : "Crea la primera, o deja que el bot la suba."}
                 />
               ) : (
-                <DataTable className="mt-4" tableClassName="min-w-[860px]">
+                <DataTable tableClassName="min-w-[860px]">
                   <DataTableHead>
-                    <DataTableTh>Sitio</DataTableTh>
-                    <DataTableTh>Zona</DataTableTh>
-                    <DataTableTh>Trato</DataTableTh>
+                    <DataTableTh>Oportunidad</DataTableTh>
                     <DataTableTh>Etapa</DataTableTh>
-                    <DataTableTh>Contacto</DataTableTh>
+                    <DataTableTh>Persona</DataTableTh>
                     <DataTableTh>Próximo paso</DataTableTh>
                     <DataTableTh>Fecha</DataTableTh>
                   </DataTableHead>
                   <tbody>
                     {sitios.map((sitio) => (
-                      <DataTableRow key={sitio.id}>
+                      <DataTableRow key={sitio.id} onClick={() => setOpenSitioId(sitio.id)}>
                         <DataTableCell>
-                          <button type="button" onClick={() => setOpenSitioId(sitio.id)} className="text-left font-semibold" style={{ color: brand.navy }}>
-                            {sitio.nombre}
-                          </button>
-                          {sitio.clave ? <p className="mt-0.5 text-xs text-brand-muted">{sitio.clave}</p> : null}
+                          <p className="font-semibold">{sitio.nombre}</p>
+                          <p className="mt-0.5 text-xs text-brand-muted">{[sitio.zona, sitio.tratoLabel].filter(Boolean).join(" · ") || "Sin zona"}</p>
                         </DataTableCell>
-                        <DataTableCell>{sitio.zona || "—"}</DataTableCell>
-                        <DataTableCell>{sitio.tratoLabel}</DataTableCell>
                         <DataTableCell>
                           <EtapaPill etapa={sitio.etapa} label={sitio.etapaLabel} />
                         </DataTableCell>
                         <DataTableCell>{sitio.contacto?.nombre || "—"}</DataTableCell>
-                        <DataTableCell className="max-w-[220px]">
-                          <span className="line-clamp-2">{sitio.proximaAccion || "—"}</span>
-                          {sitio.seguimientoVencido ? (
-                            <span className="mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ backgroundColor: brand.paleOrange, color: "#9A3412" }}>
-                              Atrasado
-                            </span>
-                          ) : null}
+                        <DataTableCell className="max-w-[240px]">
+                          <span className="line-clamp-2">{sitio.proximaAccion || "Sin definir"}</span>
                         </DataTableCell>
-                        <DataTableCell className="whitespace-nowrap tabular-nums">{fechaCorta(sitio.proximaFecha)}</DataTableCell>
+                        <DataTableCell className="whitespace-nowrap">
+                          <span className="tabular-nums" style={{ color: sitio.seguimientoVencido ? "#9A3412" : undefined, fontWeight: sitio.seguimientoVencido ? 700 : 500 }}>
+                            {sitio.seguimientoVencido ? "Atrasado · " : ""}
+                            {fechaCorta(sitio.proximaFecha)}
+                          </span>
+                        </DataTableCell>
                       </DataTableRow>
                     ))}
                   </tbody>
                 </DataTable>
               )}
             </section>
-          ) : (
+          ) : null}
+
+          {tab === "mapa" ? (
+            <section className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1.5fr)_320px]">
+              <AdminExpansionMap sitios={sitios.length ? sitios : board?.sitios ?? []} onSelect={setOpenSitioId} />
+              <div className="max-h-[440px] space-y-2 overflow-y-auto pr-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted">
+                  {(board?.sitios ?? []).filter((sitio) => sitio.enMapa).length} en el mapa
+                  {sinMapa.length ? ` · ${sinMapa.length} sin ubicación` : ""}
+                </p>
+                {(q ? sitios : board?.sitios ?? []).map((sitio) => (
+                  <button
+                    key={sitio.id}
+                    type="button"
+                    onClick={() => setOpenSitioId(sitio.id)}
+                    className="flex w-full items-start gap-3 rounded-2xl bg-white px-3 py-3 text-left"
+                    style={{ border: "1px solid #E7EBE4" }}
+                  >
+                    <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: sitio.enMapa ? etapaColor(sitio.etapa) : "#D1D5DB" }} />
+                    <span>
+                      <span className="block text-sm font-semibold">{sitio.nombre}</span>
+                      <span className="mt-0.5 block text-xs text-brand-muted">
+                        {sitio.zona || "Sin zona"} · {sitio.enMapa ? sitio.etapaLabel : "falta ubicación"}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {tab === "personas" ? (
             <section className="mt-4">
-              <AdminInput
-                value={contactoQ}
-                onChange={(event) => setContactoQ(event.target.value)}
-                placeholder="Buscar nombre, empresa, teléfono o correo"
-                aria-label="Buscar contactos"
-              />
+              <div className="max-w-sm">
+                <AdminInput
+                  bare
+                  value={contactoQ}
+                  onChange={(event) => setContactoQ(event.target.value)}
+                  placeholder="Buscar persona, empresa o teléfono"
+                  aria-label="Buscar personas"
+                />
+              </div>
               {contactos.length === 0 ? (
                 <Empty
-                  title={board?.contactos.length ? "Ningún contacto con esa búsqueda" : "Todavía no hay contactos"}
-                  body="Brokers, desarrolladores, administraciones y propietarios viven aquí, aparte de los clientes de la tienda."
+                  title={board?.contactos.length ? "Nadie con esa búsqueda" : "Todavía no hay personas"}
+                  body="Brokers, desarrolladores y propietarios. El bot puede subirlos con teléfono, WhatsApp y cargo."
                 />
               ) : (
-                <DataTable className="mt-4" tableClassName="min-w-[760px]">
-                  <DataTableHead>
-                    <DataTableTh>Nombre</DataTableTh>
-                    <DataTableTh>Tipo</DataTableTh>
-                    <DataTableTh>Empresa</DataTableTh>
-                    <DataTableTh>Teléfono</DataTableTh>
-                    <DataTableTh>Correo</DataTableTh>
-                    <DataTableTh className="w-24">
-                      <span className="sr-only">Editar</span>
-                    </DataTableTh>
-                  </DataTableHead>
-                  <tbody>
-                    {contactos.map((contacto) => (
-                      <DataTableRow key={contacto.id}>
-                        <DataTableCell className="font-semibold">
-                          {contacto.nombre}
-                          {contacto.clave ? <p className="mt-0.5 text-xs font-normal text-brand-muted">{contacto.clave}</p> : null}
-                        </DataTableCell>
-                        <DataTableCell>{contacto.tipoLabel}</DataTableCell>
-                        <DataTableCell>{contacto.empresa || "—"}</DataTableCell>
-                        <DataTableCell>
-                          {contacto.telefono ? (
-                            <a href={`tel:${contacto.telefono}`} className="font-semibold" style={{ color: brand.navy }}>
-                              {contacto.telefono}
-                            </a>
-                          ) : (
-                            "—"
-                          )}
-                        </DataTableCell>
-                        <DataTableCell>
-                          {contacto.email ? (
-                            <a href={`mailto:${contacto.email}`} className="font-semibold" style={{ color: brand.navy }}>
-                              {contacto.email}
-                            </a>
-                          ) : (
-                            "—"
-                          )}
-                        </DataTableCell>
-                        <DataTableCell>
-                          <button type="button" onClick={() => setEditingContacto(contacto)} className="text-sm font-bold" style={{ color: brand.green }}>
-                            Editar
-                          </button>
-                        </DataTableCell>
-                      </DataTableRow>
-                    ))}
-                  </tbody>
-                </DataTable>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {contactos.map((contacto) => (
+                    <article key={contacto.id} className="rounded-2xl bg-white p-4" style={{ border: "1px solid #E7EBE4" }}>
+                      <div className="flex items-start gap-3">
+                        <span
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+                          style={{ backgroundColor: brand.navy }}
+                        >
+                          {iniciales(contacto.nombre)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-semibold">{contacto.nombre}</p>
+                          <p className="truncate text-sm text-brand-muted">{contacto.cargo || contacto.empresa || contacto.tipoLabel}</p>
+                        </div>
+                        <button type="button" onClick={() => setEditingContacto(contacto)} className="text-sm font-bold" style={{ color: brand.green }}>
+                          Editar
+                        </button>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ backgroundColor: brand.paleBlue, color: brand.navy }}>
+                          {contacto.tipoLabel}
+                        </span>
+                        {contacto.fuenteLabel ? <span className="text-xs text-brand-muted">{contacto.fuenteLabel}</span> : null}
+                      </div>
+                      <div className="mt-3 space-y-1 text-sm">
+                        {contacto.telefono ? <a href={`tel:${contacto.telefono}`} className="block font-medium" style={{ color: brand.navy }}>{contacto.telefono}</a> : null}
+                        {contacto.whatsapp ? <p className="text-brand-muted">WhatsApp {contacto.whatsapp}</p> : null}
+                        {contacto.email ? <a href={`mailto:${contacto.email}`} className="block truncate" style={{ color: brand.navy }}>{contacto.email}</a> : null}
+                        {!contacto.telefono && !contacto.email ? <p className="text-brand-muted">Sin teléfono ni correo</p> : null}
+                      </div>
+                    </article>
+                  ))}
+                </div>
               )}
             </section>
-          )}
+          ) : null}
         </>
       ) : null}
 
@@ -473,16 +482,42 @@ export function AdminExpansion() {
   );
 }
 
+function GhostButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-full px-4 text-sm font-semibold"
+      style={{ minHeight: 40, border: "1px solid #E5E7EB", backgroundColor: "#fff", color: brand.ink }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function iniciales(nombre: string): string {
+  const parts = nombre.trim().split(/\s+/).slice(0, 2);
+  return parts.map((part) => part[0]?.toUpperCase() ?? "").join("") || "?";
+}
+
+function etapaColor(etapa: ExpansionEtapa): string {
+  if (etapa === "descartado" || etapa === "pausa") return "#9CA3AF";
+  if (etapa === "oportunidad" || etapa === "negociacion") return brand.orange;
+  if (etapa === "conversacion" || etapa === "respondio" || etapa === "presentacion_enviada") return brand.green;
+  return brand.blue;
+}
+
 function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="shrink-0 rounded-full px-3 text-sm font-bold"
+      className="shrink-0 rounded-full px-3 text-sm font-semibold"
       style={{
-        minHeight: 36,
-        backgroundColor: active ? brand.ink : "#F3F4F6",
+        minHeight: 32,
+        backgroundColor: active ? brand.ink : "#fff",
         color: active ? "#fff" : brand.ink,
+        border: active ? `1px solid ${brand.ink}` : "1px solid #E5E7EB",
       }}
     >
       {children}
@@ -490,21 +525,83 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
   );
 }
 
-function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+const BOARD_TAIL = new Set<ExpansionEtapa>(["pausa", "descartado"]);
+
+function PipelineBoard({
+  sitios,
+  etapas,
+  etapa,
+  soloVencidos,
+  onOpen,
+}: {
+  sitios: ExpansionSitio[];
+  etapas: ExpansionPipeline["etapas"];
+  etapa: EtapaFilter;
+  soloVencidos: boolean;
+  onOpen: (id: string) => void;
+}) {
+  const columns = etapas.filter((item) => {
+    const cards = sitios.filter((sitio) => sitio.etapa === item.id);
+    if (etapa !== "todas") return item.id === etapa;
+    if (soloVencidos) return cards.length > 0;
+    if (BOARD_TAIL.has(item.id)) return cards.length > 0;
+    return true;
+  });
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rounded-full px-4 text-sm font-bold"
-      style={{
-        minHeight: 40,
-        backgroundColor: active ? brand.paleGreen : "transparent",
-        color: brand.ink,
-        border: active ? `1px solid ${brand.green}` : "1px solid transparent",
-      }}
-    >
-      {children}
-    </button>
+    <div className="mt-4 flex gap-3 overflow-x-auto pb-4">
+      {columns.map((column) => {
+        const cards = sitios.filter((sitio) => sitio.etapa === column.id);
+        return (
+          <section key={column.id} className="flex w-[272px] shrink-0 flex-col rounded-2xl bg-[#F3F6F1]">
+            <header className="flex items-center justify-between px-3 pb-2 pt-3">
+              <span className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: etapaColor(column.id) }} />
+                <span className="truncate">{column.label}</span>
+              </span>
+              <span className="text-xs font-semibold tabular-nums text-brand-muted">{cards.length}</span>
+            </header>
+            <div className="flex min-h-[140px] flex-col gap-2 overflow-y-auto px-2 pb-2" style={{ maxHeight: "62vh" }}>
+              {cards.map((sitio) => (
+                <button
+                  key={sitio.id}
+                  type="button"
+                  onClick={() => onOpen(sitio.id)}
+                  className="rounded-xl bg-white px-3 py-3 text-left shadow-[0_1px_2px_rgba(26,26,26,0.06)]"
+                  style={{ boxShadow: sitio.seguimientoVencido ? `inset 3px 0 0 ${brand.orange}` : undefined }}
+                >
+                  <p className="font-semibold leading-snug">{sitio.nombre}</p>
+                  <p className="mt-1 truncate text-xs text-brand-muted">{[sitio.zona, sitio.tratoLabel].filter(Boolean).join(" · ") || "Sin zona"}</p>
+                  <p className="mt-2 line-clamp-2 text-sm">{sitio.proximaAccion || "Sin próximo paso"}</p>
+                  <p className="mt-2 text-xs font-semibold" style={{ color: sitio.seguimientoVencido ? "#9A3412" : brand.muted }}>
+                    {sitio.seguimientoVencido ? "Atrasado · " : ""}
+                    {sitio.proximaFecha ? fechaCorta(sitio.proximaFecha) : "Sin fecha"}
+                    {sitio.contacto ? ` · ${sitio.contacto.nombre}` : ""}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function StageRail({ etapa }: { etapa: ExpansionEtapa }) {
+  const flow = EXPANSION_ETAPAS.filter((item) => item.id !== "pausa" && item.id !== "descartado");
+  const index = flow.findIndex((item) => item.id === etapa);
+  return (
+    <ol className="mt-4 flex gap-1" aria-label="Avance en el pipeline">
+      {flow.map((item, position) => (
+        <li
+          key={item.id}
+          title={item.label}
+          className="h-1.5 flex-1 rounded-full"
+          style={{ backgroundColor: index >= 0 && position <= index ? etapaColor(item.id) : "#E5E7EB" }}
+        />
+      ))}
+    </ol>
   );
 }
 
@@ -533,7 +630,19 @@ function Empty({ title, body }: { title: string; body: string }) {
   );
 }
 
-function ModalFrame({ title, kicker, onClose, children }: { title: string; kicker: string; onClose: () => void; children: ReactNode }) {
+function ModalFrame({
+  title,
+  kicker,
+  onClose,
+  children,
+  layout = "dialog",
+}: {
+  title: string;
+  kicker: string;
+  onClose: () => void;
+  children: ReactNode;
+  layout?: "dialog" | "drawer";
+}) {
   useEffect(() => {
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -550,14 +659,19 @@ function ModalFrame({ title, kicker, onClose, children }: { title: string; kicke
     };
   }, [onClose]);
 
+  const panelClass =
+    layout === "drawer"
+      ? "relative z-10 h-full w-full max-w-xl overflow-y-auto bg-white p-6 sm:p-8"
+      : "relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[28px] bg-white p-6";
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center px-4 py-6 sm:items-center">
-      <button type="button" className="absolute inset-0 bg-black/40" aria-label="Cerrar" onClick={onClose} />
+    <div className={layout === "drawer" ? "fixed inset-0 z-50 flex justify-end" : "fixed inset-0 z-50 flex items-end justify-center px-4 py-6 sm:items-center"}>
+      <button type="button" className="absolute inset-0 bg-black/35" aria-label="Cerrar" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="expansion-modal-title"
-        className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[28px] bg-white p-6"
+        className={panelClass}
         style={{ boxShadow: "0 24px 64px rgba(26, 26, 26, 0.18)", color: brand.ink }}
       >
         <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">{kicker}</p>
@@ -1101,7 +1215,7 @@ function SitioDetalle({
   const contacto = sitio?.contacto ? contactos.find((item) => item.id === sitio.contacto?.id) ?? sitio.contacto : null;
 
   return (
-    <ModalFrame title={sitio?.nombre ?? "Sitio"} kicker="Seguimiento" onClose={onClose}>
+    <ModalFrame title={sitio?.nombre ?? "Oportunidad"} kicker="Oportunidad" onClose={onClose} layout="drawer">
       {loading ? (
         <div className="mt-5 h-24 animate-pulse rounded-lg bg-gray-100" />
       ) : !sitio ? (
@@ -1112,21 +1226,17 @@ function SitioDetalle({
             <EtapaPill etapa={sitio.etapa} label={sitio.etapaLabel} />
             <span className="text-sm text-brand-muted">{sitio.tratoLabel}</span>
             {sitio.zona ? <span className="text-sm text-brand-muted">{sitio.zona}</span> : null}
-            {sitio.seguimientoVencido ? (
-              <span className="rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ backgroundColor: brand.paleOrange, color: "#9A3412" }}>
-                Atrasado
-              </span>
-            ) : null}
           </div>
-          <p className="mt-3 text-sm">
-            <span className="font-semibold">En esta etapa desde </span>
-            {fechaCorta(sitio.etapaDesde)}
-          </p>
-          <p className="mt-1 text-sm">
-            <span className="font-semibold">Próximo paso: </span>
-            {sitio.proximaAccion || "Sin definir"}
-            {sitio.proximaFecha ? ` · ${fechaCorta(sitio.proximaFecha)}` : ""}
-          </p>
+          <StageRail etapa={sitio.etapa} />
+          <div className="mt-4 rounded-2xl px-4 py-3" style={{ backgroundColor: sitio.seguimientoVencido ? brand.paleOrange : brand.paleGreen }}>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted">
+              {sitio.seguimientoVencido ? "Seguimiento atrasado" : "Próximo paso"}
+            </p>
+            <p className="mt-1 font-semibold">{sitio.proximaAccion || "Sin definir"}</p>
+            <p className="mt-1 text-sm text-brand-muted">
+              {sitio.proximaFecha ? fechaCorta(sitio.proximaFecha) : "Sin fecha"} · en esta etapa desde {fechaCorta(sitio.etapaDesde)}
+            </p>
+          </div>
           {contacto ? (
             <p className="mt-1 text-sm">
               <span className="font-semibold">Contacto: </span>
@@ -1174,10 +1284,11 @@ function SitioDetalle({
           {actividades.length === 0 ? (
             <p className="mt-2 text-sm text-brand-muted">Todavía no hay llamadas, visitas ni notas.</p>
           ) : (
-            <ul className="mt-3 space-y-3">
+            <ul className="mt-4 border-l border-[#E5E7EB] pl-4">
               {actividades.map((actividad) => (
-                <li key={actividad.id} className="rounded-lg px-3 py-3" style={{ backgroundColor: "#F8FAF7" }}>
-                  <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">
+                <li key={actividad.id} className="relative pb-4">
+                  <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-white" style={{ border: `2px solid ${brand.green}` }} />
+                  <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted">
                     {actividad.tipoLabel} · {fechaCorta(actividad.fecha)}
                   </p>
                   <p className="mt-1 whitespace-pre-wrap text-sm">{actividad.texto}</p>
