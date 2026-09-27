@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
     },
     nota: "Estas rutas son de solo lectura y no incluyen teléfonos, direcciones ni chats. El catálogo no tiene existencias.",
     endpoints: [
+      { method: "GET", path: "/api/agent/metas?fecha=YYYY-MM-DD", describe: "Meta del día (la misma que Hoy) y la venta de esa fecha. Con mes=YYYY-MM devuelve cada día del mes." },
       { method: "GET", path: "/api/agent/ventas?fecha=YYYY-MM-DD", describe: "Ventas diarias de un día, o from y to (máximo 93 días)" },
       { method: "GET", path: "/api/agent/compras?from=YYYY-MM-DD&to=YYYY-MM-DD", describe: "Facturas con fecha en el rango" },
       { method: "GET", path: "/api/agent/caja?fecha=YYYY-MM-DD", describe: "Turnos y ledger del rango" },
