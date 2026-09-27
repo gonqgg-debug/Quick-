@@ -1,5 +1,7 @@
 import { publishAgentEvent } from "@/lib/agent-events";
 import { parsePrice } from "@/lib/catalog-import";
+import { removeCompraCaptura, storeCompraCaptura, type CompraCapturaFile } from "@/lib/compra-captura";
+import { COMPRA_NCF_DUPLICADO, parseNcf, parseRnc } from "@/lib/compra-fiscal";
 import { isDayKey, todayDayKey } from "@/lib/local-day";
 import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
@@ -21,7 +23,7 @@ const LIST_MAX = 1000;
 
 const PROVEEDOR_SELECT = "id, nombre, tiene_credito, dias_credito, notas";
 const COMPRA_SELECT =
-  "id, proveedor_id, monto, fecha, due_date, pagado, pagado_en, proveedores ( id, nombre )";
+  "id, proveedor_id, monto, fecha, due_date, pagado, pagado_en, rnc, ncf, captura_path, proveedores ( id, nombre )";
 
 type ProveedorRow = {
   id: unknown;
@@ -41,8 +43,13 @@ type CompraRow = {
   due_date: unknown;
   pagado: unknown;
   pagado_en: unknown;
+  rnc: unknown;
+  ncf: unknown;
+  captura_path: unknown;
   proveedores?: ProveedorEmbed;
 };
+
+type CompraStored = Compra & { capturaPath: string | null };
 
 function isUniqueViolation(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "23505");
@@ -87,7 +94,12 @@ function proveedorNombre(embed: ProveedorEmbed | undefined, fallbackId: string):
   return nombre || fallbackId;
 }
 
-function mapCompra(row: CompraRow): Compra | null {
+function fiscalText(value: unknown): string | null {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text || null;
+}
+
+function mapCompra(row: CompraRow): CompraStored | null {
   const id = String(row.id ?? "");
   const proveedorId = String(row.proveedor_id ?? "");
   const fecha = String(row.fecha ?? "");
@@ -96,6 +108,7 @@ function mapCompra(row: CompraRow): Compra | null {
     return null;
   }
   const pagadoEn = row.pagado_en ? String(row.pagado_en) : null;
+  const capturaPath = fiscalText(row.captura_path);
   return {
     id,
     proveedorId,
@@ -105,6 +118,26 @@ function mapCompra(row: CompraRow): Compra | null {
     dueDate,
     pagado: Boolean(row.pagado),
     pagadoEn: pagadoEn && isDayKey(pagadoEn) ? pagadoEn : null,
+    rnc: fiscalText(row.rnc),
+    ncf: fiscalText(row.ncf),
+    tieneCaptura: Boolean(capturaPath),
+    capturaPath,
+  };
+}
+
+function publicCompra(compra: CompraStored): Compra {
+  return {
+    id: compra.id,
+    proveedorId: compra.proveedorId,
+    proveedorNombre: compra.proveedorNombre,
+    monto: compra.monto,
+    fecha: compra.fecha,
+    dueDate: compra.dueDate,
+    pagado: compra.pagado,
+    pagadoEn: compra.pagadoEn,
+    rnc: compra.rnc,
+    ncf: compra.ncf,
+    tieneCaptura: compra.tieneCaptura,
   };
 }
 
@@ -287,7 +320,10 @@ export async function listCompras(filters: ListComprasFilters = {}): Promise<Com
   if (error) {
     throw error;
   }
-  const compras = (data ?? []).map((row) => mapCompra(row as CompraRow)).filter((row): row is Compra => Boolean(row));
+  const compras = (data ?? [])
+    .map((row) => mapCompra(row as CompraRow))
+    .filter((row): row is CompraStored => Boolean(row))
+    .map(publicCompra);
   return { compras, summary, total: count ?? compras.length };
 }
 
@@ -374,7 +410,7 @@ async function resolveProveedor(input: { proveedorId?: unknown; proveedorNombre?
   throw new Error("Elige o escribe un proveedor");
 }
 
-async function getCompraById(id: string): Promise<Compra | null> {
+async function getCompraById(id: string): Promise<CompraStored | null> {
   if (!id) {
     return null;
   }
@@ -386,6 +422,48 @@ async function getCompraById(id: string): Promise<Compra | null> {
   return data ? mapCompra(data as CompraRow) : null;
 }
 
+async function findCompraByRncNcf(rnc: string, ncf: string): Promise<CompraStored | null> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.from("compras").select(COMPRA_SELECT).eq("rnc", rnc).eq("ncf", ncf).maybeSingle();
+  if (error) {
+    throw error;
+  }
+  return data ? mapCompra(data as CompraRow) : null;
+}
+
+export class CompraDuplicadaError extends Error {
+  compra: Compra;
+
+  constructor(compra: Compra) {
+    super(COMPRA_NCF_DUPLICADO);
+    this.name = "CompraDuplicadaError";
+    this.compra = compra;
+  }
+}
+
+function requireFiscal(input: { rnc?: unknown; ncf?: unknown }): { rnc: string; ncf: string } {
+  const rnc = parseRnc(input.rnc);
+  if (!rnc.ok) {
+    throw new Error(rnc.message);
+  }
+  const ncf = parseNcf(input.ncf);
+  if (!ncf.ok) {
+    throw new Error(ncf.message);
+  }
+  return { rnc: rnc.rnc, ncf: ncf.ncf };
+}
+
+async function throwIfDuplicateNcf(error: unknown, rnc: string, ncf: string): Promise<never> {
+  if (!isUniqueViolation(error)) {
+    throw error;
+  }
+  const existing = await findCompraByRncNcf(rnc, ncf);
+  if (existing) {
+    throw new CompraDuplicadaError(publicCompra(existing));
+  }
+  throw new Error(COMPRA_NCF_DUPLICADO);
+}
+
 export type CompraInput = {
   proveedorId?: unknown;
   proveedorNombre?: unknown;
@@ -394,6 +472,9 @@ export type CompraInput = {
   dueDate?: unknown;
   pagado?: unknown;
   pagadoEn?: unknown;
+  rnc?: unknown;
+  ncf?: unknown;
+  captura?: CompraCapturaFile;
 };
 
 export async function createCompra(input: CompraInput): Promise<Compra> {
@@ -407,6 +488,11 @@ export async function createCompra(input: CompraInput): Promise<Compra> {
   const pagadoEn = pagado
     ? parseOptionalDayField(input.pagadoEn, "La fecha de pago no es válida") ?? fecha
     : null;
+  const fiscal = requireFiscal(input);
+  if (!input.captura) {
+    throw new Error("La captura de la factura es obligatoria");
+  }
+  const capturaPath = await storeCompraCaptura(input.captura);
 
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
@@ -418,18 +504,24 @@ export async function createCompra(input: CompraInput): Promise<Compra> {
       due_date: dueDate,
       pagado,
       pagado_en: pagadoEn,
+      rnc: fiscal.rnc,
+      ncf: fiscal.ncf,
+      captura_path: capturaPath,
     })
     .select(COMPRA_SELECT)
     .single();
   if (error) {
-    throw error;
+    await removeCompraCaptura(capturaPath);
+    await throwIfDuplicateNcf(error, fiscal.rnc, fiscal.ncf);
   }
-  const mapped = mapCompra(data as CompraRow);
+  const mapped = data ? mapCompra(data as CompraRow) : null;
   if (!mapped) {
+    await removeCompraCaptura(capturaPath);
     throw new Error("No pudimos guardar la compra");
   }
-  await publishAgentEvent("compra.creada", { ...mapped });
-  return mapped;
+  const compra = publicCompra(mapped);
+  await publishAgentEvent("compra.creada", { ...compra });
+  return compra;
 }
 
 export async function updateCompra(id: string, input: CompraInput): Promise<Compra> {
@@ -448,7 +540,12 @@ export async function updateCompra(id: string, input: CompraInput): Promise<Comp
     due_date?: string;
     pagado?: boolean;
     pagado_en?: string | null;
+    rnc?: string;
+    ncf?: string;
+    captura_path?: string;
   } = {};
+  let uploadedPath: string | null = null;
+  let fiscal: { rnc: string; ncf: string } | null = null;
 
   if (hasOwn(input, "proveedorId") || hasOwn(input, "proveedorNombre")) {
     const proveedor = await resolveProveedor(input);
@@ -496,8 +593,28 @@ export async function updateCompra(id: string, input: CompraInput): Promise<Comp
     next.pagado_en = null;
   }
 
+  if (hasOwn(input, "rnc") || hasOwn(input, "ncf")) {
+    fiscal = requireFiscal({
+      rnc: hasOwn(input, "rnc") ? input.rnc : current.rnc,
+      ncf: hasOwn(input, "ncf") ? input.ncf : current.ncf,
+    });
+    if (fiscal.rnc !== current.rnc) {
+      next.rnc = fiscal.rnc;
+    }
+    if (fiscal.ncf !== current.ncf) {
+      next.ncf = fiscal.ncf;
+    }
+  }
+  if (!current.tieneCaptura && !input.captura && (hasOwn(input, "rnc") || hasOwn(input, "ncf"))) {
+    throw new Error("La captura de la factura es obligatoria");
+  }
+  if (input.captura) {
+    uploadedPath = await storeCompraCaptura(input.captura);
+    next.captura_path = uploadedPath;
+  }
+
   if (Object.keys(next).length === 0) {
-    return current;
+    return publicCompra(current);
   }
 
   const supabase = getSupabaseAdminClient();
@@ -508,18 +625,35 @@ export async function updateCompra(id: string, input: CompraInput): Promise<Comp
     .select(COMPRA_SELECT)
     .maybeSingle();
   if (error) {
+    await removeCompraCaptura(uploadedPath);
+    if (fiscal) {
+      await throwIfDuplicateNcf(error, fiscal.rnc, fiscal.ncf);
+    }
     throw error;
   }
   const mapped = data ? mapCompra(data as CompraRow) : null;
   if (!mapped) {
+    await removeCompraCaptura(uploadedPath);
     throw new Error("No encontramos esa compra");
   }
-  await publishAgentEvent("compra.actualizada", { ...mapped });
-  return mapped;
+  if (uploadedPath && current.capturaPath && current.capturaPath !== uploadedPath) {
+    await removeCompraCaptura(current.capturaPath);
+  }
+  const compra = publicCompra(mapped);
+  await publishAgentEvent("compra.actualizada", { ...compra });
+  return compra;
 }
 
 export async function markCompraPagada(id: string): Promise<Compra> {
   return updateCompra(id, { pagado: true });
+}
+
+export function compraFailure(error: unknown, fallback: string): { status: number; error: string; compra?: Compra } {
+  if (error instanceof CompraDuplicadaError) {
+    return { status: 409, error: error.message, compra: error.compra };
+  }
+  const message = error instanceof Error ? error.message : fallback;
+  return { status: message.includes("No encontramos") ? 404 : 400, error: message };
 }
 
 export function parsePagadoParam(raw: string | null): boolean | null {

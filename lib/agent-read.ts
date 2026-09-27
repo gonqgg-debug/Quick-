@@ -55,7 +55,7 @@ export async function listAgentCompras(range: AgentRange) {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("compras")
-    .select("id, proveedor_id, monto, fecha, due_date, pagado, pagado_en, proveedores ( nombre )")
+    .select("id, proveedor_id, monto, fecha, due_date, pagado, pagado_en, rnc, ncf, captura_path, proveedores ( nombre )")
     .gte("fecha", range.from)
     .lte("fecha", range.to)
     .order("fecha", { ascending: true })
@@ -74,6 +74,9 @@ export async function listAgentCompras(range: AgentRange) {
       dueDate: String(row.due_date).slice(0, 10),
       pagado: Boolean(row.pagado),
       pagadoEn: row.pagado_en ? String(row.pagado_en).slice(0, 10) : null,
+      rnc: typeof row.rnc === "string" && row.rnc.trim() ? row.rnc.trim() : null,
+      ncf: typeof row.ncf === "string" && row.ncf.trim() ? row.ncf.trim() : null,
+      tieneCaptura: Boolean(row.captura_path),
     };
   });
   return {

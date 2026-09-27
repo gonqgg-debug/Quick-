@@ -343,7 +343,7 @@ function PendientesTable({
           const overdue = days < 0;
           return (
             <DataTableRow key={compra.id}>
-              <DataTableCell className="font-semibold">{compra.proveedorNombre}</DataTableCell>
+              <CompraProveedorCell compra={compra} />
               <DataTableCell numeric className="font-bold">
                 {formatPrice(compra.monto)}
               </DataTableCell>
@@ -354,6 +354,7 @@ function PendientesTable({
               </DataTableCell>
               <DataTableCell className="whitespace-nowrap text-right">
                 <div className="flex flex-wrap items-center justify-end gap-2">
+                  <FacturaLink compra={compra} />
                   <button
                     type="button"
                     onClick={() => onEdit(compra)}
@@ -413,7 +414,7 @@ function HistorialTable({
         <tbody>
           {compras.map((compra) => (
             <DataTableRow key={compra.id}>
-              <DataTableCell className="font-semibold">{compra.proveedorNombre}</DataTableCell>
+              <CompraProveedorCell compra={compra} />
               <DataTableCell numeric className="font-bold">
                 {formatPrice(compra.monto)}
               </DataTableCell>
@@ -431,14 +432,17 @@ function HistorialTable({
                 )}
               </DataTableCell>
               <DataTableCell>
-                <button
-                  type="button"
-                  onClick={() => onEdit(compra)}
-                  className="text-sm font-bold"
-                  style={{ color: brand.green }}
-                >
-                  Editar
-                </button>
+                <div className="flex items-center justify-end gap-3">
+                  <FacturaLink compra={compra} />
+                  <button
+                    type="button"
+                    onClick={() => onEdit(compra)}
+                    className="text-sm font-bold"
+                    style={{ color: brand.green }}
+                  >
+                    Editar
+                  </button>
+                </div>
               </DataTableCell>
             </DataTableRow>
           ))}
@@ -476,6 +480,33 @@ function HistorialTable({
   );
 }
 
+function CompraProveedorCell({ compra }: { compra: Compra }) {
+  const extra = [compra.ncf, compra.rnc ? `RNC ${compra.rnc}` : null].filter(Boolean).join(" · ");
+  return (
+    <DataTableCell className="font-semibold">
+      {compra.proveedorNombre}
+      {extra ? <span className="mt-0.5 block text-xs font-medium text-brand-muted">{extra}</span> : null}
+    </DataTableCell>
+  );
+}
+
+function FacturaLink({ compra }: { compra: Compra }) {
+  if (!compra.tieneCaptura) {
+    return null;
+  }
+  return (
+    <a
+      href={`/api/admin/compras/${compra.id}/captura`}
+      target="_blank"
+      rel="noreferrer"
+      className="text-sm font-bold"
+      style={{ color: brand.green }}
+    >
+      Factura
+    </a>
+  );
+}
+
 function montoDraft(value: number): string {
   if (!Number.isFinite(value) || value <= 0) {
     return "";
@@ -504,6 +535,10 @@ function CompraModal({
   const [pagado, setPagado] = useState(compra?.pagado ?? false);
   const [pagadoEn, setPagadoEn] = useState(compra?.pagadoEn ?? today);
   const [pagadoAlRegistrar, setPagadoAlRegistrar] = useState(true);
+  const [rnc, setRnc] = useState(compra?.rnc ?? "");
+  const [ncf, setNcf] = useState(compra?.ncf ?? "");
+  const [capturaFile, setCapturaFile] = useState<File | null>(null);
+  const [capturaPreview, setCapturaPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const skipAutoDue = useRef(!isNew);
@@ -532,6 +567,16 @@ function CompraModal({
   }, [onClose]);
 
   useEffect(() => {
+    if (!capturaFile || !capturaFile.type.startsWith("image/")) {
+      setCapturaPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(capturaFile);
+    setCapturaPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [capturaFile]);
+
+  useEffect(() => {
     if (isNew) {
       return;
     }
@@ -547,30 +592,43 @@ function CompraModal({
     setSaving(true);
     setFormError(null);
     try {
+      if (!capturaFile && (isNew || !compra?.tieneCaptura)) {
+        throw new Error("La captura de la factura es obligatoria");
+      }
+      if (capturaFile && capturaFile.size > 4 * 1024 * 1024) {
+        throw new Error("La captura no puede pasar de 4 MB");
+      }
       const registrarPagada = isNew && !esCredito && pagadoAlRegistrar;
-      const payload: Record<string, unknown> = {
-        proveedorId: proveedorId || undefined,
-        proveedorNombre: query.trim() || undefined,
-        monto,
-        fecha,
-        dueDate: isNew ? vencimientoAutomatico : dueDate,
-      };
+      const form = new FormData();
+      if (proveedorId) {
+        form.set("proveedorId", proveedorId);
+      }
+      if (query.trim()) {
+        form.set("proveedorNombre", query.trim());
+      }
+      form.set("monto", monto);
+      form.set("fecha", fecha);
+      form.set("dueDate", isNew ? vencimientoAutomatico : dueDate);
+      form.set("rnc", rnc.trim());
+      form.set("ncf", ncf.trim());
+      if (capturaFile) {
+        form.set("captura", capturaFile);
+      }
       if (isNew) {
         if (registrarPagada) {
-          payload.pagado = true;
-          payload.pagadoEn = fecha;
+          form.set("pagado", "true");
+          form.set("pagadoEn", fecha);
         }
       } else {
-        payload.pagado = pagado;
+        form.set("pagado", pagado ? "true" : "false");
         if (pagado) {
-          payload.pagadoEn = pagadoEn;
+          form.set("pagadoEn", pagadoEn);
         }
       }
       const response = await fetch(isNew ? "/api/admin/compras" : `/api/admin/compras/${compra.id}`, {
         method: isNew ? "POST" : "PATCH",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: form,
       });
       const body = (await response.json().catch(() => null)) as { compra?: Compra; error?: string } | null;
       if (!response.ok || !body?.compra) {
@@ -652,6 +710,59 @@ function CompraModal({
             />
           </span>
         </label>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className={adminLabelClass}>
+            RNC
+            <AdminInput
+              required
+              value={rnc}
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="9 u 11 dígitos"
+              onChange={(event) => setRnc(event.target.value)}
+            />
+          </label>
+          <label className={adminLabelClass}>
+            NCF
+            <AdminInput
+              required
+              value={ncf}
+              autoComplete="off"
+              placeholder="B0100000001"
+              onChange={(event) => setNcf(event.target.value)}
+            />
+          </label>
+        </div>
+        <p className="mt-1 text-xs text-brand-muted">El NCF electrónico se escribe E310000000001.</p>
+
+        <label className={`${adminLabelClass} mt-4`}>
+          Captura de la factura
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
+            required={isNew}
+            className="mt-1.5 block w-full text-sm file:mr-3 file:rounded-full file:border-0 file:bg-[#F3F4F6] file:px-3 file:py-2 file:text-sm file:font-bold"
+            onChange={(event) => setCapturaFile(event.target.files?.[0] ?? null)}
+          />
+          <span className="mt-1 block text-xs text-brand-muted">JPG, PNG, WebP o PDF. Máximo 4 MB.</span>
+        </label>
+        {capturaPreview ? (
+          // The preview is a local file the browser just picked, so it stays a plain image.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={capturaPreview} alt="Vista previa de la factura" className="mt-3 max-h-40 rounded-xl object-contain" />
+        ) : null}
+        {!isNew && compra.tieneCaptura ? (
+          <a
+            href={`/api/admin/compras/${compra.id}/captura`}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-block text-sm font-bold"
+            style={{ color: brand.green }}
+          >
+            Ver captura actual
+          </a>
+        ) : null}
 
         <div className={`mt-4 grid gap-3 ${isNew ? "" : "sm:grid-cols-2"}`}>
           <label className={adminLabelClass}>
@@ -750,7 +861,14 @@ function CompraModal({
           </button>
           <button
             type="submit"
-            disabled={saving || (!proveedorId && !query.trim()) || !monto.trim()}
+            disabled={
+              saving ||
+              (!proveedorId && !query.trim()) ||
+              !monto.trim() ||
+              !rnc.trim() ||
+              !ncf.trim() ||
+              (!capturaFile && (isNew || !compra?.tieneCaptura))
+            }
             className="rounded-full px-5 text-sm font-bold text-white disabled:opacity-40"
             style={{ minHeight: 44, backgroundColor: brand.green }}
           >

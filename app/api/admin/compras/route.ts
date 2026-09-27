@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
-import { createCompra, listCompras, parsePagadoParam } from "@/lib/admin-compras";
+import { compraFailure, createCompra, listCompras, parsePagadoParam } from "@/lib/admin-compras";
+import { readCompraBody } from "@/lib/compra-request";
 import { isDayKey } from "@/lib/local-day";
 
 export const dynamic = "force-dynamic";
@@ -37,27 +38,12 @@ export async function POST(request: NextRequest) {
     return auth;
   }
 
-  let body: {
-    proveedorId?: unknown;
-    proveedorNombre?: unknown;
-    monto?: unknown;
-    fecha?: unknown;
-    dueDate?: unknown;
-    pagado?: unknown;
-    pagadoEn?: unknown;
-  };
   try {
-    body = (await request.json()) as typeof body;
-  } catch {
-    return NextResponse.json({ error: "El cuerpo no es un JSON válido." }, { status: 400 });
-  }
-
-  try {
-    const compra = await createCompra(body);
+    const compra = await createCompra(await readCompraBody(request));
     return NextResponse.json({ compra }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "No pudimos registrar la compra";
     console.error("[admin] compras create", error);
-    return NextResponse.json({ error: message }, { status: 400 });
+    const failure = compraFailure(error, "No pudimos registrar la compra");
+    return NextResponse.json({ error: failure.error, compra: failure.compra }, { status: failure.status });
   }
 }

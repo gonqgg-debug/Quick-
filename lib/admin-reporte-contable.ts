@@ -111,6 +111,9 @@ async function listCompras(from: string, to: string, omitidas: ContableOmitida[]
           dueDate,
           pagado: Boolean(row.pagado),
           pagadoEn: isDayKey(pagadoEn) ? pagadoEn : null,
+          rnc: textOrNull(row.rnc),
+          ncf: textOrNull(row.ncf),
+          tieneCaptura: Boolean(row.captura_path),
         },
       ];
     });
@@ -119,7 +122,7 @@ async function listCompras(from: string, to: string, omitidas: ContableOmitida[]
     listAll<Record<string, unknown>>(async (start, end) =>
       supabase
         .from("compras")
-        .select("id, proveedor_id, monto, fecha, due_date, pagado, pagado_en, proveedores ( nombre )")
+        .select("id, proveedor_id, monto, fecha, due_date, pagado, pagado_en, rnc, ncf, captura_path, proveedores ( nombre )")
         .gte("fecha", from)
         .lte("fecha", to)
         .order("fecha", { ascending: true })
@@ -129,7 +132,7 @@ async function listCompras(from: string, to: string, omitidas: ContableOmitida[]
     listAll<Record<string, unknown>>(async (start, end) =>
       supabase
         .from("compras")
-        .select("id, proveedor_id, monto, fecha, due_date, pagado, pagado_en, proveedores ( nombre )")
+        .select("id, proveedor_id, monto, fecha, due_date, pagado, pagado_en, rnc, ncf, captura_path, proveedores ( nombre )")
         .gte("pagado_en", from)
         .lte("pagado_en", to)
         .order("pagado_en", { ascending: true })
