@@ -10,8 +10,10 @@ import {
   DataTableRow,
   DataTableTh,
 } from "@/components/admin/DataTable";
+import { AdminExpansionMap } from "@/components/admin/AdminExpansionMap";
 import {
   EXPANSION_ETAPAS,
+  EXPANSION_FUENTES,
   EXPANSION_TIPOS_ACTIVIDAD,
   EXPANSION_TIPOS_CONTACTO,
   EXPANSION_TRATOS,
@@ -33,7 +35,7 @@ type Board = {
   contactos: ExpansionContacto[];
 };
 
-type Tab = "sitios" | "contactos";
+type Tab = "sitios" | "mapa" | "contactos";
 type EtapaFilter = "todas" | ExpansionEtapa;
 
 function fechaCorta(value: string | null): string {
@@ -130,7 +132,7 @@ export function AdminExpansion() {
         if (!needle) {
           return true;
         }
-        return [sitio.nombre, sitio.zona, sitio.clave, sitio.contacto?.nombre, sitio.proximaAccion].some((value) =>
+        return [sitio.nombre, sitio.zona, sitio.direccion, sitio.desarrollador, sitio.clave, sitio.contacto?.nombre, sitio.proximaAccion].some((value) =>
           value?.toLowerCase().includes(needle)
         );
       })
@@ -148,7 +150,7 @@ export function AdminExpansion() {
       if (!needle) {
         return true;
       }
-      return [contacto.nombre, contacto.empresa, contacto.telefono, contacto.email, contacto.clave, contacto.tipoLabel].some(
+      return [contacto.nombre, contacto.empresa, contacto.telefono, contacto.whatsapp, contacto.email, contacto.cargo, contacto.clave, contacto.tipoLabel].some(
         (value) => value?.toLowerCase().includes(needle)
       );
     });
@@ -169,7 +171,7 @@ export function AdminExpansion() {
           <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Expansión</p>
           <h1 className="font-display mt-1 text-2xl font-bold">Pipeline</h1>
           <p className="mt-1 max-w-xl text-sm text-brand-muted">
-            Sitios, contactos y el próximo paso. El bot escribe en esta misma lista.
+            Sitios, contactos y el próximo paso. El mapa muestra cada oportunidad con latitud y longitud. El bot escribe en esta misma lista.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -269,12 +271,39 @@ export function AdminExpansion() {
             <TabButton active={tab === "sitios"} onClick={() => setTab("sitios")}>
               Sitios
             </TabButton>
+            <TabButton active={tab === "mapa"} onClick={() => setTab("mapa")}>
+              Mapa
+            </TabButton>
             <TabButton active={tab === "contactos"} onClick={() => setTab("contactos")}>
               Contactos
             </TabButton>
           </div>
 
-          {tab === "sitios" ? (
+          {tab === "mapa" ? (
+            <section className="mt-4">
+              <AdminExpansionMap sitios={board?.sitios ?? []} onSelect={(id) => setOpenSitioId(id)} />
+              <p className="mt-3 text-sm text-brand-muted">
+                {(board?.sitios ?? []).filter((sitio) => sitio.enMapa).length} en el mapa
+                {(board?.sitios ?? []).some((sitio) => !sitio.enMapa)
+                  ? ` · ${(board?.sitios ?? []).filter((sitio) => !sitio.enMapa).length} sin latitud y longitud`
+                  : ""}
+              </p>
+              {(board?.sitios ?? []).some((sitio) => !sitio.enMapa) ? (
+                <ul className="mt-3 space-y-2">
+                  {(board?.sitios ?? [])
+                    .filter((sitio) => !sitio.enMapa)
+                    .map((sitio) => (
+                      <li key={sitio.id}>
+                        <button type="button" onClick={() => setOpenSitioId(sitio.id)} className="text-left text-sm font-semibold" style={{ color: brand.navy }}>
+                          {sitio.nombre}
+                        </button>
+                        <span className="text-sm text-brand-muted"> · {sitio.zona || "sin zona"} · falta ubicación</span>
+                      </li>
+                    ))}
+                </ul>
+              ) : null}
+            </section>
+          ) : tab === "sitios" ? (
             <section className="mt-4">
               <AdminInput
                 value={q}
@@ -481,12 +510,12 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 
 function EtapaPill({ etapa, label }: { etapa: ExpansionEtapa; label: string }) {
   const tone =
-    etapa === "descartado"
+    etapa === "descartado" || etapa === "pausa"
       ? { bg: "#F3F4F6", color: brand.muted }
-      : etapa === "apertura" || etapa === "acuerdo"
-        ? { bg: brand.paleGreen, color: "#3F6212" }
-        : etapa === "negociacion" || etapa === "propuesta"
-          ? { bg: brand.paleOrange, color: "#9A3412" }
+      : etapa === "oportunidad" || etapa === "negociacion"
+        ? { bg: brand.paleOrange, color: "#9A3412" }
+        : etapa === "conversacion" || etapa === "respondio" || etapa === "presentacion_enviada"
+          ? { bg: brand.paleGreen, color: "#3F6212" }
           : { bg: brand.paleBlue, color: brand.navy };
   return (
     <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-bold" style={{ backgroundColor: tone.bg, color: tone.color }}>
@@ -583,7 +612,15 @@ function ContactoModal({
   const [nombre, setNombre] = useState(contacto?.nombre ?? "");
   const [empresa, setEmpresa] = useState(contacto?.empresa ?? "");
   const [telefono, setTelefono] = useState(contacto?.telefono ?? "");
+  const [whatsapp, setWhatsapp] = useState(contacto?.whatsapp ?? "");
   const [email, setEmail] = useState(contacto?.email ?? "");
+  const [cargo, setCargo] = useState(contacto?.cargo ?? "");
+  const [zona, setZona] = useState(contacto?.zona ?? "");
+  const [especialidad, setEspecialidad] = useState(contacto?.especialidad ?? "");
+  const [web, setWeb] = useState(contacto?.web ?? "");
+  const [instagram, setInstagram] = useState(contacto?.instagram ?? "");
+  const [linkedin, setLinkedin] = useState(contacto?.linkedin ?? "");
+  const [fuente, setFuente] = useState(contacto?.fuente ?? "");
   const [tipo, setTipo] = useState<ExpansionTipoContacto>(contacto?.tipo ?? "broker");
   const [notas, setNotas] = useState(contacto?.notas ?? "");
   const [saving, setSaving] = useState(false);
@@ -598,7 +635,15 @@ function ContactoModal({
       nombre,
       empresa,
       telefono,
+      whatsapp,
       email,
+      cargo,
+      zona,
+      especialidad,
+      web,
+      instagram,
+      linkedin,
+      fuente: fuente || null,
       tipo,
       notas,
     };
@@ -644,8 +689,51 @@ function ContactoModal({
             <AdminInput value={telefono} onChange={(event) => setTelefono(event.target.value)} inputMode="tel" />
           </label>
           <label className={adminLabelClass}>
-            Correo
-            <AdminInput value={email} onChange={(event) => setEmail(event.target.value)} inputMode="email" />
+            WhatsApp
+            <AdminInput value={whatsapp} onChange={(event) => setWhatsapp(event.target.value)} inputMode="tel" />
+          </label>
+        </div>
+        <label className={`${adminLabelClass} mt-4`}>
+          Correo
+          <AdminInput value={email} onChange={(event) => setEmail(event.target.value)} inputMode="email" />
+        </label>
+        <label className={`${adminLabelClass} mt-4`}>
+          Cargo
+          <AdminInput value={cargo} onChange={(event) => setCargo(event.target.value)} placeholder="Director Comercial" />
+        </label>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className={adminLabelClass}>
+            Zona
+            <AdminInput value={zona} onChange={(event) => setZona(event.target.value)} />
+          </label>
+          <label className={adminLabelClass}>
+            Especialidad
+            <AdminInput value={especialidad} onChange={(event) => setEspecialidad(event.target.value)} />
+          </label>
+        </div>
+        <label className={`${adminLabelClass} mt-4`}>
+          Fuente
+          <AdminSelect value={fuente} onChange={(event) => setFuente(event.target.value)}>
+            <option value="">Sin fuente</option>
+            {EXPANSION_FUENTES.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </AdminSelect>
+        </label>
+        <label className={`${adminLabelClass} mt-4`}>
+          Web
+          <AdminInput value={web} onChange={(event) => setWeb(event.target.value)} />
+        </label>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className={adminLabelClass}>
+            Instagram
+            <AdminInput value={instagram} onChange={(event) => setInstagram(event.target.value)} />
+          </label>
+          <label className={adminLabelClass}>
+            LinkedIn
+            <AdminInput value={linkedin} onChange={(event) => setLinkedin(event.target.value)} />
           </label>
         </div>
         <label className={`${adminLabelClass} mt-4`}>
@@ -678,8 +766,17 @@ function SitioModal({
   const [clave, setClave] = useState(sitio?.clave ?? "");
   const [nombre, setNombre] = useState(sitio?.nombre ?? "");
   const [zona, setZona] = useState(sitio?.zona ?? "");
+  const [direccion, setDireccion] = useState(sitio?.direccion ?? "");
+  const [lat, setLat] = useState(sitio?.lat == null ? "" : String(sitio.lat));
+  const [lng, setLng] = useState(sitio?.lng == null ? "" : String(sitio.lng));
+  const [desarrollador, setDesarrollador] = useState(sitio?.desarrollador ?? "");
+  const [unidades, setUnidades] = useState(sitio?.unidades == null ? "" : String(sitio.unidades));
+  const [entrega, setEntrega] = useState(sitio?.entrega ?? "");
+  const [porQue, setPorQue] = useState(sitio?.porQue ?? "");
+  const [web, setWeb] = useState(sitio?.web ?? "");
+  const [fuente, setFuente] = useState(sitio?.fuente ?? "");
   const [trato, setTrato] = useState<ExpansionTrato>(sitio?.trato ?? "alquiler");
-  const [etapa, setEtapa] = useState<ExpansionEtapa>(sitio?.etapa ?? "contacto");
+  const [etapa, setEtapa] = useState<ExpansionEtapa>(sitio?.etapa ?? "identificado");
   const [contactoId, setContactoId] = useState(sitio?.contacto?.id ?? "");
   const [proximaAccion, setProximaAccion] = useState(sitio?.proximaAccion ?? "");
   const [proximaFecha, setProximaFecha] = useState(sitio?.proximaFecha ?? "");
@@ -695,6 +792,15 @@ function SitioModal({
       clave: clave.trim() || null,
       nombre,
       zona,
+      direccion,
+      lat: lat.trim() === "" ? null : Number(lat),
+      lng: lng.trim() === "" ? null : Number(lng),
+      desarrollador,
+      unidades: unidades.trim() === "" ? null : Number(unidades),
+      entrega,
+      porQue,
+      web,
+      fuente: fuente || null,
       trato,
       etapa,
       contactoId: contactoId || null,
@@ -749,6 +855,54 @@ function SitioModal({
               </option>
             ))}
           </AdminSelect>
+        </label>
+        <label className={`${adminLabelClass} mt-4`}>
+          Dirección
+          <AdminInput value={direccion} onChange={(event) => setDireccion(event.target.value)} />
+        </label>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className={adminLabelClass}>
+            Latitud
+            <AdminInput value={lat} onChange={(event) => setLat(event.target.value)} inputMode="decimal" placeholder="18.62" />
+          </label>
+          <label className={adminLabelClass}>
+            Longitud
+            <AdminInput value={lng} onChange={(event) => setLng(event.target.value)} inputMode="decimal" placeholder="-68.42" />
+          </label>
+        </div>
+        <p className="mt-1 text-xs text-brand-muted">Las dos juntas ponen la oportunidad en el mapa. El bot puede mandarlas al subir el sitio.</p>
+        <label className={`${adminLabelClass} mt-4`}>
+          Desarrollador
+          <AdminInput value={desarrollador} onChange={(event) => setDesarrollador(event.target.value)} />
+        </label>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className={adminLabelClass}>
+            Unidades
+            <AdminInput value={unidades} onChange={(event) => setUnidades(event.target.value)} inputMode="numeric" />
+          </label>
+          <label className={adminLabelClass}>
+            Entrega
+            <AdminInput value={entrega} onChange={(event) => setEntrega(event.target.value)} placeholder="2027" />
+          </label>
+        </div>
+        <label className={`${adminLabelClass} mt-4`}>
+          Por qué sirve para Quick
+          <AdminTextarea value={porQue} onChange={(event) => setPorQue(event.target.value)} rows={2} />
+        </label>
+        <label className={`${adminLabelClass} mt-4`}>
+          Fuente
+          <AdminSelect value={fuente} onChange={(event) => setFuente(event.target.value)}>
+            <option value="">Sin fuente</option>
+            {EXPANSION_FUENTES.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </AdminSelect>
+        </label>
+        <label className={`${adminLabelClass} mt-4`}>
+          Web
+          <AdminInput value={web} onChange={(event) => setWeb(event.target.value)} />
         </label>
         <label className={`${adminLabelClass} mt-4`}>
           Contacto
@@ -870,7 +1024,7 @@ function SitioDetalle({
   const [tipo, setTipo] = useState<ExpansionTipoActividad>("nota");
   const [texto, setTexto] = useState("");
   const [fecha, setFecha] = useState("");
-  const [etapa, setEtapa] = useState<ExpansionEtapa>("contacto");
+  const [etapa, setEtapa] = useState<ExpansionEtapa>("identificado");
   const [proximaAccion, setProximaAccion] = useState("");
   const [proximaFecha, setProximaFecha] = useState("");
 
@@ -981,6 +1135,35 @@ function SitioDetalle({
             </p>
           ) : (
             <p className="mt-1 text-sm text-brand-muted">Sin contacto enlazado.</p>
+          )}
+          {sitio.desarrollador ? (
+            <p className="mt-1 text-sm">
+              <span className="font-semibold">Desarrollador: </span>
+              {sitio.desarrollador}
+            </p>
+          ) : null}
+          {sitio.unidades != null || sitio.entrega ? (
+            <p className="mt-1 text-sm">
+              <span className="font-semibold">Escala: </span>
+              {sitio.unidades != null ? `${sitio.unidades} unidades` : "unidades sin confirmar"}
+              {sitio.entrega ? ` · entrega ${sitio.entrega}` : ""}
+            </p>
+          ) : null}
+          {sitio.porQue ? <p className="mt-2 text-sm">{sitio.porQue}</p> : null}
+          {sitio.fuenteLabel ? <p className="mt-1 text-sm text-brand-muted">Fuente: {sitio.fuenteLabel}</p> : null}
+          {sitio.direccion ? <p className="mt-1 text-sm text-brand-muted">{sitio.direccion}</p> : null}
+          {sitio.enMapa && sitio.lat != null && sitio.lng != null ? (
+            <a
+              className="mt-2 inline-block text-sm font-bold"
+              style={{ color: brand.navy }}
+              href={`https://www.google.com/maps?q=${sitio.lat},${sitio.lng}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Ver en Google Maps
+            </a>
+          ) : (
+            <p className="mt-2 text-sm text-brand-muted">Sin ubicación en el mapa. Agrega latitud y longitud al editar.</p>
           )}
           {sitio.detalle ? <p className="mt-3 whitespace-pre-wrap text-sm text-brand-muted">{sitio.detalle}</p> : null}
           <button type="button" onClick={() => onEdit(sitio)} className="mt-3 text-sm font-bold" style={{ color: brand.green }}>

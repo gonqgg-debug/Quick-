@@ -2,6 +2,7 @@ import { isDayKey, todayDayKey } from "@/lib/local-day";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import {
   EXPANSION_ETAPAS,
+  EXPANSION_FUENTES,
   EXPANSION_META_IDS,
   EXPANSION_TIPOS_ACTIVIDAD,
   EXPANSION_TIPOS_CONTACTO,
@@ -10,8 +11,11 @@ import {
   expansionMetaCopy,
   isUuid,
   labelOf,
+  mensajeEtapaInvalida,
   parseClave,
+  parseCoord,
   parseEtapa,
+  parseFuente,
   parseTipoActividad,
   parseTipoContacto,
   parseTrato,
@@ -19,6 +23,7 @@ import {
   type ExpansionActividad,
   type ExpansionContacto,
   type ExpansionEtapa,
+  type ExpansionFuente,
   type ExpansionMeta,
   type ExpansionMetaId,
   type ExpansionPipeline,
@@ -29,9 +34,10 @@ import {
 } from "@/lib/expansion-shared";
 
 const LIST_MAX = 1000;
-const CONTACTO_SELECT = "id, clave, nombre, empresa, telefono, email, tipo, notas";
+const CONTACTO_SELECT =
+  "id, clave, nombre, empresa, telefono, whatsapp, email, cargo, zona, especialidad, web, instagram, linkedin, fuente, tipo, notas";
 const SITIO_SELECT =
-  "id, clave, nombre, zona, trato, etapa, etapa_desde, detalle, proxima_accion, proxima_fecha, contacto_id, expansion_contactos ( id, clave, nombre, empresa, telefono, email, tipo, notas )";
+  "id, clave, nombre, zona, direccion, lat, lng, desarrollador, unidades, entrega, por_que, web, fuente, trato, etapa, etapa_desde, detalle, proxima_accion, proxima_fecha, contacto_id, expansion_contactos ( id, clave, nombre, empresa, telefono, whatsapp, email, cargo, zona, especialidad, web, instagram, linkedin, fuente, tipo, notas )";
 
 type ContactoRow = {
   id?: unknown;
@@ -39,7 +45,15 @@ type ContactoRow = {
   nombre?: unknown;
   empresa?: unknown;
   telefono?: unknown;
+  whatsapp?: unknown;
   email?: unknown;
+  cargo?: unknown;
+  zona?: unknown;
+  especialidad?: unknown;
+  web?: unknown;
+  instagram?: unknown;
+  linkedin?: unknown;
+  fuente?: unknown;
   tipo?: unknown;
   notas?: unknown;
 };
@@ -72,6 +86,11 @@ function requireNombre(value: unknown, label: string): string {
   return nombre;
 }
 
+function mapFuente(value: unknown): { fuente: ExpansionFuente | null; fuenteLabel: string | null } {
+  const fuente = parseFuente(value);
+  return { fuente, fuenteLabel: fuente ? labelOf(EXPANSION_FUENTES, fuente) : null };
+}
+
 function mapContacto(row: ContactoRow | null | undefined): ExpansionContacto | null {
   if (!row) {
     return null;
@@ -82,13 +101,23 @@ function mapContacto(row: ContactoRow | null | undefined): ExpansionContacto | n
   if (!id || !nombre) {
     return null;
   }
+  const fuente = mapFuente(row.fuente);
   return {
     id,
     clave: textOrNull(row.clave, 80),
     nombre,
     empresa: textOrNull(row.empresa, 160),
     telefono: textOrNull(row.telefono, 40),
+    whatsapp: textOrNull(row.whatsapp, 40),
     email: textOrNull(row.email, 160),
+    cargo: textOrNull(row.cargo, 120),
+    zona: textOrNull(row.zona, 160),
+    especialidad: textOrNull(row.especialidad, 160),
+    web: textOrNull(row.web, 300),
+    instagram: textOrNull(row.instagram, 160),
+    linkedin: textOrNull(row.linkedin, 300),
+    fuente: fuente.fuente,
+    fuenteLabel: fuente.fuenteLabel,
     tipo,
     tipoLabel: labelOf(EXPANSION_TIPOS_CONTACTO, tipo),
     notas: textOrNull(row.notas, 2000),
@@ -110,11 +139,26 @@ function mapSitio(row: Record<string, unknown>, today = todayDayKey()): Expansio
     return null;
   }
   const proximaFecha = row.proxima_fecha ? String(row.proxima_fecha).slice(0, 10) : null;
+  const lat = coordOrNull(row.lat, "lat");
+  const lng = coordOrNull(row.lng, "lng");
+  const fuente = mapFuente(row.fuente);
+  const unidades = unidadesOrNull(row.unidades);
   const sitio: ExpansionSitio = {
     id,
     clave: textOrNull(row.clave, 80),
     nombre,
     zona: textOrNull(row.zona, 160),
+    direccion: textOrNull(row.direccion, 240),
+    lat,
+    lng,
+    enMapa: lat != null && lng != null,
+    desarrollador: textOrNull(row.desarrollador, 160),
+    unidades,
+    entrega: textOrNull(row.entrega, 40),
+    porQue: textOrNull(row.por_que, 500),
+    web: textOrNull(row.web, 300),
+    fuente: fuente.fuente,
+    fuenteLabel: fuente.fuenteLabel,
     trato,
     tratoLabel: labelOf(EXPANSION_TRATOS, trato),
     etapa,
@@ -150,6 +194,87 @@ function mapActividad(row: Record<string, unknown>): ExpansionActividad | null {
   };
 }
 
+function coordOrNull(value: unknown, kind: "lat" | "lng"): number | null {
+  const parsed = parseCoord(value, kind);
+  return parsed.ok ? parsed.value : null;
+}
+
+function unidadesOrNull(value: unknown): number | null {
+  const number = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : Number.NaN;
+  if (!Number.isInteger(number) || number < 0) {
+    return null;
+  }
+  return number;
+}
+
+function readFuente(value: unknown): ExpansionFuente | null {
+  if (value == null || value === "") {
+    return null;
+  }
+  const fuente = parseFuente(value);
+  if (!fuente) {
+    throw new Error("La fuente no es válida. Usa google, maps, instagram, linkedin, hunter, website, portal, prensa, gmail u otro");
+  }
+  return fuente;
+}
+
+function readUnidades(value: unknown): number | null {
+  if (value == null || value === "") {
+    return null;
+  }
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value.trim()) : Number.NaN;
+  if (!Number.isInteger(number) || number < 0 || number > 100000) {
+    throw new Error("Las unidades tienen que ser un número entero de 0 a 100000");
+  }
+  return number;
+}
+
+function readUbicacion(input: Record<string, unknown>, requirePair: boolean): { lat: number | null; lng: number | null } | undefined {
+  const hasLat = hasOwn(input, "lat");
+  const hasLng = hasOwn(input, "lng");
+  if (!hasLat && !hasLng) {
+    return requirePair ? { lat: null, lng: null } : undefined;
+  }
+  const lat = parseCoord(hasLat ? input.lat : null, "lat");
+  const lng = parseCoord(hasLng ? input.lng : null, "lng");
+  if (!lat.ok) {
+    throw new Error(lat.message);
+  }
+  if (!lng.ok) {
+    throw new Error(lng.message);
+  }
+  if ((lat.value == null) !== (lng.value == null)) {
+    throw new Error("Para el mapa hacen falta latitud y longitud");
+  }
+  return { lat: lat.value, lng: lng.value };
+}
+
+function contactoDetails(input: Record<string, unknown>, includeMissing = true): Record<string, unknown> {
+  const next: Record<string, unknown> = {};
+  const textFields: Array<[string, string, number]> = [
+    ["empresa", "empresa", 160],
+    ["telefono", "telefono", 40],
+    ["whatsapp", "whatsapp", 40],
+    ["email", "email", 160],
+    ["cargo", "cargo", 120],
+    ["zona", "zona", 160],
+    ["especialidad", "especialidad", 160],
+    ["web", "web", 300],
+    ["instagram", "instagram", 160],
+    ["linkedin", "linkedin", 300],
+    ["notas", "notas", 2000],
+  ];
+  for (const [key, column, max] of textFields) {
+    if (includeMissing || hasOwn(input, key)) {
+      next[column] = textOrNull(input[key], max);
+    }
+  }
+  if (includeMissing || hasOwn(input, "fuente")) {
+    next.fuente = readFuente(input.fuente);
+  }
+  return next;
+}
+
 function isUniqueViolation(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "23505");
 }
@@ -172,7 +297,7 @@ export async function listExpansionContactos(query?: string | null): Promise<Exp
       if (!needle) {
         return true;
       }
-      return [row.nombre, row.empresa, row.telefono, row.email, row.clave].some((value) => value?.toLowerCase().includes(needle));
+      return [row.nombre, row.empresa, row.telefono, row.whatsapp, row.email, row.cargo, row.zona, row.clave].some((value) => value?.toLowerCase().includes(needle));
     });
 }
 
@@ -224,11 +349,8 @@ export async function createExpansionContacto(input: {
     .insert({
       clave: clave.clave,
       nombre: requireNombre(input.nombre, "nombre"),
-      empresa: textOrNull(input.empresa, 160),
-      telefono: textOrNull(input.telefono, 40),
-      email: textOrNull(input.email, 160),
+      ...contactoDetails(input),
       tipo,
-      notas: textOrNull(input.notas, 2000),
     })
     .select(CONTACTO_SELECT)
     .single();
@@ -257,18 +379,7 @@ export async function updateExpansionContacto(idOrClave: string, input: Record<s
   if (hasOwn(input, "nombre")) {
     next.nombre = requireNombre(input.nombre, "nombre");
   }
-  if (hasOwn(input, "empresa")) {
-    next.empresa = textOrNull(input.empresa, 160);
-  }
-  if (hasOwn(input, "telefono")) {
-    next.telefono = textOrNull(input.telefono, 40);
-  }
-  if (hasOwn(input, "email")) {
-    next.email = textOrNull(input.email, 160);
-  }
-  if (hasOwn(input, "notas")) {
-    next.notas = textOrNull(input.notas, 2000);
-  }
+  Object.assign(next, contactoDetails(input, false));
   if (hasOwn(input, "tipo")) {
     const tipo = parseTipoContacto(input.tipo);
     if (!tipo) {
@@ -327,7 +438,7 @@ export async function listExpansionSitios(filter?: { etapa?: string | null; q?: 
   if (filter?.etapa) {
     const etapa = parseEtapa(filter.etapa);
     if (!etapa) {
-      throw new Error("La etapa no es válida");
+      throw new Error(mensajeEtapaInvalida());
     }
     query = query.eq("etapa", etapa);
   }
@@ -347,7 +458,7 @@ export async function listExpansionSitios(filter?: { etapa?: string | null; q?: 
       if (!needle) {
         return true;
       }
-      return [sitio.nombre, sitio.zona, sitio.clave, sitio.contacto?.nombre, sitio.proximaAccion].some((value) => value?.toLowerCase().includes(needle));
+      return [sitio.nombre, sitio.zona, sitio.direccion, sitio.desarrollador, sitio.clave, sitio.contacto?.nombre, sitio.proximaAccion, sitio.porQue].some((value) => value?.toLowerCase().includes(needle));
     });
 }
 
@@ -380,6 +491,32 @@ function sitioFields(input: Record<string, unknown>, { requireAll }: { requireAl
   }
   if (requireAll || hasOwn(input, "detalle")) {
     next.detalle = textOrNull(input.detalle, 2000);
+  }
+  if (requireAll || hasOwn(input, "direccion")) {
+    next.direccion = textOrNull(input.direccion, 240);
+  }
+  if (requireAll || hasOwn(input, "desarrollador")) {
+    next.desarrollador = textOrNull(input.desarrollador, 160);
+  }
+  if (requireAll || hasOwn(input, "entrega")) {
+    next.entrega = textOrNull(input.entrega, 40);
+  }
+  if (requireAll || hasOwn(input, "porQue")) {
+    next.por_que = textOrNull(input.porQue, 500);
+  }
+  if (requireAll || hasOwn(input, "web")) {
+    next.web = textOrNull(input.web, 300);
+  }
+  if (requireAll || hasOwn(input, "unidades")) {
+    next.unidades = readUnidades(input.unidades);
+  }
+  if (requireAll || hasOwn(input, "fuente")) {
+    next.fuente = readFuente(input.fuente);
+  }
+  const ubicacion = readUbicacion(input, requireAll);
+  if (ubicacion) {
+    next.lat = ubicacion.lat;
+    next.lng = ubicacion.lng;
   }
   if (requireAll || hasOwn(input, "proximaAccion")) {
     next.proxima_accion = textOrNull(input.proximaAccion, 240);
@@ -416,9 +553,9 @@ export async function createExpansionSitio(input: Record<string, unknown>): Prom
       return { creado: false, sitio: existing };
     }
   }
-  const etapa = input.etapa == null || input.etapa === "" ? "contacto" : parseEtapa(input.etapa);
+  const etapa = input.etapa == null || input.etapa === "" ? "identificado" : parseEtapa(input.etapa);
   if (!etapa) {
-    throw new Error("La etapa no es válida. Usa contacto, visita, propuesta, negociacion, acuerdo, apertura o descartado");
+    throw new Error(mensajeEtapaInvalida());
   }
   const contactoId = await resolveContactoId(input);
   const supabase = getSupabaseAdminClient();
@@ -458,7 +595,7 @@ export async function updateExpansionSitio(idOrClave: string, input: Record<stri
   if (hasOwn(input, "etapa")) {
     const etapa = parseEtapa(input.etapa);
     if (!etapa) {
-      throw new Error("La etapa no es válida. Usa contacto, visita, propuesta, negociacion, acuerdo, apertura o descartado");
+      throw new Error(mensajeEtapaInvalida());
     }
     if (etapa !== current.etapa) {
       next.etapa = etapa;
@@ -519,7 +656,7 @@ export async function createExpansionActividad(
   }
   const tipo = input.tipo == null || input.tipo === "" ? "nota" : parseTipoActividad(input.tipo);
   if (!tipo) {
-    throw new Error("El tipo de actividad no es válido. Usa nota, llamada, whatsapp, visita o propuesta");
+    throw new Error("El tipo de actividad no es válido. Usa nota, investigacion, llamada, whatsapp, email, visita o presentacion");
   }
   const texto = textOrNull(input.texto, 2000);
   if (!texto) {

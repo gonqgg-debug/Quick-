@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   EXPANSION_AGENT_ENDPOINTS,
   EXPANSION_AGENT_USO,
+  EXPANSION_CARGOS_SUGERIDOS,
   EXPANSION_ETAPAS,
+  EXPANSION_FUENTES,
   EXPANSION_META_IDS,
   EXPANSION_TIPOS_ACTIVIDAD,
   EXPANSION_TIPOS_CONTACTO,
@@ -69,6 +71,8 @@ export function expansionVocabulario() {
     tratos: EXPANSION_TRATOS,
     tiposContacto: EXPANSION_TIPOS_CONTACTO,
     tiposActividad: EXPANSION_TIPOS_ACTIVIDAD,
+    fuentes: EXPANSION_FUENTES,
+    cargosSugeridos: EXPANSION_CARGOS_SUGERIDOS,
     metas: EXPANSION_META_IDS.map((id) => ({ id, ...expansionMetaCopy(id) })),
     endpoints: EXPANSION_AGENT_ENDPOINTS,
   };
