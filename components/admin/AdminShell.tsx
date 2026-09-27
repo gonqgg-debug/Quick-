@@ -45,6 +45,9 @@ function sectionForPath(pathname: string): AdminNavSectionId | null {
   if (pathname.startsWith("/admin/clientes")) {
     return "clientes";
   }
+  if (pathname.startsWith("/admin/expansion")) {
+    return "expansion";
+  }
   if (pathname.startsWith("/admin/catalogo")) {
     return "catalogo";
   }
@@ -65,6 +68,7 @@ function defaultOpen(): OpenState {
   return {
     pedidos: true,
     clientes: true,
+    expansion: true,
     catalogo: true,
     finanzas: true,
     caja: true,
