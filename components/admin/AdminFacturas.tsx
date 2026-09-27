@@ -81,9 +81,13 @@ function resultadoStyle(resultado: FacturaResultado): { backgroundColor: string;
   return { backgroundColor: brand.paleOrange, color: "#9A3412" };
 }
 
+function estadoCorto(estado: FacturaEstado): string {
+  return FACTURA_ESTADOS.find((item) => item.id === estado)?.corto ?? estado;
+}
+
 function Pill({ label, style }: { label: string; style: { backgroundColor: string; color: string } }) {
   return (
-    <span className="inline-flex rounded-full px-2.5 py-1 text-xs font-bold" style={style}>
+    <span className="inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold" style={style}>
       {label}
     </span>
   );
@@ -176,7 +180,7 @@ export function AdminFacturas() {
 
       <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Metric label="En análisis" value={enAnalisis} />
-        <Metric label="Pendientes de información" value={pendientesInfo} />
+        <Metric label="Pendientes" value={pendientesInfo} />
         <Metric label="Completas" value={completas} />
         <button type="button" onClick={() => setSinFoto((current) => !current)} className="rounded-2xl px-4 py-3 text-left" style={{ backgroundColor: sinFoto ? brand.paleOrange : "#fff", border: "1px solid #E7EBE4" }}>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted">Sin foto</p>
@@ -193,7 +197,7 @@ export function AdminFacturas() {
             <option value="">Todos los estados</option>
             {FACTURA_ESTADOS.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.label}
+                {item.corto}
               </option>
             ))}
           </AdminSelect>
@@ -252,7 +256,7 @@ export function AdminFacturas() {
                     </span>
                   </DataTableCell>
                   <DataTableCell>
-                    <Pill label={factura.estadoLabel} style={estadoStyle(factura.estado)} />
+                    <Pill label={estadoCorto(factura.estado)} style={estadoStyle(factura.estado)} />
                   </DataTableCell>
                   <DataTableCell numeric>
                     <span style={{ color: factura.preguntasAbiertas > 0 ? "#9A3412" : undefined, fontWeight: factura.preguntasAbiertas > 0 ? 700 : 500 }}>
@@ -369,7 +373,7 @@ function FacturaDrawer({ facturaId, onClose, onChanged }: { facturaId: string; o
           <h2 className="font-display mt-1 text-2xl font-bold">{factura?.referencia ?? "Abriendo…"}</h2>
           {factura ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Pill label={factura.estadoLabel} style={estadoStyle(factura.estado)} />
+              <Pill label={estadoCorto(factura.estado)} style={estadoStyle(factura.estado)} />
               <Pill label={factura.tieneFoto ? fotoLabel(factura) : "Sin foto"} style={factura.tieneFoto ? { backgroundColor: brand.paleGreen, color: "#3F6212" } : { backgroundColor: brand.paleOrange, color: "#9A3412" }} />
               {factura.posibleDuplicado ? <Pill label="Posible duplicado" style={resultadoStyle("diferencia")} /> : null}
             </div>

@@ -1,15 +1,15 @@
 import { calendarDayKey } from "@/lib/local-day";
 
 export const FACTURA_ESTADOS = [
-  { id: "recibida", label: "Recibida", ayuda: "Llegó y todavía no se revisa." },
-  { id: "en_analisis", label: "En análisis", ayuda: "Phillip está leyendo el documento." },
-  { id: "pendiente_informacion", label: "Pendiente de información", ayuda: "Hay una duda abierta." },
-  { id: "respuesta_recibida", label: "Respuesta recibida", ayuda: "Llegó la respuesta y falta incorporarla." },
-  { id: "completa", label: "Completa", ayuda: "Phillip terminó de capturar y validar. No significa que la factura ya esté en Odoo." },
-  { id: "incompleta", label: "Incompleta", ayuda: "Faltan páginas o datos y no se van a conseguir." },
-  { id: "posible_duplicado", label: "Posible duplicado", ayuda: "Coincide con otra factura ya guardada." },
-  { id: "documento_no_valido", label: "Documento no válido", ayuda: "No es una factura utilizable." },
-  { id: "escalada", label: "Escalada", ayuda: "Phillip la pasó a una persona." },
+  { id: "recibida", label: "Recibida", corto: "Recibida", ayuda: "Llegó y todavía no se revisa." },
+  { id: "en_analisis", label: "En análisis", corto: "Análisis", ayuda: "Phillip está leyendo el documento." },
+  { id: "pendiente_informacion", label: "Pendiente de información", corto: "Pendiente", ayuda: "Hay una duda abierta." },
+  { id: "respuesta_recibida", label: "Respuesta recibida", corto: "Respondida", ayuda: "Llegó la respuesta y falta incorporarla." },
+  { id: "completa", label: "Completa", corto: "Completa", ayuda: "Phillip terminó de capturar y validar. No significa que la factura ya esté en Odoo." },
+  { id: "incompleta", label: "Incompleta", corto: "Incompleta", ayuda: "Faltan páginas o datos y no se van a conseguir." },
+  { id: "posible_duplicado", label: "Posible duplicado", corto: "Duplicado", ayuda: "Coincide con otra factura ya guardada." },
+  { id: "documento_no_valido", label: "Documento no válido", corto: "No válida", ayuda: "No es una factura utilizable." },
+  { id: "escalada", label: "Escalada", corto: "Escalada", ayuda: "Phillip la pasó a una persona." },
 ] as const;
 
 export const FACTURA_TIPOS = [
