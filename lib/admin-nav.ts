@@ -15,7 +15,8 @@ export type AdminNavIcon =
   | "settings"
   | "customers"
   | "broadcast"
-  | "report";
+  | "report"
+  | "invoices";
 
 export type AdminNavChild = {
   href: string;
@@ -116,6 +117,7 @@ export const ADMIN_FINANZAS_NAV: AdminNavItem[] = [
   { href: "/admin/ventas", label: "Ventas", icon: "sales", status: "live" },
   ADMIN_VENTAS_HISTORICO,
   { href: "/admin/compras", label: "Compras", icon: "purchases", status: "live" },
+  { href: "/admin/facturas", label: "Facturas", icon: "invoices", status: "live" },
   { href: "/admin/proveedores", label: "Proveedores", icon: "suppliers", status: "live" },
   ADMIN_PARAMETROS,
 ];
