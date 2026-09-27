@@ -508,39 +508,45 @@ function Productos({ factura, onChanged }: { factura: FacturaDetalle; onChanged:
     return <p className="text-sm text-brand-muted">Phillip todavía no extrajo productos.</p>;
   }
   return (
-    <DataTable tableClassName="min-w-[860px]">
-      <DataTableHead>
-        <DataTableTh>#</DataTableTh>
-        <DataTableTh>Descripción</DataTableTh>
-        <DataTableTh>Presentación</DataTableTh>
-        <DataTableTh numeric>Cantidad</DataTableTh>
-        <DataTableTh numeric>Unidades</DataTableTh>
-        <DataTableTh numeric>Costo</DataTableTh>
-        <DataTableTh numeric>Total</DataTableTh>
-        <DataTableTh>Estado</DataTableTh>
-      </DataTableHead>
-      <tbody>
-        {factura.lineas.map((linea) => (
-          <DataTableRow key={linea.id}>
-            <DataTableCell>{linea.numeroLinea}</DataTableCell>
-            <DataTableCell>
-              <p className="font-semibold">{linea.descripcionOriginal || linea.codigoSku}</p>
-              <p className="mt-0.5 text-xs text-brand-muted">
-                {[linea.productoNormalizado, linea.marca, linea.variante, linea.tamano, linea.codigoSku].filter(Boolean).join(" · ") || "Sin normalizar"}
-              </p>
-              {linea.observacion ? <p className="mt-1 text-xs" style={{ color: "#9A3412" }}>{linea.observacion}</p> : null}
-              <CatalogoLinea facturaId={factura.id} linea={linea} onChanged={onChanged} />
-            </DataTableCell>
-            <DataTableCell>{linea.presentacionLabel || "—"}</DataTableCell>
-            <DataTableCell numeric>{linea.cantidadComprada ?? "—"}</DataTableCell>
-            <DataTableCell numeric>{linea.unidadesTotales ?? "—"}</DataTableCell>
-            <DataTableCell numeric>{formatMonto(linea.costoPorPresentacion, factura.moneda)}</DataTableCell>
-            <DataTableCell numeric>{formatMonto(linea.totalLinea, factura.moneda)}</DataTableCell>
-            <DataTableCell>{linea.estadoLabel}</DataTableCell>
-          </DataTableRow>
-        ))}
-      </tbody>
-    </DataTable>
+    <ul className="space-y-3">
+      {factura.lineas.map((linea) => {
+        const detalle = [linea.productoNormalizado, linea.marca, linea.variante, linea.tamano, linea.codigoSku].filter(Boolean).join(" · ");
+        return (
+          <li key={linea.id} className="rounded-2xl border border-[#E7EBE4] bg-white px-4 py-3">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold" style={{ backgroundColor: "#F3F4F6", color: brand.ink }}>
+                {linea.numeroLinea}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="font-semibold leading-snug">{linea.descripcionOriginal || linea.codigoSku || "Sin descripción"}</p>
+                  <span className="shrink-0 text-xs font-semibold text-brand-muted">{linea.estadoLabel}</span>
+                </div>
+                {detalle ? <p className="mt-1 text-xs leading-relaxed text-brand-muted">{detalle}</p> : null}
+              </div>
+            </div>
+            <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+              <LineaDato label="Presentación" value={linea.presentacionLabel} />
+              <LineaDato label="Cantidad" value={linea.cantidadComprada == null ? null : String(linea.cantidadComprada)} />
+              <LineaDato label="Unidades" value={linea.unidadesTotales == null ? null : String(linea.unidadesTotales)} />
+              <LineaDato label="Total" value={formatMonto(linea.totalLinea, factura.moneda)} />
+            </dl>
+            <p className="mt-2 text-xs text-brand-muted">Costo {formatMonto(linea.costoPorPresentacion, factura.moneda)} por presentación</p>
+            {linea.observacion ? <p className="mt-2 text-xs leading-relaxed" style={{ color: "#9A3412" }}>{linea.observacion}</p> : null}
+            <CatalogoLinea facturaId={factura.id} linea={linea} onChanged={onChanged} />
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function LineaDato({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted">{label}</dt>
+      <dd className="mt-0.5 text-sm font-semibold tabular-nums">{value && value !== "—" ? value : "—"}</dd>
+    </div>
   );
 }
 
@@ -633,26 +639,31 @@ function CatalogoLinea({
   }
 
   return (
-    <div className="mt-2">
-      {vinculado ? (
-        <p className="text-xs font-semibold" style={{ color: "#3F6212" }}>
-          Catálogo: {vinculado.nombre}
-          {vinculado.codigoOdoo ? ` · ${vinculado.codigoOdoo}` : ""}
-        </p>
-      ) : (
-        <p className="text-xs font-semibold" style={{ color: "#9A3412" }}>
-          Sin producto del catálogo
-        </p>
-      )}
-      <div className="mt-1 flex flex-wrap gap-2">
-        <button type="button" className="text-xs font-bold" style={{ color: brand.blue }} onClick={() => setOpen((current) => !current)}>
-          {vinculado ? "Cambiar" : "Elegir"}
-        </button>
+    <div className="mt-3 border-t border-[#E7EBE4] pt-3">
+      <div className="flex items-center justify-between gap-3">
         {vinculado ? (
-          <button type="button" className="text-xs font-bold text-brand-muted" disabled={guardando} onClick={() => void elegir(null)}>
-            Quitar
+          <p className="min-w-0 text-sm font-semibold leading-snug" style={{ color: "#3F6212" }}>
+            {vinculado.nombre}
+            {vinculado.codigoOdoo ? <span className="mt-0.5 block text-xs font-medium text-brand-muted">{vinculado.codigoOdoo}</span> : null}
+          </p>
+        ) : (
+          <p className="text-sm text-brand-muted">Sin producto del catálogo</p>
+        )}
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            className="rounded-full px-3 text-xs font-bold"
+            style={{ minHeight: 32, backgroundColor: brand.paleBlue, color: brand.navy }}
+            onClick={() => setOpen((current) => !current)}
+          >
+            {vinculado ? "Cambiar" : "Elegir"}
           </button>
-        ) : null}
+          {vinculado ? (
+            <button type="button" className="rounded-full px-3 text-xs font-bold text-brand-muted" style={{ minHeight: 32 }} disabled={guardando} onClick={() => void elegir(null)}>
+              Quitar
+            </button>
+          ) : null}
+        </div>
       </div>
       {open ? (
         <div className="mt-2 rounded-xl border border-[#E7EBE4] bg-white p-2">
