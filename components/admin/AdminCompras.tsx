@@ -736,17 +736,46 @@ function CompraModal({
         </div>
         <p className="mt-1 text-xs text-brand-muted">El NCF electrónico se escribe E310000000001.</p>
 
-        <label className={`${adminLabelClass} mt-4`}>
-          Captura de la factura
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
-            required={isNew}
-            className="mt-1.5 block w-full text-sm file:mr-3 file:rounded-full file:border-0 file:bg-[#F3F4F6] file:px-3 file:py-2 file:text-sm file:font-bold"
-            onChange={(event) => setCapturaFile(event.target.files?.[0] ?? null)}
-          />
-          <span className="mt-1 block text-xs text-brand-muted">JPG, PNG, WebP o PDF. Máximo 4 MB.</span>
-        </label>
+        <div className="mt-4">
+          <p className={adminLabelClass}>Captura de la factura</p>
+          <div className="mt-1.5 flex flex-wrap gap-2">
+            <label
+              className="inline-flex cursor-pointer items-center rounded-full px-4 text-sm font-bold text-white"
+              style={{ minHeight: 44, backgroundColor: brand.green }}
+            >
+              Tomar foto
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="sr-only"
+                onChange={(event) => {
+                  setCapturaFile(event.target.files?.[0] ?? null);
+                  event.target.value = "";
+                }}
+              />
+            </label>
+            <label
+              className="inline-flex cursor-pointer items-center rounded-full px-4 text-sm font-bold"
+              style={{ minHeight: 44, border: "1px solid #E5E7EB", color: brand.ink }}
+            >
+              Elegir archivo
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
+                className="sr-only"
+                onChange={(event) => {
+                  setCapturaFile(event.target.files?.[0] ?? null);
+                  event.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+          <p className="mt-1 text-xs text-brand-muted">
+            En el teléfono, Tomar foto abre la cámara. También puedes elegir una imagen o un PDF de hasta 4 MB.
+          </p>
+          {capturaFile ? <p className="mt-2 text-sm font-semibold">{capturaFile.name}</p> : null}
+        </div>
         {capturaPreview ? (
           // The preview is a local file the browser just picked, so it stays a plain image.
           // eslint-disable-next-line @next/next/no-img-element
