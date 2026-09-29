@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { formatPrice } from "@/lib/money";
 import { countSpreadsheetDataRows } from "@/lib/count-spreadsheet-rows";
 import type { ImportPreview } from "@/lib/catalog-import-shared";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { brand } from "@/lib/theme";
 
 const PREVIEW_LIMIT = 40;
@@ -500,28 +501,28 @@ function PreviewLists({ preview }: { preview: ImportPreview }) {
         {preview.created.length === 0 ? (
           <Empty text="No hay productos nuevos en este archivo." />
         ) : (
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead>
-              <tr className="text-xs font-bold uppercase tracking-wide text-brand-muted">
-                <th className="px-4 py-2">Código</th>
-                <th className="px-4 py-2">Nombre</th>
-                <th className="px-4 py-2">Marca</th>
-                <th className="px-4 py-2">Categoría</th>
-                <th className="px-4 py-2 text-right">Precio</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="min-w-[640px]">
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Código</TableHead>
+                <TableHead>Nombre</TableHead>
+                <TableHead>Marca</TableHead>
+                <TableHead>Categoría</TableHead>
+                <TableHead className="text-right">Precio</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {preview.created.slice(0, PREVIEW_LIMIT).map((item) => (
-                <tr key={item.codigo} className="border-t" style={{ borderColor: "#F3F4F6" }}>
-                  <td className="px-4 py-2 font-mono text-xs">{item.codigo}</td>
-                  <td className="px-4 py-2 font-semibold">{item.nombre}</td>
-                  <td className="px-4 py-2">{item.marca || "—"}</td>
-                  <td className="px-4 py-2">{item.categoria}</td>
-                  <td className="px-4 py-2 text-right font-bold">{formatPrice(item.precio)}</td>
-                </tr>
+                <TableRow key={item.codigo}>
+                  <TableCell className="font-mono text-xs">{item.codigo}</TableCell>
+                  <TableCell className="font-medium">{item.nombre}</TableCell>
+                  <TableCell>{item.marca || "—"}</TableCell>
+                  <TableCell>{item.categoria}</TableCell>
+                  <TableCell className="text-right font-medium">{formatPrice(item.precio)}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
         <More count={preview.created.length} />
       </details>

@@ -13,14 +13,18 @@ import {
   type MetaMensual,
   type ParametrosConfig,
 } from "@/lib/admin-parametros-shared";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatPrice } from "@/lib/money";
 import { brand } from "@/lib/theme";
 
 const inputClass =
-  "h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium outline-none focus:border-[#7EB341]";
+  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 const fieldClass = `mt-1.5 ${inputClass}`;
-const labelClass = "block text-[13px] font-semibold text-brand-ink";
-const hintClass = "mt-1 text-[13px] leading-snug text-brand-muted";
+const labelClass = "block text-sm font-medium leading-none text-foreground";
+const hintClass = "mt-1 text-sm leading-snug text-muted-foreground";
 
 type Draft = {
   mesActivo: string;
@@ -378,76 +382,62 @@ export function AdminParametros() {
             </button>
           </section>
 
-          <section className="mt-6 rounded-[24px] border bg-white p-5 sm:p-6" style={{ borderColor: "#E5E7EB" }}>
+          <Card className="mt-6 p-5 shadow-sm sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="font-display text-lg font-bold">Metas mensuales</h2>
-                <p className="mt-1 text-sm text-brand-muted">
+                <h2 className="font-display text-lg font-semibold">Metas mensuales</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
                   La meta del mes activo es la que Hoy compara contra las ventas. Cuando abras un mes nuevo, agrégala aquí.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setMetaModal({ mes: nextMonthInput(metas), meta: "" })}
-                className="rounded-full px-4 text-sm font-bold text-white"
-                style={{ minHeight: 44, backgroundColor: brand.green }}
-              >
+              <Button type="button" onClick={() => setMetaModal({ mes: nextMonthInput(metas), meta: "" })}>
                 Agregar meta
-              </button>
+              </Button>
             </div>
 
             {metas.length === 0 ? (
-              <div className="mt-5 rounded-[24px] px-5 py-10 text-center" style={{ backgroundColor: "#F8FAF7" }}>
+              <div className="mt-5 rounded-lg bg-muted px-5 py-10 text-center">
                 <p className="font-display text-xl font-bold">Todavía no hay metas</p>
-                <p className="mt-2 text-sm text-brand-muted">Agrega la del mes que vas a operar.</p>
+                <p className="mt-2 text-sm text-muted-foreground">Agrega la del mes que vas a operar.</p>
               </div>
             ) : (
-              <div className="mt-5 overflow-x-auto rounded-[20px] border" style={{ borderColor: "#E5E7EB" }}>
-                <table className="w-full min-w-[420px] text-left text-sm">
-                  <thead>
-                    <tr className="text-xs font-bold uppercase tracking-wide text-brand-muted" style={{ backgroundColor: "#F8FAF7" }}>
-                      <th className="px-4 py-3">Mes</th>
-                      <th className="whitespace-nowrap px-4 py-3 text-right">Meta</th>
-                      <th className="w-24 px-4 py-3">
-                        <span className="sr-only">Editar</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {metas.map((item, index) => {
-                      const isActive = config?.mesActivo === item.mes;
-                      return (
-                        <tr key={item.mes} style={{ backgroundColor: index % 2 === 1 ? "#FAFBFA" : "#FFFFFF" }}>
-                          <td className="px-4 py-3 font-semibold">
-                            {formatMetaMes(item.mes)}
-                            {isActive ? (
-                              <span
-                                className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white"
-                                style={{ backgroundColor: brand.green }}
-                              >
-                                Activo
-                              </span>
-                            ) : null}
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right font-bold tabular-nums">{formatPrice(item.meta)}</td>
-                          <td className="px-4 py-3">
-                            <button
-                              type="button"
-                              onClick={() => setMetaModal({ mes: monthInputValue(item.mes), meta: String(item.meta) })}
-                              className="text-sm font-bold"
-                              style={{ color: brand.green }}
-                            >
-                              Editar
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <Table className="mt-5 min-w-[420px]">
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Mes</TableHead>
+                    <TableHead className="text-right">Meta</TableHead>
+                    <TableHead className="w-24">
+                      <span className="sr-only">Editar</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {metas.map((item) => {
+                    const isActive = config?.mesActivo === item.mes;
+                    return (
+                      <TableRow key={item.mes}>
+                        <TableCell className="font-medium">
+                          {formatMetaMes(item.mes)}
+                          {isActive ? <Badge className="ml-2">Activo</Badge> : null}
+                        </TableCell>
+                        <TableCell className="text-right font-medium tabular-nums">{formatPrice(item.meta)}</TableCell>
+                        <TableCell>
+                          <Button
+                            type="button"
+                            variant="link"
+                            className="h-auto p-0"
+                            onClick={() => setMetaModal({ mes: monthInputValue(item.mes), meta: String(item.meta) })}
+                          >
+                            Editar
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             )}
-          </section>
+          </Card>
         </>
       )}
 

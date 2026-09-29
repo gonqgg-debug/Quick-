@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { DataTable, DataTableCell, DataTableHead, DataTableRow, DataTableTh } from "@/components/admin/DataTable";
 import { AdminInput, AdminSelect, AdminTextarea } from "@/components/admin/AdminField";
+import { Button } from "@/components/ui/button";
 import {
   FACTURA_ESTADOS,
   formatMonto,
@@ -481,15 +482,9 @@ function Resumen({
         <span className="font-semibold">Observaciones</span>
         <AdminTextarea value={observaciones} onChange={(event) => setObservaciones(event.target.value)} rows={3} />
       </label>
-      <button
-        type="button"
-        disabled={saving}
-        onClick={() => void onSave({ observaciones })}
-        className="rounded-full px-4 text-sm font-bold text-white"
-        style={{ minHeight: 40, backgroundColor: brand.green }}
-      >
+      <Button type="button" size="sm" disabled={saving} onClick={() => void onSave({ observaciones })}>
         Guardar observaciones
-      </button>
+      </Button>
     </div>
   );
 }
@@ -781,9 +776,9 @@ function RespuestaForm({ facturaId, preguntaId, onAnswered }: { facturaId: strin
       <AdminTextarea value={respuesta} onChange={(event) => setRespuesta(event.target.value)} rows={2} placeholder="Respuesta" aria-label="Respuesta" />
       <AdminInput value={respondidoPor} onChange={(event) => setRespondidoPor(event.target.value)} placeholder="Quién respondió" aria-label="Quién respondió" />
       {error ? <p className="text-sm" style={{ color: brand.error }}>{error}</p> : null}
-      <button type="button" disabled={saving || !respuesta.trim()} onClick={() => void submit()} className="rounded-full px-4 text-sm font-bold text-white disabled:opacity-50" style={{ minHeight: 40, backgroundColor: brand.navy }}>
+      <Button type="button" size="sm" disabled={saving || !respuesta.trim()} onClick={() => void submit()}>
         Guardar respuesta
-      </button>
+      </Button>
     </div>
   );
 }

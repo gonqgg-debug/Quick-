@@ -14,6 +14,7 @@ import { formatDayKey, yesterdayDayKey } from "@/lib/local-day";
 import { formatPrice, parsePrice, toMoney } from "@/lib/money";
 import { brand } from "@/lib/theme";
 import { AdminInput, AdminSelect, AdminTextarea, adminLabelClass } from "@/components/admin/AdminField";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   DataTableCell,
@@ -104,14 +105,9 @@ export function AdminCajaTurnos() {
               Todas
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setEditing("new")}
-            className="rounded-full px-4 text-sm font-bold text-white"
-            style={{ minHeight: 44, backgroundColor: brand.green }}
-          >
+          <Button type="button" onClick={() => setEditing("new")}>
             Registrar cierre de turno
-          </button>
+          </Button>
         </div>
       </div>
 

@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { AdminSelect } from "@/components/admin/AdminField";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatPrice } from "@/lib/money";
 import { brand } from "@/lib/theme";
 import {
@@ -421,70 +428,63 @@ export function AdminCatalogProducts() {
             Usa el lápiz para abrir la ficha del producto. El catálogo público solo muestra productos activos.
           </p>
         </div>
-        <button
+        <Button
           type="button"
+          variant="secondary"
           disabled={exporting || loading || total === 0}
           onClick={() => void exportWorkbook()}
-          className="inline-flex items-center gap-2 rounded-full px-4 text-sm font-bold disabled:opacity-40"
-          style={{ minHeight: 44, backgroundColor: "#F3F4F6", color: brand.ink }}
         >
           <DownloadIcon />
           {exporting ? "Exportando..." : "Exportar a Excel"}
-        </button>
+        </Button>
       </div>
 
       <div className="mt-5 space-y-3">
         <div className="grid gap-3 md:grid-cols-2">
-          <label className="block text-xs font-bold text-brand-muted">
+          <label className="block text-sm font-medium text-foreground">
             Buscar
-            <input
+            <Input
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
               placeholder="Nombre, marca o código"
-              className="mt-1 h-11 w-full rounded-xl border bg-white px-3 text-sm font-semibold outline-none focus:border-[#7EB341]"
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
+              className="mt-1.5"
             />
           </label>
-          <label className="block text-xs font-bold text-brand-muted">
+          <label className="block text-sm font-medium text-foreground">
             Categoría
-            <span className="relative mt-1 block">
-              <select
-                value={categoria}
-                onChange={(event) => {
-                  if (!confirmDiscardIfNeeded()) {
-                    return;
-                  }
-                  dirtyRef.current = false;
-                  setEditingId(null);
-                  editingProductRef.current = null;
-                  setCategoria(event.target.value);
-                  setPage(1);
-                }}
-                className="h-11 w-full appearance-none rounded-xl border bg-white px-3 pr-9 text-sm font-semibold outline-none focus:border-[#7EB341]"
-                style={{ borderColor: "#E5E7EB", color: brand.ink }}
-              >
-                <option value="">Todas</option>
-                {categories.map((item) => (
-                  <option key={item} value={item}>
-                    {isUncategorized(item) ? "Sin categoría (All)" : item}
-                  </option>
-                ))}
-              </select>
-              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-brand-muted">
-                <ChevronIcon />
-              </span>
-            </span>
+            <AdminSelect
+              value={categoria}
+              onChange={(event) => {
+                if (!confirmDiscardIfNeeded()) {
+                  return;
+                }
+                dirtyRef.current = false;
+                setEditingId(null);
+                editingProductRef.current = null;
+                setCategoria(event.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">Todas</option>
+              {categories.map((item) => (
+                <option key={item} value={item}>
+                  {isUncategorized(item) ? "Sin categoría (All)" : item}
+                </option>
+              ))}
+            </AdminSelect>
           </label>
         </div>
         <div className="flex flex-wrap gap-2" role="tablist" aria-label="Filtrar por estado">
           {ESTADO_FILTERS.map((filter) => {
             const active = estado === filter.id;
             return (
-              <button
+              <Button
                 key={filter.id}
                 type="button"
                 role="tab"
                 aria-selected={active}
+                variant={active ? "default" : "secondary"}
+                size="sm"
                 onClick={() => {
                   if (!confirmDiscardIfNeeded()) {
                     return;
@@ -495,15 +495,9 @@ export function AdminCatalogProducts() {
                   setEstado(filter.id);
                   setPage(1);
                 }}
-                className="rounded-full px-3 text-sm font-bold"
-                style={{
-                  minHeight: 40,
-                  backgroundColor: active ? brand.green : "#F3F4F6",
-                  color: active ? "#FFFFFF" : "#4B5563",
-                }}
               >
                 {filter.label}
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -511,54 +505,50 @@ export function AdminCatalogProducts() {
 
       <div className="mt-6" style={{ paddingBottom: barMounted ? 168 : undefined }}>
         {error ? (
-          <p className="mb-3 rounded-2xl px-3 py-2 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
+          <p className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
           </p>
         ) : null}
 
         {loading ? (
-          <div className="h-64 animate-pulse rounded-[24px] bg-gray-100" />
+          <Skeleton className="h-64 w-full" />
         ) : products.length === 0 ? (
-          <div className="rounded-[28px] px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
+          <Card className="px-5 py-14 text-center shadow-sm">
             <p className="font-display text-xl font-bold">No hay productos con esos filtros</p>
-            <p className="mt-2 text-sm text-brand-muted">Prueba otro texto, categoría o estado.</p>
-          </div>
+            <p className="mt-2 text-sm text-muted-foreground">Prueba otro texto, categoría o estado.</p>
+          </Card>
         ) : (
           <div>
-            <div className="overflow-x-auto rounded-[24px] border" style={{ borderColor: "#E5E7EB" }}>
-              <table className="w-full min-w-[1180px] text-left text-sm">
-                <thead>
-                  <tr
-                    className="text-xs font-bold uppercase tracking-wide text-brand-muted"
-                    style={{ backgroundColor: "#F8FAF7" }}
-                  >
-                    <th className="w-10 px-3 py-3">
+            <Card className="overflow-hidden shadow-sm">
+              <Table className="min-w-[1180px]">
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead className="w-10">
                       <BrandCheckbox
                         checked={allPageSelected}
                         indeterminate={somePageSelected}
                         onChange={togglePage}
                         label="Seleccionar todos los visibles"
                       />
-                    </th>
-                    <th className="px-3 py-3">Foto</th>
-                    <th className="px-3 py-3">Nombre</th>
-                    <th className="px-3 py-3">Marca</th>
-                    <th className="px-3 py-3">Categoría</th>
-                    <th className="whitespace-nowrap px-3 py-3 text-right">Precio</th>
-                    <th className="whitespace-nowrap px-3 py-3">Cód. Odoo</th>
-                    <th className="whitespace-nowrap px-3 py-3">Barras</th>
-                    <th className="px-3 py-3">Estado</th>
-                    <th className="w-12 px-3 py-3">
+                    </TableHead>
+                    <TableHead>Foto</TableHead>
+                    <TableHead>Nombre</TableHead>
+                    <TableHead>Marca</TableHead>
+                    <TableHead>Categoría</TableHead>
+                    <TableHead className="text-right">Precio</TableHead>
+                    <TableHead>Cód. Odoo</TableHead>
+                    <TableHead>Barras</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="w-12">
                       <span className="sr-only">Editar</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {products.map((product, index) => (
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {products.map((product) => (
                     <ProductRow
                       key={product.id}
                       product={product}
-                      zebra={index % 2 === 1}
                       selected={selected.includes(product.id)}
                       savedFlash={savedId === product.id}
                       onToggle={(checked) => toggleRow(product.id, checked)}
@@ -567,35 +557,29 @@ export function AdminCatalogProducts() {
                       onError={setError}
                     />
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </Card>
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-brand-muted">
+              <p className="text-sm text-muted-foreground">
                 {fromRow}–{toRow} de {total.toLocaleString("es-DO")}
               </p>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={page <= 1}
-                  onClick={() => changePage(Math.max(1, page - 1))}
-                  className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
-                  style={{ minHeight: 40, backgroundColor: "#F3F4F6" }}
-                >
+                <Button type="button" variant="outline" size="sm" disabled={page <= 1} onClick={() => changePage(Math.max(1, page - 1))}>
                   Anterior
-                </button>
-                <p className="text-sm font-semibold tabular-nums">
+                </Button>
+                <p className="text-sm font-medium tabular-nums">
                   {page} / {pageCount}
                 </p>
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
                   disabled={page >= pageCount}
                   onClick={() => changePage(Math.min(pageCount, page + 1))}
-                  className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
-                  style={{ minHeight: 40, backgroundColor: "#F3F4F6" }}
                 >
                   Siguiente
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -618,34 +602,22 @@ export function AdminCatalogProducts() {
                   <p className="mr-1 text-sm font-bold">
                     {selected.length || lastSelectedCount.current} seleccionados
                   </p>
-                  <button
-                    type="button"
-                    disabled={batchBusy}
-                    onClick={() => void runBatch({ activo: true })}
-                    className="rounded-full px-3.5 text-sm font-bold text-white disabled:opacity-40"
-                    style={{ minHeight: 40, backgroundColor: brand.green }}
-                  >
+                  <Button type="button" size="sm" disabled={batchBusy} onClick={() => void runBatch({ activo: true })}>
                     Activar
-                  </button>
-                  <button
-                    type="button"
-                    disabled={batchBusy}
-                    onClick={() => void runBatch({ activo: false })}
-                    className="rounded-full border px-3.5 text-sm font-bold disabled:opacity-40"
-                    style={{ minHeight: 40, borderColor: "#FECACA", backgroundColor: "#FFF7F7", color: "#B42318" }}
-                  >
+                  </Button>
+                  <Button type="button" size="sm" variant="destructive" disabled={batchBusy} onClick={() => void runBatch({ activo: false })}>
                     Desactivar
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    size="sm"
+                    variant="outline"
                     disabled={exporting || batchBusy}
                     onClick={() => void exportWorkbook(selected)}
-                    className="inline-flex items-center gap-1.5 rounded-full border px-3.5 text-sm font-bold disabled:opacity-40"
-                    style={{ minHeight: 40, borderColor: "#E5E7EB", backgroundColor: "#FFFFFF", color: brand.ink }}
                   >
                     <DownloadIcon />
                     Exportar seleccionados
-                  </button>
+                  </Button>
                   <div
                     className="flex min-h-10 items-stretch overflow-hidden rounded-full border"
                     style={{ borderColor: "#E5E7EB" }}
@@ -781,7 +753,6 @@ function BrandCheckbox({
 
 function ProductRow({
   product,
-  zebra,
   selected,
   savedFlash,
   onToggle,
@@ -790,7 +761,6 @@ function ProductRow({
   onError,
 }: {
   product: AdminCatalogProduct;
-  zebra: boolean;
   selected: boolean;
   savedFlash: boolean;
   onToggle: (checked: boolean) => void;
@@ -814,84 +784,68 @@ function ProductRow({
   }
 
   return (
-    <tr
-      className="product-row border-t"
+    <TableRow
+      className="product-row data-[inactive=true]:opacity-70 data-[selected=true]:bg-primary/10"
       data-selected={selected ? "true" : "false"}
-      style={{
-        borderColor: "#F3F4F6",
-        backgroundColor: selected ? "rgba(126, 179, 65, 0.08)" : zebra ? "#FAFBFA" : "#FFFFFF",
-        boxShadow: selected ? `inset 3px 0 0 ${brand.green}` : undefined,
-        opacity: product.activo ? 1 : 0.72,
-      }}
+      data-inactive={product.activo ? "false" : "true"}
     >
-      <td className="px-3 py-2.5">
+      <TableCell>
         <BrandCheckbox
           checked={selected}
           onChange={onToggle}
           label={`Seleccionar ${product.nombre}`}
         />
-      </td>
-      <td className="px-3 py-2.5">
-        <div
-          className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg"
-          style={{ backgroundColor: "#F3F4F6" }}
-        >
+      </TableCell>
+      <TableCell>
+        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-md bg-muted">
           {product.fotoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={product.fotoUrl} alt="" className="h-full w-full object-contain" />
           ) : (
-            <span className="text-[10px] text-brand-muted">—</span>
+            <span className="text-[10px] text-muted-foreground">—</span>
           )}
         </div>
-      </td>
-      <td className="max-w-[240px] px-3 py-2.5 font-semibold leading-tight">{product.nombre}</td>
-      <td className="whitespace-nowrap px-3 py-2.5 text-brand-muted">{product.marca || "—"}</td>
-      <td className="whitespace-nowrap px-3 py-2.5">
+      </TableCell>
+      <TableCell className="max-w-[240px] font-medium leading-tight">{product.nombre}</TableCell>
+      <TableCell className="whitespace-nowrap text-muted-foreground">{product.marca || "—"}</TableCell>
+      <TableCell className="whitespace-nowrap">
         {missingCategory ? (
-          <span
-            className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold"
-            style={{ backgroundColor: "#FEF3C7", color: "#92400E" }}
-          >
-            Sin categoría
-          </span>
+          <Badge variant="warning">Sin categoría</Badge>
         ) : (
-          <span className="text-brand-muted">{product.categoria}</span>
+          <span className="text-muted-foreground">{product.categoria}</span>
         )}
-      </td>
-      <td className="whitespace-nowrap px-3 py-2.5 text-right font-bold tabular-nums">{formatPrice(product.precio)}</td>
-      <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-brand-muted">
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-right font-medium tabular-nums">{formatPrice(product.precio)}</TableCell>
+      <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
         {product.codigoOdoo ? (
-          <span className="cursor-help underline decoration-dotted decoration-gray-300" title={product.codigoOdoo}>
+          <span className="cursor-help underline decoration-dotted decoration-border" title={product.codigoOdoo}>
             {shortOdooCode(product.codigoOdoo)}
           </span>
         ) : (
           "—"
         )}
-      </td>
-      <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-brand-muted">{product.codigoBarras || "—"}</td>
-      <td className="px-3 py-2.5">
+      </TableCell>
+      <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">{product.codigoBarras || "—"}</TableCell>
+      <TableCell>
         <ActivoSwitch activo={product.activo} disabled={busy} onToggle={() => void toggleActivo()} />
-      </td>
-      <td className="whitespace-nowrap px-3 py-2.5">
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
         <div className="flex items-center gap-1">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={onStartEdit}
-            className="row-edit-btn inline-flex h-8 w-8 items-center justify-center rounded-full"
-            style={{ color: brand.muted }}
+            className="row-edit-btn h-8 w-8"
             aria-label={`Editar ${product.nombre}`}
             title="Editar"
           >
             <PencilIcon />
-          </button>
-          {savedFlash ? (
-            <span className="text-sm font-bold" style={{ color: brand.green }}>
-              ✓
-            </span>
-          ) : null}
+          </Button>
+          {savedFlash ? <span className="text-sm font-bold text-primary">✓</span> : null}
         </div>
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -1085,9 +1039,7 @@ function ProductEditModal({
   const displayName = draftNombre.trim() || product.nombre;
   const displayMarca = draftMarca.trim() || "Sin marca";
   const displayCategoria = resolvedCategoria || "Sin categoría";
-  const labelClass = "block text-[13px] font-medium text-brand-muted";
-  const fieldClass =
-    "mt-1.5 h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium outline-none focus:border-[#7EB341]";
+  const labelClass = "block text-sm font-medium leading-none text-foreground";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
@@ -1101,23 +1053,13 @@ function ProductEditModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="product-edit-title"
-        className="relative z-10 flex max-h-[calc(100vh-3rem)] w-full max-w-xl flex-col overflow-hidden rounded-[28px] bg-white"
-        style={{ boxShadow: "0 24px 64px rgba(26, 26, 26, 0.18)", color: brand.ink }}
+        className="relative z-10 flex max-h-[calc(100vh-3rem)] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-lg"
       >
         <div className="overflow-y-auto">
-          <div className="h-[128px] w-full" style={{ backgroundColor: "#F4F5F4" }} />
+          <div className="h-[128px] w-full bg-muted" />
           <div className="px-6 pb-8">
             <div className="-mt-[60px] flex flex-col items-center text-center">
-              <div
-                className="flex items-center justify-center overflow-hidden rounded-2xl bg-white"
-                style={{
-                  width: 120,
-                  height: 120,
-                  border: "4px solid #FFFFFF",
-                  boxShadow: "0 8px 20px rgba(26, 26, 26, 0.10)",
-                  backgroundColor: "#F3F4F6",
-                }}
-              >
+              <div className="flex h-[120px] w-[120px] items-center justify-center overflow-hidden rounded-lg border-4 border-card bg-muted shadow-md">
                 {previewSrc ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={previewSrc} alt="" className="h-full w-full object-contain" />
@@ -1141,8 +1083,10 @@ function ProductEditModal({
                   event.target.value = "";
                 }}
               />
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                className={dragOver ? "mt-4 border-primary bg-accent" : "mt-4"}
                 onClick={() => fileRef.current?.click()}
                 onDragOver={(event) => {
                   event.preventDefault();
@@ -1154,114 +1098,88 @@ function ProductEditModal({
                   setDragOver(false);
                   acceptFile(event.dataTransfer.files[0]);
                 }}
-                className="mt-4 rounded-full border px-4 text-sm font-semibold"
-                style={{
-                  minHeight: 40,
-                  borderColor: dragOver ? brand.green : "#E5E7EB",
-                  backgroundColor: dragOver ? "rgba(126, 179, 65, 0.08)" : "#FFFFFF",
-                  color: brand.ink,
-                }}
               >
                 Cambiar imagen
-              </button>
+              </Button>
             </div>
 
             <div className="mt-8 space-y-6">
               <label className={labelClass}>
                 Nombre
-                <input
+                <Input
                   ref={nombreRef}
                   value={draftNombre}
                   onChange={(event) => setDraftNombre(event.target.value)}
-                  className={fieldClass}
-                  style={{ borderColor: "#E5E7EB", color: brand.ink }}
+                  className="mt-1.5"
                 />
               </label>
               <div className="grid gap-6 sm:grid-cols-2">
                 <label className={labelClass}>
                   Marca
-                  <input
-                    value={draftMarca}
-                    onChange={(event) => setDraftMarca(event.target.value)}
-                    className={fieldClass}
-                    style={{ borderColor: "#E5E7EB", color: brand.ink }}
-                  />
+                  <Input value={draftMarca} onChange={(event) => setDraftMarca(event.target.value)} className="mt-1.5" />
                 </label>
                 <label className={labelClass}>
                   Categoría
                   {categoryMode === "new" ? (
-                    <input
+                    <Input
                       value={draftNewCategoria}
                       placeholder="Nueva categoría"
                       onChange={(event) => setDraftNewCategoria(event.target.value)}
-                      className={fieldClass}
-                      style={{ borderColor: "#E5E7EB", color: brand.ink }}
+                      className="mt-1.5"
                     />
                   ) : (
-                    <span className="relative mt-1.5 block">
-                      <select
-                        value={draftCategoria}
-                        onChange={(event) => {
-                          if (event.target.value === "__new__") {
-                            setCategoryMode("new");
-                            setDraftNewCategoria("");
-                            return;
-                          }
-                          setDraftCategoria(event.target.value);
-                        }}
-                        className="h-11 w-full appearance-none rounded-xl border bg-white px-3 pr-9 text-sm font-medium outline-none focus:border-[#7EB341]"
-                        style={{ borderColor: "#E5E7EB", color: brand.ink }}
-                      >
-                        <option value="" disabled>
-                          Elegir…
+                    <AdminSelect
+                      value={draftCategoria}
+                      onChange={(event) => {
+                        if (event.target.value === "__new__") {
+                          setCategoryMode("new");
+                          setDraftNewCategoria("");
+                          return;
+                        }
+                        setDraftCategoria(event.target.value);
+                      }}
+                    >
+                      <option value="" disabled>
+                        Elegir…
+                      </option>
+                      {categories.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
                         </option>
-                        {categories.map((item) => (
-                          <option key={item} value={item}>
-                            {item}
-                          </option>
-                        ))}
-                        <option value="__new__">Crear nueva…</option>
-                      </select>
-                      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-brand-muted">
-                        <ChevronIcon />
-                      </span>
-                    </span>
+                      ))}
+                      <option value="__new__">Crear nueva…</option>
+                    </AdminSelect>
                   )}
                 </label>
               </div>
               <label className={labelClass}>
                 Stock
-                <input
+                <Input
                   value={draftStock}
                   inputMode="numeric"
                   placeholder="Sin conteo"
                   onChange={(event) => setDraftStock(event.target.value.replace(/[^\d-]/g, "").slice(0, 7))}
-                  className={fieldClass}
-                  style={{ borderColor: "#E5E7EB", color: brand.ink }}
+                  className="mt-1.5"
                 />
-                <span className="mt-1 block text-xs font-normal text-brand-muted">
+                <span className="mt-1 block text-xs font-normal text-muted-foreground">
                   Vacío = sin conteo. El cobro no se bloquea si llega a 0.
                 </span>
               </label>
               <label className={labelClass}>
                 Precio
                 <span className="relative mt-1.5 block">
-                  <span
-                    className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-semibold"
-                    style={{ color: brand.orange }}
-                  >
+                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-medium text-warning">
                     RD$
                   </span>
-                  <input
+                  <Input
                     value={draftPrecio}
                     inputMode="decimal"
                     onChange={(event) => setDraftPrecio(event.target.value)}
-                    className="h-11 w-full rounded-xl border bg-white pl-12 pr-3 text-sm font-semibold tabular-nums outline-none focus:border-[#7EB341]"
-                    style={{ borderColor: "#E5E7EB", color: brand.ink }}
+                    className="pl-12 font-medium tabular-nums"
                   />
                 </span>
               </label>
-              <div className="grid gap-4 rounded-2xl px-4 py-3.5 sm:grid-cols-2" style={{ backgroundColor: "#F7F8F7" }}>
+              <div className="grid gap-4 rounded-lg bg-muted px-4 py-3.5 sm:grid-cols-2">
                 <div className="min-w-0">
                   <p className={labelClass}>Código Odoo</p>
                   <p
@@ -1285,49 +1203,28 @@ function ProductEditModal({
             </div>
 
             {formError ? (
-              <p className="mt-6 rounded-2xl px-3 py-2 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
+              <p className="mt-6 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {formError}
               </p>
             ) : null}
           </div>
         </div>
 
-        <div
-          className="flex flex-wrap items-center justify-between gap-3 border-t px-6 py-4"
-          style={{ borderColor: "#EFEFEF" }}
-        >
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-4">
           {draftActivo ? (
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void deactivate()}
-              className="rounded-full border px-4 text-sm font-semibold disabled:opacity-40"
-              style={{ minHeight: 44, borderColor: "#FECACA", backgroundColor: "#FFFFFF", color: "#B42318" }}
-            >
+            <Button type="button" variant="destructive" disabled={saving} onClick={() => void deactivate()}>
               Desactivar producto
-            </button>
+            </Button>
           ) : (
             <span />
           )}
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              disabled={saving}
-              onClick={requestClose}
-              className="rounded-full border px-4 text-sm font-semibold disabled:opacity-40"
-              style={{ minHeight: 44, borderColor: "#E5E7EB", backgroundColor: "#FFFFFF", color: brand.ink }}
-            >
+            <Button type="button" variant="outline" disabled={saving} onClick={requestClose}>
               Cancelar
-            </button>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void save()}
-              className="rounded-full px-5 text-sm font-bold text-white disabled:opacity-40"
-              style={{ minHeight: 44, backgroundColor: brand.green }}
-            >
+            </Button>
+            <Button type="button" disabled={saving} onClick={() => void save()}>
               {saving ? "Guardando..." : "Guardar cambios"}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -1408,14 +1305,6 @@ function DownloadIcon() {
       <path d="M8 3v7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
       <path d="M5.2 7.8 8 10.6l2.8-2.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M3.5 13h9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ChevronIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <path d="M3.5 5.2 7 8.7l3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

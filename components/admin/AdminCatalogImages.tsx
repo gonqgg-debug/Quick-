@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { CatalogImageQueueItem, CatalogImageSource, CatalogImageStats } from "@/lib/product-images-shared";
+import { Button } from "@/components/ui/button";
 import { brand } from "@/lib/theme";
 
 const TEST_WEB_LIMIT = 8;
@@ -306,15 +307,14 @@ export function AdminCatalogImages() {
               </button>
             </span>
             <span title={batchDisabledReason} className="inline-flex">
-              <button
+              <Button
                 type="button"
                 disabled={scanning || !canBatch}
                 onClick={() => void runBatch("auto")}
-                className="rounded-full px-4 text-sm font-bold text-white disabled:opacity-40"
-                style={{ backgroundColor: brand.orange, minHeight: 44 }}
+                className="bg-warning text-warning-foreground hover:bg-warning/90"
               >
                 {scanning ? "Buscando..." : `Buscar sugerencias (${pendingSearch} pendientes)`}
-              </button>
+              </Button>
             </span>
           </div>
           {nacionalDisabledReason || batchDisabledReason ? (
@@ -451,15 +451,14 @@ export function AdminCatalogImages() {
                   </p>
                 )}
                 <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-3">
-                  <button
+                  <Button
                     type="button"
+                    size="sm"
                     disabled={busyId === item.id || !item.suggestion}
                     onClick={() => item.suggestion && void accept(item.suggestion.id, item.id)}
-                    className="rounded-full px-4 text-sm font-bold text-white disabled:opacity-40"
-                    style={{ backgroundColor: brand.green, minHeight: 40 }}
                   >
                     Usar esta
-                  </button>
+                  </Button>
                   <button
                     type="button"
                     disabled={busyId === item.id}
@@ -513,8 +512,10 @@ export function AdminCatalogImages() {
             {letter ? ` · letra ${letter}` : ""} · página {page} de {totalPages}
           </p>
           <div className="flex gap-2">
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               disabled={page <= 1}
               onClick={() => {
                 const next = page - 1;
@@ -523,13 +524,12 @@ export function AdminCatalogImages() {
                   setError(loadError instanceof Error ? loadError.message : "Error al cargar");
                 });
               }}
-              className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
-              style={{ minHeight: 40, backgroundColor: "#F3F4F6" }}
             >
               Anterior
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              size="sm"
               disabled={page >= totalPages}
               onClick={() => {
                 const next = page + 1;
@@ -538,11 +538,9 @@ export function AdminCatalogImages() {
                   setError(loadError instanceof Error ? loadError.message : "Error al cargar");
                 });
               }}
-              className="rounded-full px-4 text-sm font-bold text-white disabled:opacity-40"
-              style={{ minHeight: 40, backgroundColor: brand.green }}
             >
               Siguiente
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}

@@ -7,6 +7,8 @@ import type { CajaAsignacionSugerida, CajaBalances } from "@/lib/caja";
 import { toMoney } from "@/lib/money";
 import { brand } from "@/lib/theme";
 import { AdminInput } from "@/components/admin/AdminField";
+import { Card } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const INK = "#111827";
 const MUTED = "#6B7280";
@@ -395,53 +397,49 @@ function RecuentoPanel<T extends number>({
   const match = diferencia != null && isNearZero(diferencia);
 
   return (
-    <section className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-5 shadow-sm sm:px-5">
-      <h2 className="text-lg font-semibold" style={{ color: INK }}>
-        {title}
-      </h2>
+    <Card className="px-4 py-5 shadow-sm sm:px-5">
+      <h2 className="text-lg font-semibold text-foreground">{title}</h2>
       <div className="mt-3">{header}</div>
 
-      <div className="mt-4 overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="text-xs font-medium uppercase tracking-wide" style={{ color: MUTED }}>
-              <th className="pb-2 pr-3 font-medium">Denominación</th>
-              <th className="pb-2 pr-3 font-medium">Cantidad</th>
-              <th className="pb-2 text-right font-medium">Subtotal</th>
-            </tr>
-          </thead>
-          <tbody>
-            {denoms.map((denom) => {
-              const qty = parseCount(counts[denom]);
-              return (
-                <tr key={denom} className="border-t border-[#F3F4F6]">
-                  <td className="whitespace-nowrap py-2 pr-3 font-semibold tabular-nums" style={{ color: INK }}>
-                    {formatCajaMoney(denom, moneda)}
-                  </td>
-                  <td className="py-2 pr-3">
-                    <AdminInput
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="off"
-                      aria-label={`Cantidad de ${formatCajaMoney(denom, moneda)}`}
-                      value={counts[denom]}
-                      onChange={(event) => onCountChange(denom, event.target.value)}
-                      placeholder="0"
-                      bare
-                      className="max-w-[7.5rem] tabular-nums"
-                    />
-                  </td>
-                  <td className="whitespace-nowrap py-2 text-right tabular-nums" style={{ color: MUTED }}>
-                    {formatCajaMoney(denom * qty, moneda)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <Table className="mt-4">
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead>Denominación</TableHead>
+            <TableHead>Cantidad</TableHead>
+            <TableHead className="text-right">Subtotal</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {denoms.map((denom) => {
+            const qty = parseCount(counts[denom]);
+            return (
+              <TableRow key={denom}>
+                <TableCell className="whitespace-nowrap font-medium tabular-nums">
+                  {formatCajaMoney(denom, moneda)}
+                </TableCell>
+                <TableCell>
+                  <AdminInput
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    aria-label={`Cantidad de ${formatCajaMoney(denom, moneda)}`}
+                    value={counts[denom]}
+                    onChange={(event) => onCountChange(denom, event.target.value)}
+                    placeholder="0"
+                    bare
+                    className="max-w-[7.5rem] tabular-nums"
+                  />
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-right tabular-nums text-muted-foreground">
+                  {formatCajaMoney(denom * qty, moneda)}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
 
-      <dl className="mt-5 space-y-2 border-t border-[#E5E7EB] pt-4">
+      <dl className="mt-5 space-y-2 border-t border-border pt-4">
         <SummaryRow label="Total contado" value={formatCajaMoney(total, moneda)} emphasize />
         <SummaryRow
           label={esperadoLabel}
@@ -459,7 +457,7 @@ function RecuentoPanel<T extends number>({
           </dd>
         </div>
       </dl>
-    </section>
+    </Card>
   );
 }
 

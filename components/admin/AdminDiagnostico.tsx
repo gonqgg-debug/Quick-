@@ -9,7 +9,10 @@ import {
   formulaForecastCierreMes,
   type DiagnosticoForecast,
 } from "@/lib/admin-diagnostico-shared";
-import { brand } from "@/lib/theme";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 type DiagnosticoResponse = DiagnosticoForecast & { formula?: string; error?: string };
 
@@ -61,21 +64,21 @@ export function AdminDiagnostico() {
       </p>
 
       {error ? (
-        <p className="mt-4 rounded-2xl px-4 py-3 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
+        <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
         </p>
       ) : null}
 
       {loading ? (
-        <div className="mt-6 h-64 animate-pulse rounded-[24px] bg-gray-100" />
+        <Skeleton className="mt-6 h-64 w-full" />
       ) : data ? (
         <DiagnosticoBody data={data} />
       ) : null}
 
       <p className="mt-8">
-        <Link href="/admin/parametros" className="text-sm font-semibold" style={{ color: brand.green }}>
-          Volver a parámetros
-        </Link>
+        <Button variant="link" className="h-auto p-0" asChild>
+          <Link href="/admin/parametros">Volver a parámetros</Link>
+        </Button>
       </p>
     </div>
   );
@@ -87,54 +90,56 @@ function DiagnosticoBody({ data }: { data: DiagnosticoResponse }) {
 
   return (
     <>
-      <p className="mt-5 text-sm text-brand-muted">
-        Mes activo: <span className="font-semibold text-brand-ink">{data.mesActivo.label}</span>
+      <p className="mt-5 text-sm text-muted-foreground">
+        Mes activo: <span className="font-medium text-foreground">{data.mesActivo.label}</span>
       </p>
 
-      <div className="mt-4 overflow-x-auto rounded-[24px] border" style={{ borderColor: "#E5E7EB" }}>
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead>
-            <tr className="text-xs font-bold uppercase tracking-wide text-brand-muted" style={{ backgroundColor: "#F8FAF7" }}>
-              <th className="px-4 py-3">Día</th>
-              <th className="whitespace-nowrap px-4 py-3 text-right">Avg M-1 (mes reciente)</th>
-              <th className="whitespace-nowrap px-4 py-3 text-right">Avg M-2</th>
-              <th className="whitespace-nowrap px-4 py-3 text-right">Avg M-3</th>
-              <th className="whitespace-nowrap px-4 py-3 text-right">Ponderado ({pesoHeader})</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.dias.map((dia, index) => (
-              <tr key={dia.iso} style={{ backgroundColor: index % 2 === 1 ? "#FAFBFA" : "#FFFFFF" }}>
-                <td className="px-4 py-3 font-semibold">{dia.nombre}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatDiagnosticoAmount(dia.avgM1)}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatDiagnosticoAmount(dia.avgM2)}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatDiagnosticoAmount(dia.avgM3)}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-right font-bold tabular-nums">
+      <Card className="mt-4 overflow-hidden shadow-sm">
+        <Table className="min-w-[720px]">
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableHead>Día</TableHead>
+              <TableHead className="text-right">Avg M-1 (mes reciente)</TableHead>
+              <TableHead className="text-right">Avg M-2</TableHead>
+              <TableHead className="text-right">Avg M-3</TableHead>
+              <TableHead className="text-right">Ponderado ({pesoHeader})</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.dias.map((dia) => (
+              <TableRow key={dia.iso}>
+                <TableCell className="font-medium">{dia.nombre}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatDiagnosticoAmount(dia.avgM1)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatDiagnosticoAmount(dia.avgM2)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatDiagnosticoAmount(dia.avgM3)}</TableCell>
+                <TableCell className="text-right font-medium tabular-nums">
                   {formatDiagnosticoAmount(dia.ponderado)}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </Card>
 
-      <section className="mt-5 space-y-4 rounded-[24px] border bg-white p-5" style={{ borderColor: "#E5E7EB" }}>
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-brand-muted">Suma total ponderado (sumE)</p>
-          <p className="mt-1 font-display text-2xl font-bold tabular-nums">{formatDiagnosticoAmount(data.sumaPonderado)}</p>
-        </div>
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-brand-muted">Meses usados</p>
-          <p className="mt-1 text-sm font-semibold">
-            M-1: {data.meses.m1.label}, M-2: {data.meses.m2.label}, M-3: {data.meses.m3.label}
-          </p>
-        </div>
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-brand-muted">Forecast de cierre de mes</p>
-          <p className="mt-1 font-display text-2xl font-bold tabular-nums">{formatDiagnosticoAmount(data.forecastCierreMes)}</p>
-          <p className="mt-2 text-xs tabular-nums text-brand-muted">{formula}</p>
-        </div>
-      </section>
+      <Card className="mt-5 shadow-sm">
+        <CardContent className="space-y-4 p-5">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Suma total ponderado (sumE)</p>
+            <p className="mt-1 font-display text-2xl font-bold tabular-nums">{formatDiagnosticoAmount(data.sumaPonderado)}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Meses usados</p>
+            <p className="mt-1 text-sm font-medium">
+              M-1: {data.meses.m1.label}, M-2: {data.meses.m2.label}, M-3: {data.meses.m3.label}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Forecast de cierre de mes</p>
+            <p className="mt-1 font-display text-2xl font-bold tabular-nums">{formatDiagnosticoAmount(data.forecastCierreMes)}</p>
+            <p className="mt-2 text-xs tabular-nums text-muted-foreground">{formula}</p>
+          </div>
+        </CardContent>
+      </Card>
     </>
   );
 }

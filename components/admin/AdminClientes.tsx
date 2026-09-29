@@ -12,7 +12,9 @@ import {
   DataTableTh,
 } from "@/components/admin/DataTable";
 import type { AdminClienteListItem, AdminClienteSortKey } from "@/lib/admin-clientes-shared";
-import { brand } from "@/lib/theme";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type SortDir = "asc" | "desc";
 
@@ -154,29 +156,28 @@ export function AdminClientes() {
       <h1 className="font-display mt-1 text-2xl font-bold">Directorio</h1>
       <p className="mt-1 text-sm text-brand-muted">Métricas derivadas de chats y pedidos. No hay una tabla aparte.</p>
 
-      <input
+      <Input
         value={searchInput}
         onChange={(event) => setSearchInput(event.target.value)}
         placeholder="Buscar por nombre o teléfono"
-        className="mt-5 h-11 w-full max-w-md rounded-full border px-4 outline-none"
-        style={{ borderColor: "#E5E7EB" }}
+        className="mt-5 max-w-md"
       />
 
       {error ? (
-        <p className="mt-4 rounded-2xl px-4 py-3 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
+        <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
         </p>
       ) : null}
 
       {loading ? (
-        <div className="mt-6 h-48 animate-pulse rounded-lg bg-gray-100" />
+        <Skeleton className="mt-6 h-48 w-full" />
       ) : visible.length === 0 ? (
-        <div className="mt-6 rounded-lg px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
+        <Card className="mt-6 px-5 py-14 text-center shadow-sm">
           <p className="font-display text-xl font-bold">{query ? "Sin resultados" : "Todavía no hay clientes"}</p>
-          <p className="mt-2 text-sm text-brand-muted">
+          <p className="mt-2 text-sm text-muted-foreground">
             {query ? "Prueba con otro nombre o teléfono." : "Cuando alguien escriba por WhatsApp, aparece aquí."}
           </p>
-        </div>
+        </Card>
       ) : (
         <DataTable className="mt-6" tableClassName="min-w-[920px]">
           <DataTableHead>
@@ -191,7 +192,7 @@ export function AdminClientes() {
                   <button
                     type="button"
                     onClick={() => toggleSort(column.key)}
-                    className="inline-flex items-center gap-1 uppercase tracking-wider"
+                    className="inline-flex items-center gap-1 font-medium"
                   >
                     {column.label}
                     <span className="text-[10px]" aria-hidden>

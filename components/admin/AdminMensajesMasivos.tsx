@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AdminInput, AdminTextarea, adminLabelClass } from "@/components/admin/AdminField";
+import { Button } from "@/components/ui/button";
 import {
   WHATSAPP_TEXT_MAX,
   type MassMessagePreview,
@@ -344,15 +345,9 @@ export function AdminMensajesMasivos() {
         >
           {previewing ? "Calculando…" : "Vista previa"}
         </button>
-        <button
-          type="button"
-          disabled={!canSend}
-          onClick={() => setConfirmOpen(true)}
-          className="rounded-full px-4 text-sm font-bold text-white disabled:opacity-40"
-          style={{ minHeight: 44, backgroundColor: brand.green }}
-        >
+        <Button type="button" disabled={!canSend} onClick={() => setConfirmOpen(true)}>
           Enviar
-        </button>
+        </Button>
       </div>
       {!previewMatches && mensaje.trim() ? (
         <p className="mt-2 text-xs text-brand-muted">Usa Vista previa antes de enviar. Si cambias el texto o las fechas, hay que volver a previsualizar.</p>
@@ -417,14 +412,9 @@ function ConfirmSendModal({
           >
             Cancelar
           </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="rounded-full px-4 text-sm font-bold text-white"
-            style={{ minHeight: 44, backgroundColor: brand.green }}
-          >
+          <Button type="button" onClick={onConfirm}>
             Sí, enviar
-          </button>
+          </Button>
         </div>
       </div>
     </div>

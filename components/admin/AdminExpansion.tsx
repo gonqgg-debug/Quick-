@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AdminInput, AdminSelect, AdminTextarea, adminLabelClass } from "@/components/admin/AdminField";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   DataTableCell,
@@ -179,14 +180,9 @@ export function AdminExpansion() {
         <div className="flex flex-wrap gap-2">
           <GhostButton onClick={() => setEditingMetas(true)}>Metas</GhostButton>
           <GhostButton onClick={() => setEditingContacto("new")}>Persona</GhostButton>
-          <button
-            type="button"
-            onClick={() => setEditingSitio("new")}
-            className="rounded-full px-4 text-sm font-bold text-white"
-            style={{ minHeight: 40, backgroundColor: brand.green }}
-          >
+          <Button type="button" size="sm" onClick={() => setEditingSitio("new")}>
             Oportunidad
-          </button>
+          </Button>
         </div>
       </div>
 

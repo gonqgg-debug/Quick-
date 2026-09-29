@@ -20,6 +20,7 @@ import { formatPrice } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
 const SEMAFORO: Record<
@@ -384,34 +385,30 @@ function TendenciaSection({
               <div className="h-52 w-full" />
             )}
 
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[640px] text-left text-sm">
-                <thead>
-                  <tr className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    <th className="border-b border-border px-3 py-2 font-medium">Fecha</th>
-                    <th className="border-b border-border px-3 py-2 text-right font-medium">Venta real</th>
-                    <th className="border-b border-border px-3 py-2 text-right font-medium">Meta del día</th>
-                    <th className="border-b border-border px-3 py-2 text-right font-medium">Diferencia</th>
-                    <th className="border-b border-border px-3 py-2 text-right font-medium">Acum. del mes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dias.map((dia) => (
-                    <tr key={dia.fecha}>
-                      <td className="border-b border-muted px-3 py-2.5 font-medium text-foreground">{dia.label}</td>
-                      <td className="border-b border-muted px-3 py-2.5 text-right tabular-nums text-foreground">
-                        {formatPrice(dia.ventaReal)}
-                      </td>
-                      <td className="border-b border-muted px-3 py-2.5 text-right tabular-nums text-muted-foreground">
-                        {formatPrice(dia.metaDelDia)}
-                      </td>
-                      <SignedCell value={dia.diferencia} />
-                      <SignedCell value={dia.acumuladoMes} />
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table className="mt-4 min-w-[640px]">
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Fecha</TableHead>
+                  <TableHead className="text-right">Venta real</TableHead>
+                  <TableHead className="text-right">Meta del día</TableHead>
+                  <TableHead className="text-right">Diferencia</TableHead>
+                  <TableHead className="text-right">Acum. del mes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {dias.map((dia) => (
+                  <TableRow key={dia.fecha}>
+                    <TableCell className="font-medium">{dia.label}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatPrice(dia.ventaReal)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {formatPrice(dia.metaDelDia)}
+                    </TableCell>
+                    <SignedCell value={dia.diferencia} />
+                    <SignedCell value={dia.acumuladoMes} />
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </>
         )}
 
@@ -421,39 +418,33 @@ function TendenciaSection({
           {proximos.length === 0 ? (
             <p className="mt-4 text-sm text-muted-foreground">No hay metas cargadas para los próximos días.</p>
           ) : (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[320px] text-left text-sm">
-                <thead>
-                  <tr className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    <th className="border-b border-border px-3 py-2 font-medium">Fecha</th>
-                    <th className="border-b border-border px-3 py-2 text-right font-medium">Meta</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {proximos.map((dia) => (
-                    <tr key={dia.fecha}>
-                      <td className="border-b border-muted px-3 py-2.5 font-medium text-foreground">
-                        {dia.label}
-                        {dia.fecha === today ? (
-                          <span className="ml-2 text-xs font-medium text-muted-foreground">Hoy</span>
-                        ) : null}
-                      </td>
-                      <td className="border-b border-muted px-3 py-2.5 text-right tabular-nums text-foreground">
-                        {formatPrice(dia.metaDelDia)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td className="px-3 py-2.5 text-sm font-semibold text-foreground">Total 7 días</td>
-                    <td className="px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-foreground">
-                      {formatPrice(metaProximos)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+            <Table className="mt-4 min-w-[320px]">
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Fecha</TableHead>
+                  <TableHead className="text-right">Meta</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {proximos.map((dia) => (
+                  <TableRow key={dia.fecha}>
+                    <TableCell className="font-medium">
+                      {dia.label}
+                      {dia.fecha === today ? (
+                        <span className="ml-2 text-xs font-medium text-muted-foreground">Hoy</span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{formatPrice(dia.metaDelDia)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+              <TableFooter>
+                <TableRow>
+                  <TableCell className="font-semibold">Total 7 días</TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums">{formatPrice(metaProximos)}</TableCell>
+                </TableRow>
+              </TableFooter>
+            </Table>
           )}
         </div>
       </CardContent>
@@ -464,14 +455,11 @@ function TendenciaSection({
 function SignedCell({ value }: { value: number }) {
   const positive = value >= 0;
   return (
-    <td
-      className={cn(
-        "border-b border-muted px-3 py-2.5 text-right font-medium tabular-nums",
-        positive ? "text-primary" : "text-destructive"
-      )}
+    <TableCell
+      className={cn("text-right font-medium tabular-nums", positive ? "text-primary" : "text-destructive")}
     >
       {positive ? "↑ " : "↓ "}
       {formatSignedPrice(value)}
-    </td>
+    </TableCell>
   );
 }
