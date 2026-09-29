@@ -1,5 +1,13 @@
 import Dexie, { type Table } from "dexie";
 import { mergeStock, type PosProduct, type PosSaleItem, type PosSaleStatus, type PosMetodoPago } from "@/lib/pos-shared";
+import type { CajaTurnoPeriodo } from "@/lib/admin-caja-shared";
+
+export type PosShift = {
+  id: "current";
+  periodo: CajaTurnoPeriodo;
+  fondoInicial: number;
+  openedAt: string;
+};
 
 export type PosSaleRecord = {
   clientId: string;
@@ -16,12 +24,16 @@ export type PosSaleRecord = {
 class PosDatabase extends Dexie {
   products!: Table<PosProduct, string>;
   sales!: Table<PosSaleRecord, string>;
+  shift!: Table<PosShift, string>;
 
   constructor() {
     super("quick-pos");
     this.version(1).stores({
       products: "id, categoria, nombre",
       sales: "clientId, status, createdAt",
+    });
+    this.version(2).stores({
+      shift: "id",
     });
   }
 }
@@ -80,4 +92,22 @@ export async function saveSaleAndStock(sale: PosSaleRecord): Promise<void> {
 
 export async function countPendingSales(): Promise<number> {
   return posDb().sales.where("status").equals("pendiente_sync").count();
+}
+
+export async function readShift(): Promise<PosShift | null> {
+  return (await posDb().shift.get("current")) ?? null;
+}
+
+export async function saveShift(shift: PosShift): Promise<void> {
+  await posDb().shift.put(shift);
+}
+
+export async function clearShift(): Promise<void> {
+  await posDb().shift.delete("current");
+}
+
+export async function salesSince(openedAt: string): Promise<{ count: number; total: number }> {
+  const rows = await posDb().sales.where("createdAt").aboveOrEqual(openedAt).toArray();
+  const total = rows.reduce((sum, row) => sum + row.total, 0);
+  return { count: rows.length, total: Math.round(total * 100) / 100 };
 }

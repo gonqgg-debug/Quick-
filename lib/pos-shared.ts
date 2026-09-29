@@ -38,6 +38,30 @@ export function foldText(value: string): string {
     .toLowerCase();
 }
 
+/** Miniatura para la grilla. Supabase sirve el archivo original, que en el mostrador es demasiado pesado. */
+export function posThumbUrl(fotoUrl: string | null): string | null {
+  if (!fotoUrl) {
+    return null;
+  }
+  try {
+    const url = new URL(fotoUrl);
+    const marker = "/storage/v1/object/public/";
+    const index = url.pathname.indexOf(marker);
+    if (index === -1) {
+      return fotoUrl;
+    }
+    const objectPath = url.pathname.slice(index + marker.length);
+    url.pathname = `/storage/v1/render/image/public/${objectPath}`;
+    url.search = "";
+    url.searchParams.set("width", "480");
+    url.searchParams.set("quality", "60");
+    url.searchParams.set("resize", "cover");
+    return url.toString();
+  } catch {
+    return fotoUrl;
+  }
+}
+
 export function productInitials(nombre: string): string {
   const parts = nombre.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) {

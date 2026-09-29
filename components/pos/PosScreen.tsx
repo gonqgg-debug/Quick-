@@ -5,9 +5,18 @@ import { toast } from "sonner";
 import { StaffLogin } from "@/components/staff/StaffLogin";
 import { PosCart } from "@/components/pos/PosCart";
 import { PosCatalog } from "@/components/pos/PosCatalog";
+import { PosOpenShift } from "@/components/pos/PosOpenShift";
 import { PosPayDialog } from "@/components/pos/PosPayDialog";
 import { pullCatalog, queuePosSale, syncPendingSales } from "@/components/pos/pos-sync";
-import { countPendingSales, readLocalProducts } from "@/lib/pos-db";
+import {
+  clearShift,
+  countPendingSales,
+  readLocalProducts,
+  readShift,
+  salesSince,
+  saveShift,
+  type PosShift,
+} from "@/lib/pos-db";
 import { formatPrice } from "@/lib/money";
 import { saleTotal, type PosMetodoPago, type PosProduct, type PosSaleItem } from "@/lib/pos-shared";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +46,10 @@ export function PosScreen() {
   const [clearOpen, setClearOpen] = useState(false);
   const [offlineEmpty, setOfflineEmpty] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [shift, setShift] = useState<PosShift | null>(null);
+  const [shiftReady, setShiftReady] = useState(false);
+  const [closeShiftOpen, setCloseShiftOpen] = useState(false);
+  const [shiftSummary, setShiftSummary] = useState({ count: 0, total: 0 });
 
   const refreshPending = useCallback(async () => {
     setPending(await countPendingSales().catch(() => 0));
@@ -85,6 +98,10 @@ export function PosScreen() {
 
   useEffect(() => {
     void load();
+    void readShift()
+      .then(setShift)
+      .catch(() => setShift(null))
+      .finally(() => setShiftReady(true));
   }, [load]);
 
   useEffect(() => {
@@ -191,11 +208,19 @@ export function PosScreen() {
 
   const total = useMemo(() => saleTotal(lines), [lines]);
 
+  async function askCloseShift() {
+    if (!shift) {
+      return;
+    }
+    setShiftSummary(await salesSince(shift.openedAt).catch(() => ({ count: 0, total: 0 })));
+    setCloseShiftOpen(true);
+  }
+
   if (gate === "login") {
     return <StaffLogin onSuccess={() => void load()} />;
   }
 
-  if (gate === "loading") {
+  if (gate === "loading" || !shiftReady) {
     return <p className="p-6 text-sm text-muted-foreground">Abriendo el cobro…</p>;
   }
 
@@ -203,9 +228,17 @@ export function PosScreen() {
     <div className="fixed inset-0 flex flex-col bg-background text-foreground">
       <Toaster theme="light" position="top-center" />
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2 md:px-4">
-        <p className="shrink-0 text-lg font-semibold">Cobro</p>
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="shrink-0 text-lg font-semibold">Cobro</p>
+          {shift ? (
+            <Button type="button" variant="outline" size="touch" className="h-11" onClick={() => void askCloseShift()}>
+              Turno {shift.periodo}
+            </Button>
+          ) : null}
+        </div>
         <ConnectionBadge link={link} pending={pending} />
       </header>
+      {shift ? (
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1">
           <PosCatalog
@@ -227,12 +260,27 @@ export function PosScreen() {
           />
         </aside>
       </div>
+      ) : (
+        <PosOpenShift
+          onOpen={(periodo, fondoInicial) => {
+            const next: PosShift = {
+              id: "current",
+              periodo,
+              fondoInicial,
+              openedAt: new Date().toISOString(),
+            };
+            void saveShift(next).then(() => setShift(next));
+          }}
+        />
+      )}
 
+      {shift ? (
       <div className="shrink-0 border-t border-border p-3 lg:hidden">
         <Button type="button" className="h-14 w-full text-lg" onClick={() => setCartOpen(true)}>
           Ver carrito ({lines.reduce((sum, line) => sum + line.cantidad, 0)}) — {formatPrice(total)}
         </Button>
       </div>
+      ) : null}
 
       <Dialog open={cartOpen} onOpenChange={setCartOpen}>
         <DialogContent className="bottom-0 left-0 top-auto flex h-[88dvh] max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-b-none rounded-t-2xl p-0 sm:bottom-0 sm:rounded-b-none sm:rounded-t-2xl">
@@ -249,6 +297,40 @@ export function PosScreen() {
       </Dialog>
 
       <PosPayDialog open={payOpen} lines={lines} onOpenChange={setPayOpen} onConfirm={(metodo, monto) => void confirmSale(metodo, monto)} />
+
+      <Dialog open={closeShiftOpen} onOpenChange={setCloseShiftOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cerrar turno {shift?.periodo}</DialogTitle>
+            <DialogDescription>
+              {shiftSummary.count === 0
+                ? "Este turno todavía no tiene ventas guardadas en este equipo."
+                : `${shiftSummary.count === 1 ? "1 venta" : `${shiftSummary.count} ventas`} · ${formatPrice(shiftSummary.total)}. El fondo inicial era ${formatPrice(shift?.fondoInicial ?? 0)}.`}
+              {" "}El cierre contado sigue haciéndose en Administración → Caja → Turnos.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" className="h-12" onClick={() => setCloseShiftOpen(false)}>
+              Seguir
+            </Button>
+            <Button
+              type="button"
+              className="h-12"
+              onClick={() => {
+                void clearShift().then(() => {
+                  setShift(null);
+                  setLines([]);
+                  setCloseShiftOpen(false);
+                  setCartOpen(false);
+                  setPayOpen(false);
+                });
+              }}
+            >
+              Cerrar turno
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={clearOpen} onOpenChange={setClearOpen}>
         <DialogContent>

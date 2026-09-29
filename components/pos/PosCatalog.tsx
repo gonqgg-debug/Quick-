@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { categoryEmoji } from "@/lib/theme";
-import { foldText, productInitials, stockBadge, type PosProduct } from "@/lib/pos-shared";
+import { foldText, posThumbUrl, productInitials, stockBadge, type PosProduct } from "@/lib/pos-shared";
 import { formatPrice } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -104,9 +104,10 @@ export function PosCatalog({ products, loading, offlineEmpty, loadError, flashId
 }
 
 function ProductTile({ product, flash, onAdd }: { product: PosProduct; flash: boolean; onAdd: () => void }) {
-  const [imageFailed, setImageFailed] = useState(false);
+  const thumb = posThumbUrl(product.fotoUrl);
+  const [src, setSrc] = useState(thumb);
   const badge = stockBadge(product.stock);
-  const showImage = Boolean(product.fotoUrl) && !imageFailed;
+  const showImage = Boolean(src);
 
   return (
     <Card
@@ -130,10 +131,18 @@ function ProductTile({ product, flash, onAdd }: { product: PosProduct; flash: bo
             {/* next/image goes through the optimizer and fails offline; a broken photo falls back to initials. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={product.fotoUrl ?? ""}
+              src={src ?? ""}
               alt=""
+              loading="lazy"
+              decoding="async"
               className="h-full w-full object-cover"
-              onError={() => setImageFailed(true)}
+              onError={() => {
+                if (src && product.fotoUrl && src !== product.fotoUrl) {
+                  setSrc(product.fotoUrl);
+                  return;
+                }
+                setSrc(null);
+              }}
             />
           </>
         ) : (
