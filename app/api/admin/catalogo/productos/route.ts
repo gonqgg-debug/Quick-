@@ -43,6 +43,7 @@ export async function PATCH(request: NextRequest) {
       categoria?: unknown;
       precio?: unknown;
       activo?: unknown;
+      stock?: unknown;
     };
     if (typeof body.id !== "string" || !body.id) {
       return NextResponse.json({ error: "Falta el producto" }, { status: 400 });
@@ -54,6 +55,7 @@ export async function PATCH(request: NextRequest) {
       categoria: body.categoria,
       precio: body.precio,
       activo: body.activo,
+      stock: body.stock,
     });
     return NextResponse.json({ product });
   } catch (error) {

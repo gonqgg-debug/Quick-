@@ -1,0 +1,14 @@
+{
+  "name": "Quick! Cobro",
+  "short_name": "Cobro",
+  "start_url": "/pos",
+  "scope": "/pos",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#7EB341",
+  "lang": "es",
+  "icons": [
+    { "src": "/icon.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/apple-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

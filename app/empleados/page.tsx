@@ -34,6 +34,8 @@ export default function EmpleadosPage() {
           href="/staff"
           action="Entrar a Delivery"
           tone="orange"
+          extraHref="/pos"
+          extraAction="Cobro en mostrador"
         />
         <GatePanel
           eyebrow="Back office"
@@ -55,6 +57,8 @@ function GatePanel({
   href,
   action,
   tone,
+  extraHref,
+  extraAction,
 }: {
   eyebrow: string;
   title: string;
@@ -62,6 +66,8 @@ function GatePanel({
   href: string;
   action: string;
   tone: "orange" | "green";
+  extraHref?: string;
+  extraAction?: string;
 }) {
   const accent = tone === "orange" ? brand.orange : brand.green;
   const wash = tone === "orange" ? "#FFF7ED" : "#F1F7EA";
@@ -85,6 +91,15 @@ function GatePanel({
       >
         {action}
       </Link>
+      {extraHref && extraAction ? (
+        <Link
+          href={extraHref}
+          className="mt-3 inline-flex min-h-12 w-full max-w-xs items-center justify-center rounded-full border bg-white px-7 py-3.5 text-base font-bold"
+          style={{ borderColor: accent, color: accent }}
+        >
+          {extraAction}
+        </Link>
+      ) : null}
     </section>
   );
 }
