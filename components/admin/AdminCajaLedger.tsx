@@ -12,6 +12,7 @@ import {
 import { formatDayKey, yesterdayDayKey } from "@/lib/local-day";
 import { brand } from "@/lib/theme";
 import { AdminInput, AdminSelect, adminLabelClass } from "@/components/admin/AdminField";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   DataTableCell,
@@ -106,14 +107,9 @@ export function AdminCajaLedger() {
             </AdminSelect>
           </label>
         </div>
-        <button
-          type="button"
-          onClick={() => setEditing("new")}
-          className="rounded-full px-4 text-sm font-bold text-white"
-          style={{ minHeight: 44, backgroundColor: brand.green }}
-        >
+        <Button type="button" onClick={() => setEditing("new")}>
           Registrar movimiento
-        </button>
+        </Button>
       </div>
 
       {error ? (

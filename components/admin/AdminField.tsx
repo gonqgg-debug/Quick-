@@ -4,20 +4,22 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 export function cx(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(" ");
 }
 
-export const adminLabelClass = "block text-[13px] font-medium text-brand-muted";
+export const adminLabelClass = "block text-sm font-medium leading-none text-foreground";
 
-/** Shared look for text, number, date, and select controls. */
+/** Shared look for text, number, date, and select controls. Matches shadcn Input. */
 export const adminControlClass =
-  "w-full rounded-md border border-[#E5E7EB] bg-white px-3 py-2 text-sm font-medium text-brand-ink outline-none transition-shadow focus:border-brand-green focus:ring-2 focus:ring-brand-green/40 disabled:cursor-not-allowed disabled:opacity-55";
+  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm";
 
 export const adminFieldClass = `mt-1.5 ${adminControlClass}`;
 
-export const adminTextareaClass = `${adminFieldClass} resize-y`;
+export const adminTextareaClass = `${adminFieldClass} min-h-[80px] resize-y py-2`;
 
 type AdminInputProps = InputHTMLAttributes<HTMLInputElement> & {
   /** Skip the default top margin when the parent already provides spacing. */
@@ -28,7 +30,7 @@ export const AdminInput = forwardRef<HTMLInputElement, AdminInputProps>(function
   { className, bare = false, ...props },
   ref
 ) {
-  return <input ref={ref} className={cx(bare ? adminControlClass : adminFieldClass, className)} {...props} />;
+  return <Input ref={ref} className={cn(!bare && "mt-1.5", className)} {...props} />;
 });
 
 type AdminSelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
@@ -40,10 +42,10 @@ export const AdminSelect = forwardRef<HTMLSelectElement, AdminSelectProps>(funct
   ref
 ) {
   return (
-    <span className={cx("relative block", !bare && "mt-1.5")}>
+    <span className={cn("relative block", !bare && "mt-1.5")}>
       <select
         ref={ref}
-        className={cx(adminControlClass, "appearance-none !pr-9", className)}
+        className={cn(adminControlClass, "appearance-none pr-9", className)}
         {...props}
       >
         {children}
@@ -52,7 +54,7 @@ export const AdminSelect = forwardRef<HTMLSelectElement, AdminSelectProps>(funct
         viewBox="0 0 20 20"
         fill="currentColor"
         aria-hidden="true"
-        className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6B7280]"
+        className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
       >
         <path
           fillRule="evenodd"
@@ -66,6 +68,6 @@ export const AdminSelect = forwardRef<HTMLSelectElement, AdminSelectProps>(funct
 
 export const AdminTextarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
   function AdminTextarea({ className, ...props }, ref) {
-    return <textarea ref={ref} className={cx(adminTextareaClass, className)} {...props} />;
+    return <textarea ref={ref} className={cn(adminTextareaClass, className)} {...props} />;
   }
 );

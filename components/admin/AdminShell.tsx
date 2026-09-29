@@ -14,8 +14,10 @@ import {
   type AdminNavSectionId,
 } from "@/lib/admin-nav";
 import { PRODUCT_REQUESTS_CHANGED_EVENT } from "@/lib/product-requests-shared";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
-import { brand } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 
 type AdminShellProps = {
   email: string;
@@ -99,12 +101,9 @@ function PendingBadge({ count }: { count: number }) {
     return null;
   }
   return (
-    <span
-      className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
-      style={{ backgroundColor: brand.orange }}
-    >
+    <Badge className="ml-1.5 h-4 min-w-4 rounded-full border-transparent bg-warning px-1 text-[10px] text-white hover:bg-warning">
       {count > 9 ? "9+" : count}
-    </span>
+    </Badge>
   );
 }
 
@@ -238,31 +237,29 @@ export function AdminShell({ email, children }: AdminShellProps) {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-white" style={{ color: brand.ink }}>
+    <div className="flex h-screen overflow-hidden bg-muted/40 text-foreground">
       <AdminSidebar
-        className="hidden h-full w-[252px] shrink-0 flex-col border-r px-3 py-4 md:flex"
-        style={{ borderColor: "#EEF1EE", backgroundColor: "#F7F8F6" }}
+        className="hidden h-full w-[252px] shrink-0 flex-col border-r border-border bg-card px-3 py-4 md:flex"
         {...sidebarProps}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <header
-          className="shrink-0 border-b bg-white px-4 py-2.5 md:hidden"
-          style={{ borderColor: "#EEF1EE" }}
-        >
+        <header className="shrink-0 border-b border-border bg-card px-4 py-2.5 md:hidden">
           <div className="flex items-center justify-between gap-3">
             <Link href="/admin" aria-label="Administración Quick!">
               <Logo className="h-7 w-auto max-w-[120px]" />
             </Link>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => setMenuOpen(true)}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-brand-ink transition-colors hover:bg-black/[0.05]"
+              className="h-11 w-11 [&_svg]:size-6"
               aria-label="Abrir menú"
               aria-expanded={menuOpen}
               aria-controls="admin-mobile-nav"
             >
               <MenuGlyph />
-            </button>
+            </Button>
           </div>
         </header>
         <main className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-6">{children}</main>
@@ -287,20 +284,21 @@ export function AdminShell({ email, children }: AdminShellProps) {
           role="dialog"
           ariaModal
           ariaLabel="Menú de administración"
-          className={`absolute inset-y-0 left-0 z-10 flex w-[85%] max-w-[320px] flex-col border-r px-3 py-4 shadow-xl transition-transform duration-200 ease-out ${
+          className={`absolute inset-y-0 left-0 z-10 flex w-[85%] max-w-[320px] flex-col border-r border-border bg-card px-3 py-4 shadow-xl transition-transform duration-200 ease-out ${
             menuOpen ? "translate-x-0" : "-translate-x-full"
           }`}
-          style={{ borderColor: "#EEF1EE", backgroundColor: "#F7F8F6" }}
           headerAction={
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               onClick={closeMenu}
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-brand-ink transition-colors hover:bg-black/[0.05]"
+              className="h-11 w-11 shrink-0 [&_svg]:size-5"
               aria-label="Cerrar menú"
               tabIndex={menuOpen ? 0 : -1}
             >
               <CloseGlyph />
-            </button>
+            </Button>
           }
           onNavigate={closeMenu}
           inert={!menuOpen}
@@ -374,27 +372,25 @@ function AdminSidebar({
         onToggle={onToggle}
         onNavigate={onNavigate}
       />
-      <div className="mt-auto shrink-0 border-t px-1 pt-3" style={{ borderColor: "#E5E7EB" }}>
+      <div className="mt-auto shrink-0 border-t border-border px-1 pt-3">
         <div className="flex items-center gap-2.5 px-2 py-1">
-          <span
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-            style={{ backgroundColor: brand.green }}
-          >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
             {initial}
           </span>
-          <p className="min-w-0 truncate text-xs text-brand-muted">{email}</p>
+          <p className="min-w-0 truncate text-xs text-muted-foreground">{email}</p>
         </div>
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => {
             onNavigate?.();
             onLogout();
           }}
-          className="mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-semibold text-brand-ink transition-colors hover:bg-black/[0.05]"
+          className="mt-1 w-full justify-start px-2.5 [&_svg]:size-[18px]"
         >
           <NavGlyph name="logout" />
           Salir
-        </button>
+        </Button>
       </div>
     </aside>
   );
@@ -427,14 +423,14 @@ function AdminNav({
             <button
               type="button"
               onClick={() => onToggle(section.id)}
-              className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-brand-muted transition-colors hover:bg-black/[0.04] hover:text-brand-ink"
+              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
               aria-expanded={expanded}
               aria-controls={sectionDomId}
             >
               <span className="flex items-center gap-2">
                 {section.label}
                 {!expanded && hasActive ? (
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: brand.green }} />
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                 ) : null}
               </span>
               <Chevron open={expanded} />
@@ -490,13 +486,14 @@ function LiveItem({
         <Link
           href={item.children?.[0]?.href ?? item.href}
           onClick={onNavigate}
-          className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition-colors ${
-            active && !hasChildren ? "" : "hover:bg-black/[0.04]"
-          }`}
-          style={{
-            backgroundColor: active && !hasChildren ? `${brand.green}1F` : "transparent",
-            color: active ? brand.green : brand.ink,
-          }}
+          className={cn(
+            "flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
+            active && !hasChildren
+              ? "bg-accent text-accent-foreground"
+              : active
+                ? "text-primary hover:bg-accent"
+                : "text-foreground hover:bg-accent"
+          )}
         >
           <NavGlyph name={item.icon} />
           <span className="truncate">{item.label}</span>
@@ -506,7 +503,7 @@ function LiveItem({
           <button
             type="button"
             onClick={onToggleNested}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-brand-muted transition-colors hover:bg-black/[0.04] hover:text-brand-ink"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             aria-expanded={childrenOpen}
             aria-label={childrenOpen ? `Cerrar ${item.label}` : `Abrir ${item.label}`}
           >
@@ -516,7 +513,7 @@ function LiveItem({
       </div>
       {hasChildren ? (
         <Collapse open={childrenOpen}>
-          <div className="mb-1 ml-4 mt-0.5 flex flex-col gap-0.5 border-l pl-2" style={{ borderColor: "#D9DDD6" }}>
+          <div className="mb-1 ml-4 mt-0.5 flex flex-col gap-0.5 border-l border-border pl-2">
             {item.children?.map((child) => (
               <ChildLink
                 key={child.href}
@@ -549,13 +546,10 @@ function ChildLink({
     <Link
       href={child.href}
       onClick={onNavigate}
-      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-semibold transition-colors ${
-        childActive ? "" : "hover:bg-black/[0.04]"
-      }`}
-      style={{
-        backgroundColor: childActive ? `${brand.green}1F` : "transparent",
-        color: childActive ? brand.green : brand.muted,
-      }}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
+        childActive ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+      )}
     >
       <NavGlyph name={child.icon} className="h-3.5 w-3.5 shrink-0" />
       <span>{child.label}</span>
@@ -566,7 +560,7 @@ function ChildLink({
 
 function SoonItem({ item }: { item: AdminNavItem }) {
   return (
-    <span className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-brand-muted/55">
+    <span className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-muted-foreground/55">
       <NavGlyph name={item.icon} />
       <span className="truncate">{item.label}</span>
     </span>

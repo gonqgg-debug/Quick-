@@ -14,7 +14,12 @@ import {
   type HistoryEstado,
   type HistoryOrder,
 } from "@/lib/staff-history-shared";
-import { brand } from "@/lib/theme";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const STATUS_FILTERS: { id: "todos" | "atencion" | HistoryEstado; label: string }[] = [
   { id: "todos", label: "Todos" },
@@ -24,10 +29,10 @@ const STATUS_FILTERS: { id: "todos" | "atencion" | HistoryEstado; label: string 
   { id: "despachada", label: "Despachada" },
 ];
 
-function statusColor(estado: HistoryEstado): string {
-  if (estado === "cancelada") return brand.error;
-  if (estado === "despachada") return brand.blue;
-  return brand.green;
+function statusBadge(estado: HistoryEstado): "default" | "secondary" | "destructive" {
+  if (estado === "cancelada") return "destructive";
+  if (estado === "despachada") return "secondary";
+  return "default";
 }
 
 export function AdminHistory() {
@@ -164,55 +169,50 @@ export function AdminHistory() {
             <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Delivery</p>
             <h1 className="font-display text-2xl font-bold">Historial de Delivery</h1>
           </div>
-          <button
+          <Button
             type="button"
             onClick={() => void exportExcel()}
             disabled={exporting || total === 0}
-            className="rounded-full px-4 text-sm font-bold text-white disabled:opacity-50"
-            style={{ backgroundColor: brand.orange, minHeight: 44 }}
+            className="bg-warning text-warning-foreground hover:bg-warning/90"
           >
             {exporting ? "Exportando..." : "Exportar a Excel"}
-          </button>
+          </Button>
         </div>
 
-        <input
+        <Input
           value={searchInput}
           onChange={(event) => setSearchInput(event.target.value)}
           placeholder="Buscar por # orden, cliente o teléfono"
-          className="h-11 w-full rounded-full border px-4 outline-none"
-          style={{ borderColor: "#E5E7EB", fontSize: 16 }}
         />
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="block text-xs font-bold text-brand-muted">
+          <label className="block text-sm font-medium text-foreground">
             Desde
-            <input
+            <Input
               type="date"
               value={from}
               onChange={(event) => {
                 setFrom(event.target.value);
                 setPage(1);
               }}
-              className="mt-1 h-11 w-full rounded-xl border bg-white px-3 text-sm font-semibold"
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
+              className="mt-1.5"
             />
           </label>
-          <label className="block text-xs font-bold text-brand-muted">
+          <label className="block text-sm font-medium text-foreground">
             Hasta
-            <input
+            <Input
               type="date"
               value={to}
               onChange={(event) => {
                 setTo(event.target.value);
                 setPage(1);
               }}
-              className="mt-1 h-11 w-full rounded-xl border bg-white px-3 text-sm font-semibold"
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
+              className="mt-1.5"
             />
           </label>
-          <label className="block text-xs font-bold text-brand-muted">
+          <label className="block text-sm font-medium text-foreground">
             Monto mín.
-            <input
+            <Input
               type="number"
               min={0}
               inputMode="decimal"
@@ -222,13 +222,12 @@ export function AdminHistory() {
                 setPage(1);
               }}
               placeholder="Opcional"
-              className="mt-1 h-11 w-full rounded-xl border bg-white px-3 text-sm font-semibold"
-              style={{ borderColor: "#E5E7EB" }}
+              className="mt-1.5"
             />
           </label>
-          <label className="block text-xs font-bold text-brand-muted">
+          <label className="block text-sm font-medium text-foreground">
             Monto máx.
-            <input
+            <Input
               type="number"
               min={0}
               inputMode="decimal"
@@ -238,8 +237,7 @@ export function AdminHistory() {
                 setPage(1);
               }}
               placeholder="Opcional"
-              className="mt-1 h-11 w-full rounded-xl border bg-white px-3 text-sm font-semibold"
-              style={{ borderColor: "#E5E7EB" }}
+              className="mt-1.5"
             />
           </label>
         </div>
@@ -248,29 +246,25 @@ export function AdminHistory() {
           {STATUS_FILTERS.map((filter) => {
             const active = estado === filter.id;
             return (
-              <button
+              <Button
                 key={filter.id}
                 type="button"
                 role="tab"
                 aria-selected={active}
+                size="sm"
+                variant={active ? (filter.id === "atencion" ? "destructive" : "default") : "secondary"}
                 onClick={() => {
                   setEstado(filter.id);
                   setPage(1);
                 }}
-                className="rounded-full px-3 text-sm font-bold"
-                style={{
-                  minHeight: 40,
-                  backgroundColor: active ? (filter.id === "atencion" ? brand.error : brand.green) : "#F3F4F6",
-                  color: active ? "#FFFFFF" : "#4B5563",
-                }}
               >
                 {filter.label}
-              </button>
+              </Button>
             );
           })}
         </div>
 
-        <label className="flex items-start gap-2 text-sm font-semibold" style={{ color: brand.ink }}>
+        <label className="flex items-start gap-2 text-sm font-medium text-foreground">
           <input
             type="checkbox"
             checked={includePruebas}
@@ -291,44 +285,41 @@ export function AdminHistory() {
 
       <div className="mt-6">
         {error ? (
-          <p className="mb-3 rounded-2xl px-3 py-2 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
+          <p className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
           </p>
         ) : null}
 
         {loading ? (
-          <div className="h-64 animate-pulse rounded-[24px] bg-gray-100" />
+          <Skeleton className="h-64 w-full" />
         ) : orders.length === 0 ? (
-          <div className="rounded-[28px] px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
+          <Card className="px-5 py-14 text-center shadow-sm">
             <p className="text-4xl">🌿</p>
             <p className="font-display mt-3 text-xl font-bold">No hay pedidos con esos filtros</p>
-            <p className="mt-2 text-sm text-brand-muted">Prueba otro rango de fechas, estado o búsqueda.</p>
-          </div>
+            <p className="mt-2 text-sm text-muted-foreground">Prueba otro rango de fechas, estado o búsqueda.</p>
+          </Card>
         ) : (
           <>
-            <div className="overflow-x-auto rounded-[24px] border" style={{ borderColor: "#E5E7EB" }}>
-              <table className="w-full min-w-[1020px] text-left text-sm">
-                <thead>
-                  <tr
-                    className="text-xs font-bold uppercase tracking-wide text-brand-muted"
-                    style={{ backgroundColor: "#F8FAF7" }}
-                  >
-                    <th className="whitespace-nowrap px-3 py-3">Fecha/Hora</th>
-                    <th className="whitespace-nowrap px-3 py-3"># Orden</th>
-                    <th className="px-3 py-3">Cliente</th>
-                    <th className="whitespace-nowrap px-3 py-3">Teléfono</th>
-                    <th className="px-3 py-3">Dirección</th>
-                    <th className="whitespace-nowrap px-3 py-3 text-right"># Ítems</th>
-                    <th className="whitespace-nowrap px-3 py-3 text-right">Total</th>
-                    <th className="px-3 py-3">Estado</th>
-                    <th className="whitespace-nowrap px-3 py-3">Calificación</th>
-                    <th className="whitespace-nowrap px-3 py-3">Tiempo que tardó</th>
-                    <th className="w-10 px-2 py-3">
+            <Card className="overflow-hidden shadow-sm">
+              <Table className="min-w-[1020px]">
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead>Fecha/Hora</TableHead>
+                    <TableHead># Orden</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Teléfono</TableHead>
+                    <TableHead>Dirección</TableHead>
+                    <TableHead className="text-right"># Ítems</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead>Calificación</TableHead>
+                    <TableHead>Tiempo que tardó</TableHead>
+                    <TableHead className="w-10">
                       <span className="sr-only">Detalle</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {orders.map((order) => {
                     const open = expandedId === order.id;
                     return (
@@ -340,36 +331,24 @@ export function AdminHistory() {
                       />
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </Card>
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-brand-muted">
+              <p className="text-sm text-muted-foreground">
                 {fromRow}–{toRow} de {total}
               </p>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={page <= 1}
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                  className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
-                  style={{ minHeight: 40, backgroundColor: "#F3F4F6" }}
-                >
+                <Button type="button" variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
                   Anterior
-                </button>
-                <p className="text-sm font-semibold tabular-nums">
+                </Button>
+                <p className="text-sm font-medium tabular-nums">
                   {page} / {pageCount}
                 </p>
-                <button
-                  type="button"
-                  disabled={page >= pageCount}
-                  onClick={() => setPage((current) => current + 1)}
-                  className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
-                  style={{ minHeight: 40, backgroundColor: "#F3F4F6" }}
-                >
+                <Button type="button" variant="outline" size="sm" disabled={page >= pageCount} onClick={() => setPage((current) => current + 1)}>
                   Siguiente
-                </button>
+                </Button>
               </div>
             </div>
           </>
@@ -390,94 +369,75 @@ function HistoryRow({
 }) {
   return (
     <>
-      <tr
-        className="cursor-pointer border-t"
-        style={{
-          borderColor: "#F3F4F6",
-          backgroundColor: open
-            ? "#FAFBFA"
-            : order.feedback?.requiereAtencion
-              ? "#FEF2F2"
-              : undefined,
-        }}
+      <TableRow
+        className={
+          order.feedback?.requiereAtencion && !open
+            ? "cursor-pointer bg-destructive/5 hover:bg-destructive/10"
+            : "cursor-pointer"
+        }
+        data-state={open ? "selected" : undefined}
         onClick={onToggle}
       >
-        <td className="whitespace-nowrap px-3 py-2.5 text-xs text-brand-muted">
+        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
           {formatHistoryDateTime(order.createdAt)}
-        </td>
-        <td className="whitespace-nowrap px-3 py-2.5 font-bold">
+        </TableCell>
+        <TableCell className="whitespace-nowrap font-medium">
           <span className="inline-flex items-center gap-1.5">
             #{formatOrderNumber(order.id)}
             {order.esPrueba ? <PruebaBadge /> : null}
-            {order.feedback?.requiereAtencion ? (
-              <span
-                className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
-                style={{ backgroundColor: brand.error }}
-              >
-                Atención
-              </span>
-            ) : null}
+            {order.feedback?.requiereAtencion ? <Badge variant="destructive">Atención</Badge> : null}
           </span>
-        </td>
-        <td className="max-w-[140px] truncate px-3 py-2.5">{order.clienteNombre || "—"}</td>
-        <td className="whitespace-nowrap px-3 py-2.5">{order.clienteTelefono}</td>
-        <td className="max-w-[220px] truncate px-3 py-2.5" title={order.direccion}>
+        </TableCell>
+        <TableCell className="max-w-[140px] truncate">{order.clienteNombre || "—"}</TableCell>
+        <TableCell className="whitespace-nowrap">{order.clienteTelefono}</TableCell>
+        <TableCell className="max-w-[220px] truncate" title={order.direccion}>
           {order.direccion}
-        </td>
-        <td className="px-3 py-2.5 text-right tabular-nums">{order.itemCount}</td>
-        <td className="px-3 py-2.5 text-right font-bold">{order.totalLabel}</td>
-        <td className="px-3 py-2.5">
-          <span
-            className="inline-block rounded-full px-2 py-0.5 text-[11px] font-bold text-white"
-            style={{ backgroundColor: statusColor(order.estado) }}
-          >
-            {orderStatusLabel(order.estado)}
-          </span>
-        </td>
-        <td className="whitespace-nowrap px-3 py-2.5">
+        </TableCell>
+        <TableCell className="text-right tabular-nums">{order.itemCount}</TableCell>
+        <TableCell className="text-right font-medium">{order.totalLabel}</TableCell>
+        <TableCell>
+          <Badge variant={statusBadge(order.estado)}>{orderStatusLabel(order.estado)}</Badge>
+        </TableCell>
+        <TableCell className="whitespace-nowrap">
           {order.feedback ? (
             <span
-              className="inline-flex items-center gap-1 text-sm font-bold"
-              style={{ color: order.feedback.requiereAtencion ? brand.error : brand.green }}
+              className={`inline-flex items-center gap-1 text-sm font-medium ${
+                order.feedback.requiereAtencion ? "text-destructive" : "text-primary"
+              }`}
             >
               <span aria-hidden>{feedbackEmoji(order.feedback.calificacion)}</span>
               {order.feedback.calificacion}/5
             </span>
           ) : (
-            <span className="text-xs text-brand-muted">—</span>
+            <span className="text-xs text-muted-foreground">—</span>
           )}
-        </td>
-        <td className="whitespace-nowrap px-3 py-2.5 font-mono text-sm tabular-nums text-brand-muted">
+        </TableCell>
+        <TableCell className="whitespace-nowrap font-mono text-sm tabular-nums text-muted-foreground">
           {order.durationLabel}
-        </td>
-        <td className="px-2 py-2.5">
-          <span
-            className="flex h-8 w-8 items-center justify-center rounded-full"
-            style={{ color: brand.muted }}
-            aria-hidden
-          >
+        </TableCell>
+        <TableCell>
+          <span className="flex h-8 w-8 items-center justify-center text-muted-foreground" aria-hidden>
             <ChevronIcon open={open} />
           </span>
-        </td>
-      </tr>
+        </TableCell>
+      </TableRow>
       {open ? (
-        <tr style={{ backgroundColor: "#FFFFFF" }}>
-          <td colSpan={11} className="px-3 pb-4 pt-1">
+        <TableRow className="hover:bg-transparent">
+          <TableCell colSpan={11} className="pb-4 pt-1">
             {order.feedback ? (
               <div
-                className="mb-3 rounded-2xl px-4 py-3"
-                style={{
-                  backgroundColor: order.feedback.requiereAtencion ? "#FEF2F2" : "#F8FAF7",
-                }}
+                className={`mb-3 rounded-lg px-4 py-3 ${
+                  order.feedback.requiereAtencion ? "bg-destructive/10" : "bg-muted"
+                }`}
               >
-                <p className="text-sm font-bold" style={{ color: order.feedback.requiereAtencion ? brand.error : brand.ink }}>
+                <p className={`text-sm font-semibold ${order.feedback.requiereAtencion ? "text-destructive" : "text-foreground"}`}>
                   {feedbackEmoji(order.feedback.calificacion)} {order.feedback.calificacion}/5
                   {order.feedback.requiereAtencion ? " · Requiere atención" : ""}
                 </p>
                 {order.feedback.comentario ? (
-                  <p className="mt-1 text-sm text-brand-ink">“{order.feedback.comentario}”</p>
+                  <p className="mt-1 text-sm text-foreground">“{order.feedback.comentario}”</p>
                 ) : (
-                  <p className="mt-1 text-xs text-brand-muted">Sin comentario</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Sin comentario</p>
                 )}
               </div>
             ) : null}
@@ -487,8 +447,8 @@ function HistoryRow({
               clienteTelefono={order.clienteTelefono}
               items={order.items}
             />
-          </td>
-        </tr>
+          </TableCell>
+        </TableRow>
       ) : null}
     </>
   );

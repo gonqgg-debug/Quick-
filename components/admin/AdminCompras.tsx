@@ -16,6 +16,9 @@ import { formatDayKey, todayDayKey } from "@/lib/local-day";
 import { formatPrice } from "@/lib/money";
 import { brand } from "@/lib/theme";
 import { AdminInput, AdminSelect, adminLabelClass } from "@/components/admin/AdminField";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import {
   DataTable,
   DataTableCell,
@@ -163,14 +166,9 @@ export function AdminCompras() {
           <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Compras</p>
           <h1 className="font-display mt-1 text-2xl font-bold">Compras</h1>
         </div>
-        <button
-          type="button"
-          onClick={() => setEditing("new")}
-          className="rounded-full px-4 text-sm font-bold text-white"
-          style={{ minHeight: 44, backgroundColor: brand.green }}
-        >
+        <Button type="button" onClick={() => setEditing("new")}>
           Registrar compra
-        </button>
+        </Button>
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -188,21 +186,18 @@ export function AdminCompras() {
         ).map((tab) => {
           const active = view === tab.id;
           return (
-            <button
+            <Button
               key={tab.id}
               type="button"
+              size="sm"
+              variant={active ? "default" : "secondary"}
               onClick={() => {
                 setView(tab.id);
                 setPage(1);
               }}
-              className="rounded-full px-3.5 py-1.5 text-sm font-semibold"
-              style={{
-                backgroundColor: active ? brand.green : "#F3F4F6",
-                color: active ? "#FFFFFF" : brand.ink,
-              }}
             >
               {tab.label}
-            </button>
+            </Button>
           );
         })}
       </div>
@@ -301,15 +296,12 @@ export function AdminCompras() {
 
 function SummaryCard({ label, amount, danger = false }: { label: string; amount: number; danger?: boolean }) {
   return (
-    <section className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-4 shadow-sm">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-brand-muted">{label}</p>
-      <p
-        className="mt-1 font-display text-xl font-bold tabular-nums"
-        style={{ color: danger ? brand.error : brand.ink }}
-      >
+    <Card className="px-4 py-4 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={`mt-1 font-display text-xl font-bold tabular-nums ${danger ? "text-destructive" : "text-foreground"}`}>
         {formatPrice(amount)}
       </p>
-    </section>
+    </Card>
   );
 }
 
@@ -739,10 +731,7 @@ function CompraModal({
         <div className="mt-4">
           <p className={adminLabelClass}>Captura de la factura</p>
           <div className="mt-1.5 flex flex-wrap gap-2">
-            <label
-              className="inline-flex cursor-pointer items-center rounded-full px-4 text-sm font-bold text-white"
-              style={{ minHeight: 44, backgroundColor: brand.green }}
-            >
+            <label className={cn(buttonVariants(), "cursor-pointer")}>
               Tomar foto
               <input
                 type="file"

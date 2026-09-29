@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import type { Proveedor } from "@/lib/admin-compras-shared";
 import { brand } from "@/lib/theme";
 import { AdminInput, AdminTextarea, adminLabelClass } from "@/components/admin/AdminField";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   DataTable,
   DataTableCell,
@@ -84,29 +87,24 @@ export function AdminProveedores() {
           <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Compras</p>
           <h1 className="font-display mt-1 text-2xl font-bold">Proveedores</h1>
         </div>
-        <button
-          type="button"
-          onClick={() => setEditing("new")}
-          className="rounded-full px-4 text-sm font-bold text-white"
-          style={{ minHeight: 44, backgroundColor: brand.green }}
-        >
+        <Button type="button" onClick={() => setEditing("new")}>
           Agregar proveedor
-        </button>
+        </Button>
       </div>
 
       {error ? (
-        <p className="mt-4 rounded-2xl px-4 py-3 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
+        <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
         </p>
       ) : null}
 
       {loading ? (
-        <div className="mt-6 h-48 animate-pulse rounded-lg bg-gray-100" />
+        <Skeleton className="mt-6 h-48 w-full" />
       ) : proveedores.length === 0 ? (
-        <div className="mt-6 rounded-lg px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
+        <Card className="mt-6 px-5 py-14 text-center shadow-sm">
           <p className="font-display text-xl font-bold">Todavía no hay proveedores</p>
-          <p className="mt-2 text-sm text-brand-muted">Agrega el primero para poder registrar compras.</p>
-        </div>
+          <p className="mt-2 text-sm text-muted-foreground">Agrega el primero para poder registrar compras.</p>
+        </Card>
       ) : (
         <DataTable className="mt-6" tableClassName="min-w-[640px]">
           <DataTableHead>

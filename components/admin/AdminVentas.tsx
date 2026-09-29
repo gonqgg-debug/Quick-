@@ -10,6 +10,7 @@ import {
 import { formatDayKey, todayDayKey, yesterdayDayKey } from "@/lib/local-day";
 import { brand } from "@/lib/theme";
 import { AdminInput, adminLabelClass } from "@/components/admin/AdminField";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   DataTableCell,
@@ -193,14 +194,9 @@ export function AdminVentas() {
               />
             </span>
           </label>
-          <button
-            type="submit"
-            disabled={saving || !monto.trim()}
-            className="rounded-full px-5 text-sm font-bold text-white disabled:opacity-40"
-            style={{ minHeight: 44, backgroundColor: brand.green }}
-          >
+          <Button type="submit" disabled={saving || !monto.trim()}>
             {saving ? "Guardando..." : "Guardar"}
-          </button>
+          </Button>
         </form>
         {saved ? (
           <p className="mt-3 text-sm font-semibold" style={{ color: brand.green }}>
@@ -406,22 +402,12 @@ function VentaModal({
         ) : null}
 
         <div className="mt-6 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full px-4 text-sm font-bold"
-            style={{ minHeight: 44, border: "1px solid #E5E7EB", color: brand.ink }}
-          >
+          <Button type="button" variant="outline" onClick={onClose}>
             Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={saving || !monto.trim()}
-            className="rounded-full px-5 text-sm font-bold text-white disabled:opacity-40"
-            style={{ minHeight: 44, backgroundColor: brand.green }}
-          >
+          </Button>
+          <Button type="submit" disabled={saving || !monto.trim()}>
             {saving ? "Guardando..." : "Guardar"}
-          </button>
+          </Button>
         </div>
       </form>
     </div>
