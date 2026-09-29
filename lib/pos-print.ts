@@ -1,5 +1,5 @@
 import { formatPrice } from "@/lib/money";
-import { metodoPagoLabel, type PosSaleDraft } from "@/lib/pos";
+import { ITBIS_PORCIENTO, metodoPagoLabel, splitItbis, type PosSaleDraft } from "@/lib/pos";
 
 const STORAGE_KEY = "quick-pos-printer";
 
@@ -46,6 +46,45 @@ function line(bytes: number[], value = ""): void {
   bytes.push(0x0a);
 }
 
+export type TicketPreview = {
+  when: string;
+  cajero: string | null;
+  lines: Array<{ nombre: string; detalle: string; descuento: string | null; importe: string }>;
+  descuento: string | null;
+  quickcoins: string | null;
+  base: string;
+  itbis: string;
+  total: string;
+  metodo: string;
+  recibido: string | null;
+  cambio: string | null;
+  ganar: string | null;
+};
+
+export function ticketPreview(sale: PosSaleDraft): TicketPreview {
+  const when = new Date(sale.createdAt);
+  const tax = splitItbis(sale.total);
+  return {
+    when: Number.isNaN(when.getTime()) ? sale.createdAt : when.toLocaleString("es-DO"),
+    cajero: sale.cajero ?? null,
+    lines: sale.items.map((item) => ({
+      nombre: item.nombre,
+      detalle: `${item.cantidad} x ${formatPrice(item.precioLista ?? item.precioUnitario)}`,
+      descuento: (item.descuento ?? 0) > 0 ? `Desc. -${formatPrice(item.descuento ?? 0)}` : null,
+      importe: formatPrice(item.precioUnitario * item.cantidad),
+    })),
+    descuento: (sale.descuentoTotal ?? 0) > 0 ? `-${formatPrice(sale.descuentoTotal ?? 0)}` : null,
+    quickcoins: (sale.quickcoins?.descuentoCanje ?? 0) > 0 ? `-${formatPrice(sale.quickcoins?.descuentoCanje ?? 0)}` : null,
+    base: formatPrice(tax.base),
+    itbis: formatPrice(tax.itbis),
+    total: formatPrice(tax.total),
+    metodo: metodoPagoLabel(sale.metodoPago),
+    recibido: sale.montoRecibido == null ? null : formatPrice(sale.montoRecibido),
+    cambio: sale.cambio == null ? null : formatPrice(sale.cambio),
+    ganar: (sale.quickcoins?.ganarPuntos ?? 0) > 0 ? `Ganaste ${sale.quickcoins?.ganarPuntos} QuickCoins` : null,
+  };
+}
+
 export function buildEscPosTicket(sale: PosSaleDraft, openDrawer: boolean): Uint8Array {
   const bytes: number[] = [];
   bytes.push(0x1b, 0x40);
@@ -71,8 +110,12 @@ export function buildEscPosTicket(sale: PosSaleDraft, openDrawer: boolean): Uint
   if ((sale.quickcoins?.descuentoCanje ?? 0) > 0) {
     line(bytes, `QuickCoins: -${formatPrice(sale.quickcoins?.descuentoCanje ?? 0)}`);
   }
+  const tax = splitItbis(sale.total);
+  line(bytes, `Base: ${formatPrice(tax.base)}`);
+  line(bytes, `ITBIS ${ITBIS_PORCIENTO}%: ${formatPrice(tax.itbis)}`);
+  line(bytes, "Precios con ITBIS incluido");
   bytes.push(0x1b, 0x45, 0x01);
-  line(bytes, `TOTAL ${formatPrice(sale.total)}`);
+  line(bytes, `TOTAL ${formatPrice(tax.total)}`);
   bytes.push(0x1b, 0x45, 0x00);
   line(bytes, metodoPagoLabel(sale.metodoPago));
   if (sale.montoRecibido != null) line(bytes, `Recibido ${formatPrice(sale.montoRecibido)}`);
@@ -146,8 +189,12 @@ export async function printPosTicket(
 }
 
 export function printTicketInBrowser(sale: PosSaleDraft): void {
-  const rows = sale.items
-    .map((item) => `<tr><td>${item.cantidad} ${item.nombre}</td><td>${formatPrice(item.precioUnitario * item.cantidad)}</td></tr>`)
+  const preview = ticketPreview(sale);
+  const rows = preview.lines
+    .map(
+      (item) =>
+        `<tr><td>${item.detalle}<br>${item.nombre}${item.descuento ? `<br>${item.descuento}` : ""}</td><td>${item.importe}</td></tr>`
+    )
     .join("");
   const html = `<!doctype html><html><head><title>Ticket</title><style>
     body{font-family:ui-monospace,monospace;width:280px;margin:0 auto}
@@ -156,11 +203,16 @@ export function printTicketInBrowser(sale: PosSaleDraft): void {
     h1{font-size:20px;text-align:center;margin:0}
   </style></head><body>
     <h1>QUICK!</h1>
-    <p>${sale.cajero ?? ""}</p>
+    <p style="text-align:center">Mini Market</p>
+    <p>${preview.when}${preview.cajero ? `<br>Cajero: ${preview.cajero}` : ""}</p>
     <table>${rows}</table>
-    <p><strong>Total ${formatPrice(sale.total)}</strong></p>
-    <p>${metodoPagoLabel(sale.metodoPago)}</p>
-    ${sale.cambio != null ? `<p>Cambio ${formatPrice(sale.cambio)}</p>` : ""}
+    ${preview.descuento ? `<p>Descuento ${preview.descuento}</p>` : ""}
+    ${preview.quickcoins ? `<p>QuickCoins ${preview.quickcoins}</p>` : ""}
+    <p>Base ${preview.base}<br>ITBIS ${ITBIS_PORCIENTO}% ${preview.itbis}<br>Precios con ITBIS incluido</p>
+    <p><strong>Total ${preview.total}</strong></p>
+    <p>${preview.metodo}</p>
+    ${preview.recibido ? `<p>Recibido ${preview.recibido}</p>` : ""}
+    ${preview.cambio ? `<p>Cambio ${preview.cambio}</p>` : ""}
     <script>window.onload=function(){window.print()}<\/script>
   </body></html>`;
   const popup = window.open("", "ticket", "width=420,height=720");

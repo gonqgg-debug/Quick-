@@ -10,6 +10,8 @@ import {
   buildSale,
   cartTotal,
   cashChangeAmount,
+  moneyCents,
+  splitItbis,
   isPosSaleDraft,
   parsePosVentaInput,
   pendingQtyByProduct,
@@ -200,5 +202,11 @@ assert.equal(findProductsByBarcode([product], "7501234567890").length, 1);
 assert.equal(findProductsByBarcode([product], "cafe").length, 0);
 assert.equal(quickcoinsEarn(10000), 10);
 assert.equal(quickcoinsEarn(900), 0);
+const incluido = splitItbis(118);
+assert.equal(incluido.base, 100);
+assert.equal(incluido.itbis, 18);
+assert.equal(incluido.total, 118);
+const agua = splitItbis(35);
+assert.equal(moneyCents(agua.base) + moneyCents(agua.itbis), moneyCents(35));
 
 console.log("pos logic ok");

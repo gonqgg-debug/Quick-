@@ -6,6 +6,7 @@ import { PosCart } from "@/components/pos/PosCart";
 import { PosCheckout } from "@/components/pos/PosCheckout";
 import { PosDiscount } from "@/components/pos/PosDiscount";
 import { PosQuickcoins, type PosCoinsAccount } from "@/components/pos/PosQuickcoins";
+import { PosTicketPreview } from "@/components/pos/PosTicketPreview";
 import { PosCloseShift, PosOpenShift } from "@/components/pos/PosShift";
 import { StaffLogin, staffLogout } from "@/components/staff/StaffLogin";
 import {
@@ -438,13 +439,12 @@ export function PosApp() {
       setCoinsAccount(null);
       setCheckoutOpen(false);
       setCartOpen(false);
-      const printed = await printPosTicket(stored, { openDrawer: stored.metodoPago === "efectivo", request: false });
       setSuccess({
         total: stored.total,
         cambio: stored.cambio,
         metodo: stored.metodoPago,
         sale: stored,
-        printNote: printed.ok ? null : printed.message,
+        printNote: null,
       });
       void runSync();
     } catch {
@@ -746,22 +746,24 @@ export function PosApp() {
       ) : null}
 
       {success ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white px-6 py-8 text-center shadow-2xl">
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/45 p-4 sm:items-center">
+          <div className="flex max-h-[94dvh] w-full max-w-md flex-col rounded-3xl bg-white px-6 py-6 text-center shadow-2xl" style={{ backgroundColor: "#F4F6F3" }}>
+            <div className="min-h-0 flex-1 overflow-y-auto">
             <div
-              className="mx-auto flex h-20 w-20 items-center justify-center rounded-full text-4xl font-extrabold text-white"
+              className="mx-auto flex h-14 w-14 items-center justify-center rounded-full text-2xl font-extrabold text-white"
               style={{ backgroundColor: brand.green }}
             >
               ✓
             </div>
-            <p className="mt-4 text-lg font-bold">Cobrado</p>
-            <p className="font-display text-5xl font-extrabold tabular-nums">{formatPrice(success.total)}</p>
+            <p className="mt-2 text-lg font-bold">Cobrado</p>
             {success.metodo === "efectivo" && success.cambio != null ? (
-              <p className="mt-3 text-2xl font-extrabold" style={{ color: brand.green }}>
+              <p className="text-xl font-extrabold" style={{ color: brand.green }}>
                 Cambio {formatPrice(success.cambio)}
               </p>
             ) : null}
+            <PosTicketPreview sale={success.sale} />
             {success.printNote ? <p className="mt-3 text-sm font-semibold text-brand-muted">{success.printNote}</p> : null}
+            </div>
             <button
               type="button"
               onClick={() =>
@@ -775,7 +777,7 @@ export function PosApp() {
               className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl text-lg font-extrabold text-white"
               style={{ backgroundColor: brand.navy }}
             >
-              {success.sale.metodoPago === "efectivo" ? "Imprimir y abrir caja" : "Reimprimir"}
+              {success.sale.metodoPago === "efectivo" ? "Imprimir y abrir caja" : "Imprimir"}
             </button>
             <button
               type="button"

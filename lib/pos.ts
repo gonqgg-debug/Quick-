@@ -8,6 +8,8 @@ export type PosMetodoPago = (typeof POS_METODOS)[number];
 export const POS_LOW_STOCK = 5;
 /** Tope del descuento manual (línea + ticket), en porcentaje del subtotal de lista. */
 export const POS_DESCUENTO_TOPE_PCT = 20;
+/** ITBIS incluido en el precio. 18/118 del total es el impuesto. */
+export const ITBIS_PORCIENTO = 18;
 export const QUICKCOINS_PESOS_POR_COIN = 10;
 export const QUICKCOINS_VALOR_COIN = 1;
 export const QUICKCOINS_MINIMO_CANJE = 50;
@@ -278,6 +280,16 @@ export function findProductsByBarcode<T extends { codigoBarras?: string | null }
 
 export function cashChangeAmount(recibido: number, total: number): number {
   return centsToMoney(moneyCents(recibido) - moneyCents(total));
+}
+
+export function splitItbis(total: number): { base: number; itbis: number; total: number } {
+  const totalCents = moneyCents(total);
+  const itbisCents = Math.round((totalCents * ITBIS_PORCIENTO) / (100 + ITBIS_PORCIENTO));
+  return {
+    base: centsToMoney(totalCents - itbisCents),
+    itbis: centsToMoney(itbisCents),
+    total: centsToMoney(totalCents),
+  };
 }
 
 export function normalizePosText(value: string): string {
