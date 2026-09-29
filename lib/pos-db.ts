@@ -4,12 +4,14 @@ import {
   withOptimisticStock,
   type PosProduct,
   type PosSaleDraft,
+  type PosShiftRecord,
   type PosStoredProduct,
 } from "@/lib/pos";
 
 class PosDatabase extends Dexie {
   products!: Table<PosStoredProduct, string>;
   sales!: Table<PosSaleDraft, string>;
+  shifts!: Table<PosShiftRecord, string>;
   meta!: Table<{ key: string; value: string }, string>;
 
   constructor() {
@@ -17,6 +19,12 @@ class PosDatabase extends Dexie {
     this.version(1).stores({
       products: "id, nombre, categoria",
       sales: "clientId, status, createdAt",
+      meta: "key",
+    });
+    this.version(2).stores({
+      products: "id, nombre, categoria",
+      sales: "clientId, status, createdAt, turnoClientId",
+      shifts: "clientId, estado, abiertoEn",
       meta: "key",
     });
   }
@@ -61,6 +69,75 @@ export function readPosCatalog(): Promise<PosProduct[]> {
 
 export function countPendingSales(): Promise<number> {
   return getPosDb().sales.where("status").equals("pendiente_sync").count();
+}
+
+export async function countPendingPosWork(): Promise<number> {
+  const db = getPosDb();
+  const [sales, shifts] = await Promise.all([
+    db.sales.where("status").equals("pendiente_sync").count(),
+    db.shifts.toArray(),
+  ]);
+  const shiftOps = shifts.reduce((sum, shift) => {
+    return (
+      sum +
+      (shift.aperturaSync === "pendiente_sync" ? 1 : 0) +
+      (shift.cierreSync === "pendiente_sync" ? 1 : 0)
+    );
+  }, 0);
+  return sales + shiftOps;
+}
+
+export function readOpenShift(): Promise<PosShiftRecord | null> {
+  return enqueue(async () => {
+    const rows = await getPosDb().shifts.where("estado").equals("abierto").sortBy("abiertoEn");
+    return rows[rows.length - 1] ?? null;
+  });
+}
+
+export function readShiftSales(turnoClientId: string): Promise<PosSaleDraft[]> {
+  return enqueue(async () => getPosDb().sales.where("turnoClientId").equals(turnoClientId).sortBy("createdAt"));
+}
+
+export function saveLocalShift(shift: PosShiftRecord): Promise<void> {
+  return enqueue(async () => {
+    await getPosDb().shifts.put(shift);
+  });
+}
+
+export function pendingOpenShifts(): Promise<PosShiftRecord[]> {
+  return enqueue(async () => {
+    const rows = await getPosDb().shifts.toArray();
+    return rows
+      .filter((row) => row.aperturaSync === "pendiente_sync")
+      .sort((left, right) => left.abiertoEn.localeCompare(right.abiertoEn));
+  });
+}
+
+export function pendingCloseShifts(): Promise<PosShiftRecord[]> {
+  return enqueue(async () => {
+    const rows = await getPosDb().shifts.toArray();
+    return rows
+      .filter((row) => row.cierreSync === "pendiente_sync")
+      .sort((left, right) => (left.cerradoEn ?? "").localeCompare(right.cerradoEn ?? ""));
+  });
+}
+
+export function markShiftOpenSynced(clientId: string): Promise<void> {
+  return enqueue(async () => {
+    await getPosDb().shifts.update(clientId, { aperturaSync: "sincronizada", lastError: null });
+  });
+}
+
+export function markShiftCloseSynced(clientId: string): Promise<void> {
+  return enqueue(async () => {
+    await getPosDb().shifts.update(clientId, { cierreSync: "sincronizada", lastError: null });
+  });
+}
+
+export function markShiftAttempt(clientId: string, lastError: string): Promise<void> {
+  return enqueue(async () => {
+    await getPosDb().shifts.update(clientId, { lastError: lastError.slice(0, 300) });
+  });
 }
 
 export function readCatalogFetchedAt(): Promise<string | null> {

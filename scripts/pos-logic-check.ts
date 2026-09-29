@@ -7,9 +7,17 @@ import {
   isPosSaleDraft,
   parsePosVentaInput,
   pendingQtyByProduct,
+  buildOpenShift,
+  buildShiftClose,
+  isPosShiftRecord,
+  parseAbrirTurnoInput,
   posQuickCashAmounts,
   productMatchesQuery,
   setCartQty,
+  shiftCashExpected,
+  shiftDifference,
+  shiftDifferenceLabel,
+  shiftTotals,
   stockBadge,
   withOptimisticStock,
   type PosStoredProduct,
@@ -64,19 +72,91 @@ const oversold = withOptimisticStock([product], new Map([[product.id, 8]]));
 assert.equal(oversold[0]?.stock, -3);
 
 const clientId = "33333333-3333-4333-8333-333333333333";
+const turnoId = "44444444-4444-4444-8444-444444444444";
 const sale = buildSale({
   clientId,
   createdAt: "2026-09-29T12:00:00.000Z",
   lines: [{ productoId: product.id, nombre: product.nombre, precioUnitario: 35, cantidad: 2 }],
   metodoPago: "efectivo",
   montoRecibido: 100,
+  turnoClientId: turnoId,
+  cajero: "Ana",
 });
 assert.ok(isPosSaleDraft(sale));
 if (isPosSaleDraft(sale)) {
   assert.equal(sale.total, 70);
   assert.equal(sale.cambio, 30);
   assert.equal(sale.status, "pendiente_sync");
+  assert.equal(sale.turnoClientId, turnoId);
+  assert.equal(sale.cajero, "Ana");
 }
+assert.equal(isPosSaleDraft(buildSale({
+  clientId,
+  createdAt: "2026-09-29T12:00:00.000Z",
+  lines: [{ productoId: product.id, nombre: product.nombre, precioUnitario: 35, cantidad: 1 }],
+  metodoPago: "efectivo",
+  montoRecibido: 50,
+  turnoClientId: "no-turno",
+  cajero: "Ana",
+})), false);
+
+const opened = buildOpenShift({
+  clientId: turnoId,
+  abiertoEn: "2026-09-29T12:00:00.000Z",
+  abiertoPor: "  Ana  ",
+  fondoInicial: 1000,
+});
+assert.ok(isPosShiftRecord(opened));
+if (isPosShiftRecord(opened)) {
+  assert.equal(opened.abiertoPor, "Ana");
+  assert.equal(opened.fondoInicial, 1000);
+  assert.equal(opened.estado, "abierto");
+  const totals = shiftTotals([
+    { metodoPago: "efectivo", total: 70 },
+    { metodoPago: "tarjeta", total: 40 },
+    { metodoPago: "efectivo", total: 10.5 },
+  ]);
+  assert.equal(totals.efectivo, 80.5);
+  assert.equal(totals.tarjeta, 40);
+  assert.equal(totals.ventas, 3);
+  assert.equal(shiftCashExpected(opened.fondoInicial, totals.efectivo), 1080.5);
+  const closed = buildShiftClose({
+    shift: opened,
+    sales: [
+      { metodoPago: "efectivo", total: 70 },
+      { metodoPago: "tarjeta", total: 40 },
+      { metodoPago: "efectivo", total: 10.5 },
+    ],
+    efectivoContado: 1000,
+    notas: "  faltó sencillo  ",
+    cerradoEn: "2026-09-29T20:00:00.000Z",
+  });
+  assert.ok(!("error" in closed));
+  if (!("error" in closed)) {
+    assert.equal(closed.esperado, 1080.5);
+    assert.equal(closed.diferencia, -80.5);
+    assert.equal(closed.shift.ventasAlCierre, 3);
+    assert.equal(closed.shift.notas, "faltó sencillo");
+    assert.equal(closed.shift.cierreSync, "pendiente_sync");
+    assert.equal(shiftDifference(closed.esperado, closed.esperado), 0);
+    assert.equal(shiftDifferenceLabel(0).text, "Cuadra");
+    assert.equal(shiftDifferenceLabel(-80.5).tone, "short");
+    assert.equal(shiftDifferenceLabel(20).tone, "over");
+  }
+}
+assert.equal(isPosShiftRecord(buildOpenShift({
+  clientId: turnoId,
+  abiertoEn: "2026-09-29T12:00:00.000Z",
+  abiertoPor: "   ",
+  fondoInicial: 0,
+})), false);
+
+const abrir = parseAbrirTurnoInput({
+  client_id: turnoId,
+  abierto_por: "Luis",
+  fondo_inicial: 500,
+});
+assert.equal(abrir.ok, true);
 
 const parsed = parsePosVentaInput({
   client_id: clientId,

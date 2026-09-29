@@ -16,7 +16,7 @@ export type {
   AdminCatalogProductList,
 } from "@/lib/admin-catalog-products-shared";
 
-const SELECT_FIELDS = "id, nombre, marca, categoria, precio, codigo_odoo, codigo_barras, foto_url, activo, stock";
+const SELECT_FIELDS = "id, nombre, marca, categoria, precio, codigo_odoo, codigo_barras, foto_url, activo";
 const EXPORT_MAX = 5000;
 const BATCH_MAX = 2000;
 const IDS_MAX = 2000;
@@ -39,7 +39,7 @@ function mapRow(row: {
   codigo_barras: string | null;
   foto_url: string | null;
   activo: boolean;
-  stock: number | null;
+  stock?: number | null;
 }): AdminCatalogProduct {
   const stock = row.stock == null ? null : Math.trunc(Number(row.stock));
   return {

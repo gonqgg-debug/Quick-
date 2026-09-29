@@ -4,16 +4,27 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Logo } from "@/components/brand/Logo";
 import { PosCart } from "@/components/pos/PosCart";
 import { PosCheckout } from "@/components/pos/PosCheckout";
+import { PosCloseShift, PosOpenShift } from "@/components/pos/PosShift";
 import { StaffLogin, staffLogout } from "@/components/staff/StaffLogin";
-import { countPendingSales, readPosCatalog, saveLocalSale } from "@/lib/pos-db";
+import {
+  countPendingPosWork,
+  readOpenShift,
+  readPosCatalog,
+  readShiftSales,
+  saveLocalSale,
+  saveLocalShift,
+} from "@/lib/pos-db";
 import { formatPrice } from "@/lib/money";
 import {
   POS_CATALOG_REFRESH_MS,
   POS_SYNC_INTERVAL_MS,
   addProductToCart,
+  buildOpenShift,
   buildSale,
+  buildShiftClose,
   cartTotal,
   isPosSaleDraft,
+  isPosShiftRecord,
   posCategories,
   productInitials,
   productMatchesQuery,
@@ -22,6 +33,8 @@ import {
   type CartLine,
   type PosMetodoPago,
   type PosProduct,
+  type PosSaleDraft,
+  type PosShiftRecord,
 } from "@/lib/pos";
 import { refreshCatalogFromNetwork, syncPendingSales } from "@/lib/pos-sync";
 import { brand, categoryEmoji } from "@/lib/theme";
@@ -53,17 +66,21 @@ export function PosApp() {
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [sessionNote, setSessionNote] = useState<string | null>(null);
+  const [shift, setShift] = useState<PosShiftRecord | null>(null);
+  const [closeSales, setCloseSales] = useState<PosSaleDraft[]>([]);
+  const [closeOpen, setCloseOpen] = useState(false);
 
   const reloadLocal = useCallback(async () => {
-    const [catalog, queued] = await Promise.all([readPosCatalog(), countPendingSales()]);
+    const [catalog, queued, open] = await Promise.all([readPosCatalog(), countPendingPosWork(), readOpenShift()]);
     setProducts(catalog);
     setPending(queued);
+    setShift(open);
     return catalog;
   }, []);
 
   const pullCatalog = useCallback(async (quiet = false) => {
     const result = await refreshCatalogFromNetwork();
-    if (result === "unauthorized") {
+    if (result.status === "unauthorized") {
       if (quiet) {
         setSessionNote("La sesión venció. Entra de nuevo para subir las ventas guardadas.");
         return;
@@ -72,7 +89,7 @@ export function PosApp() {
       setSessionNote(null);
       return;
     }
-    if (result === "ok") {
+    if (result.status === "ok") {
       setCatalogNote(null);
       setSessionNote(null);
       await reloadLocal();
@@ -81,14 +98,14 @@ export function PosApp() {
     }
     const local = await reloadLocal();
     if (local.length > 0) {
-      setCatalogNote(result === "offline" ? null : "Mostrando el catálogo guardado en esta caja.");
+      setCatalogNote(result.status === "offline" ? null : "Mostrando el catálogo guardado en esta caja.");
       setPhase("ready");
       return;
     }
     setCatalogNote(
-      result === "offline"
+      result.status === "offline"
         ? "Sin conexión y sin catálogo guardado. Conéctate una vez para abrir la caja."
-        : "No pudimos cargar el catálogo."
+        : result.message
     );
     setPhase("ready");
   }, [reloadLocal]);
@@ -104,7 +121,7 @@ export function PosApp() {
         setSessionNote(null);
         if (typeof navigator !== "undefined" && navigator.onLine) {
           const refreshed = await refreshCatalogFromNetwork();
-          if (refreshed === "ok") {
+          if (refreshed.status === "ok") {
             await reloadLocal();
           }
         }
@@ -126,8 +143,11 @@ export function PosApp() {
             setPhase("ready");
           }
         }
-        const queued = await countPendingSales();
-        if (!cancelled) setPending(queued);
+        const [queued, open] = await Promise.all([countPendingPosWork(), readOpenShift()]);
+        if (!cancelled) {
+          setPending(queued);
+          setShift(open);
+        }
       } catch {
         if (!cancelled) {
           setCatalogNote("Este navegador no permite guardar la caja en el dispositivo.");
@@ -205,13 +225,85 @@ export function PosApp() {
     setFormError(null);
   }
 
+  async function openShift(abiertoPor: string, fondoInicial: number) {
+    const next = buildOpenShift({
+      clientId: crypto.randomUUID(),
+      abiertoEn: new Date().toISOString(),
+      abiertoPor,
+      fondoInicial,
+    });
+    if (!isPosShiftRecord(next)) {
+      setFormError(next.error);
+      return;
+    }
+    setSaving(true);
+    setFormError(null);
+    try {
+      await saveLocalShift(next);
+      setShift(next);
+      setPending(await countPendingPosWork());
+      void runSync();
+    } catch {
+      setFormError("No pudimos guardar la apertura en este dispositivo.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function requestClose() {
+    if (!shift) return;
+    if (cart.length > 0) {
+      setFormError("Cobra o vacía el carrito antes de cerrar el turno.");
+      return;
+    }
+    setFormError(null);
+    const sales = await readShiftSales(shift.clientId);
+    setCloseSales(sales);
+    setCloseOpen(true);
+  }
+
+  async function confirmClose(efectivoContado: number, notas: string) {
+    if (!shift) return;
+    const closed = buildShiftClose({
+      shift,
+      sales: closeSales,
+      efectivoContado,
+      notas,
+      cerradoEn: new Date().toISOString(),
+    });
+    if ("error" in closed) {
+      setFormError(closed.error);
+      return;
+    }
+    setSaving(true);
+    setFormError(null);
+    try {
+      await saveLocalShift(closed.shift);
+      setShift(null);
+      setCloseOpen(false);
+      setCloseSales([]);
+      setPending(await countPendingPosWork());
+      void runSync();
+    } catch {
+      setFormError("No pudimos guardar el cierre en este dispositivo.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function confirmSale(metodo: PosMetodoPago, montoRecibido: number | null) {
+    if (!shift) {
+      setFormError("Abre un turno antes de cobrar.");
+      return;
+    }
     const sale = buildSale({
       clientId: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       lines: cart,
       metodoPago: metodo,
       montoRecibido,
+      turnoClientId: shift.clientId,
+      cajero: shift.abiertoPor,
     });
     if (!isPosSaleDraft(sale)) {
       setFormError(sale.error);
@@ -222,7 +314,7 @@ export function PosApp() {
     try {
       const next = await saveLocalSale(sale);
       setProducts(next);
-      setPending(await countPendingSales());
+      setPending(await countPendingPosWork());
       setCart([]);
       setCheckoutOpen(false);
       setCartOpen(false);
@@ -267,6 +359,16 @@ export function PosApp() {
         <p className="hidden font-display text-lg font-extrabold sm:block">Caja</p>
         <ConnectionPill connection={connection} pending={pending} />
         <div className="ml-auto flex items-center gap-1">
+          {shift ? (
+            <button
+              type="button"
+              onClick={() => void requestClose()}
+              className="flex h-11 max-w-[42vw] items-center truncate rounded-full px-3 text-sm font-extrabold"
+              style={{ backgroundColor: brand.paleOrange, color: brand.ink }}
+            >
+              Cerrar · {shift.abiertoPor}
+            </button>
+          ) : null}
           <a href="/staff" className="flex h-11 items-center px-3 text-sm font-bold text-brand-muted">
             Pedidos
           </a>
@@ -289,6 +391,9 @@ export function PosApp() {
         </p>
       ) : null}
 
+      {!shift ? (
+        <PosOpenShift busy={saving} onOpen={(nombre, fondo) => void openShift(nombre, fondo)} />
+      ) : (
       <div className="flex min-h-0 flex-1">
         <section className="flex min-w-0 flex-1 flex-col">
           <div className="shrink-0 space-y-2 px-3 pb-2 pt-3">
@@ -401,8 +506,9 @@ export function PosApp() {
           />
         </aside>
       </div>
+      )}
 
-      {units > 0 && !cartOpen && !checkoutOpen ? (
+      {shift && units > 0 && !cartOpen && !checkoutOpen ? (
         <button
           type="button"
           onClick={() => setCartOpen(true)}
@@ -429,6 +535,17 @@ export function PosApp() {
             />
           </div>
         </div>
+      ) : null}
+
+      {closeOpen && shift ? (
+        <PosCloseShift
+          abiertoPor={shift.abiertoPor}
+          fondoInicial={shift.fondoInicial}
+          sales={closeSales}
+          busy={saving}
+          onClose={() => setCloseOpen(false)}
+          onConfirm={(contado, notas) => void confirmClose(contado, notas)}
+        />
       ) : null}
 
       {checkoutOpen ? (

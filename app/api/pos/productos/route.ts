@@ -24,6 +24,7 @@ export async function GET() {
     });
   } catch (error) {
     console.error("[pos] productos", error);
-    return NextResponse.json({ error: "No pudimos cargar el catálogo" }, { status: 500 });
+    const message = error instanceof Error && error.message ? error.message : "No pudimos cargar el catálogo";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

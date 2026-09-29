@@ -1,5 +1,12 @@
 import { toMoney } from "@/lib/money";
-import type { PosAdvertencia, PosStoredProduct, PosVentaInput } from "@/lib/pos";
+import type {
+  PosAbrirTurnoInput,
+  PosAdvertencia,
+  PosCerrarTurnoInput,
+  PosStoredProduct,
+  PosTurnoResumen,
+  PosVentaInput,
+} from "@/lib/pos";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
 const PAGE = 1000;
@@ -15,20 +22,28 @@ type ProductRow = {
   stock: number | null;
 };
 
-export async function listPosProducts(): Promise<PosStoredProduct[]> {
+const PRODUCT_SELECT = "id, nombre, marca, precio, foto_url, categoria";
+
+function missingStockColumn(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String((error as { message?: string } | null)?.message ?? "");
+  return /stock/i.test(message) && /does not exist|schema cache|42703|PGRST204/i.test(message);
+}
+
+async function loadActiveProducts(includeStock: boolean): Promise<PosStoredProduct[]> {
   const supabase = getSupabaseAdminClient();
   const products: PosStoredProduct[] = [];
   for (let from = 0; from < MAX; from += PAGE) {
-    const { data, error } = await supabase
+    const query = supabase
       .from("products")
-      .select("id, nombre, marca, precio, foto_url, categoria, stock")
+      .select(includeStock ? `${PRODUCT_SELECT}, stock` : PRODUCT_SELECT)
       .eq("activo", true)
       .order("nombre", { ascending: true })
       .range(from, from + PAGE - 1);
+    const { data, error } = (await query) as { data: ProductRow[] | null; error: { message?: string } | null };
     if (error) {
       throw error;
     }
-    const batch = (data ?? []) as ProductRow[];
+    const batch = data ?? [];
     for (const row of batch) {
       products.push({
         id: String(row.id),
@@ -37,7 +52,7 @@ export async function listPosProducts(): Promise<PosStoredProduct[]> {
         precio: toMoney(row.precio),
         fotoUrl: row.foto_url ? String(row.foto_url) : null,
         categoria: String(row.categoria ?? ""),
-        stockBase: row.stock == null ? null : Math.trunc(Number(row.stock)),
+        stockBase: !includeStock || row.stock == null ? null : Math.trunc(Number(row.stock)),
       });
     }
     if (batch.length < PAGE) {
@@ -45,6 +60,17 @@ export async function listPosProducts(): Promise<PosStoredProduct[]> {
     }
   }
   return products;
+}
+
+export async function listPosProducts(): Promise<PosStoredProduct[]> {
+  try {
+    return await loadActiveProducts(true);
+  } catch (error) {
+    if (!missingStockColumn(error)) {
+      throw error;
+    }
+    return loadActiveProducts(false);
+  }
 }
 
 export type PosVentaResult = {
@@ -65,7 +91,7 @@ export async function registrarVentaPos(input: PosVentaInput): Promise<PosVentaR
     p_fecha: input.fecha,
     p_metodo_pago: input.metodoPago,
     p_monto_recibido: input.montoRecibido,
-    p_creado_por: "staff",
+    p_creado_por: input.creadoPor || "staff",
     p_items: input.items.map((item) => ({
       producto_id: item.productoId,
       nombre: item.nombre,
@@ -75,6 +101,18 @@ export async function registrarVentaPos(input: PosVentaInput): Promise<PosVentaR
   });
   if (error) {
     throw error;
+  }
+  if (input.turnoClientId) {
+    const linked = await supabase
+      .from("ventas_pos")
+      .update({ turno_client_id: input.turnoClientId }, { count: "exact" })
+      .eq("client_id", input.clientId);
+    if (linked.error) {
+      throw linked.error;
+    }
+    if (!linked.count) {
+      throw new Error("No se pudo asociar la venta al turno");
+    }
   }
   const row = (data ?? {}) as {
     id?: string;
@@ -147,4 +185,101 @@ export async function listPosAdvertencias(): Promise<PosAdvertencia[]> {
     cambio: row.cambio == null ? null : toMoney(row.cambio),
     detalle: mapDetalle(row.stock_detalle),
   }));
+}
+
+function dbMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return "";
+}
+
+function missingTurnosTable(error: unknown): boolean {
+  const message = dbMessage(error);
+  return /pos_turnos/i.test(message) && /does not exist|schema cache|42P01|PGRST205/i.test(message);
+}
+
+type TurnoRow = {
+  id: string;
+  client_id: string;
+  abierto_en: string;
+  cerrado_en: string | null;
+  fondo_inicial: number | string;
+  efectivo_contado: number | string | null;
+  efectivo_esperado: number | string | null;
+  diferencia: number | string | null;
+  total_efectivo: number | string;
+  total_tarjeta: number | string;
+  total_transferencia: number | string;
+  ventas_count: number;
+  estado: string;
+  abierto_por: string;
+  notas: string | null;
+};
+
+function mapTurno(row: TurnoRow): PosTurnoResumen {
+  return {
+    id: String(row.id),
+    clientId: String(row.client_id),
+    abiertoEn: String(row.abierto_en),
+    cerradoEn: row.cerrado_en ? String(row.cerrado_en) : null,
+    fondoInicial: toMoney(row.fondo_inicial),
+    efectivoContado: row.efectivo_contado == null ? null : toMoney(row.efectivo_contado),
+    efectivoEsperado: row.efectivo_esperado == null ? null : toMoney(row.efectivo_esperado),
+    diferencia: row.diferencia == null ? null : toMoney(row.diferencia),
+    totalEfectivo: toMoney(row.total_efectivo),
+    totalTarjeta: toMoney(row.total_tarjeta),
+    totalTransferencia: toMoney(row.total_transferencia),
+    ventasCount: Number(row.ventas_count) || 0,
+    estado: String(row.estado),
+    abiertoPor: String(row.abierto_por),
+    notas: row.notas ? String(row.notas) : null,
+  };
+}
+
+export async function abrirTurnoPos(input: PosAbrirTurnoInput): Promise<{ id: string; alreadySynced: boolean }> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.rpc("abrir_turno_pos", {
+    p_client_id: input.clientId,
+    p_abierto_en: input.abiertoEn,
+    p_fondo_inicial: input.fondoInicial,
+    p_abierto_por: input.abiertoPor,
+  });
+  if (error) throw error;
+  const row = (data ?? {}) as { id?: string; already_synced?: boolean };
+  return { id: String(row.id ?? ""), alreadySynced: Boolean(row.already_synced) };
+}
+
+export async function cerrarTurnoPos(input: PosCerrarTurnoInput): Promise<{ id: string; diferencia: number | null }> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.rpc("cerrar_turno_pos", {
+    p_client_id: input.clientId,
+    p_cerrado_en: input.cerradoEn,
+    p_efectivo_contado: input.efectivoContado,
+    p_notas: input.notas,
+    p_ventas_count: input.ventasCount,
+  });
+  if (error) throw error;
+  const row = (data ?? {}) as { id?: string; diferencia?: number | string | null };
+  return { id: String(row.id ?? ""), diferencia: row.diferencia == null ? null : toMoney(row.diferencia) };
+}
+
+export async function listPosTurnos(): Promise<PosTurnoResumen[]> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("pos_turnos")
+    .select(
+      "id, client_id, abierto_en, cerrado_en, fondo_inicial, efectivo_contado, efectivo_esperado, diferencia, total_efectivo, total_tarjeta, total_transferencia, ventas_count, estado, abierto_por, notas"
+    )
+    .order("abierto_en", { ascending: false })
+    .limit(40);
+  if (error) {
+    if (missingTurnosTable(error)) {
+      throw new Error("Falta aplicar la migración de turnos en Supabase.");
+    }
+    throw error;
+  }
+  return ((data ?? []) as TurnoRow[]).map(mapTurno);
 }
