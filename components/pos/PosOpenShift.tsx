@@ -28,7 +28,7 @@ export function PosOpenShift({ onOpen }: PosOpenShiftProps) {
 
   return (
     <div className="flex h-full items-center justify-center overflow-y-auto px-4 py-8">
-      <Card className="w-full max-w-lg shadow-sm">
+      <Card className="w-full max-w-lg font-display shadow-sm">
         <CardContent className="space-y-5 p-5">
           <div>
             <h2 className="text-2xl font-semibold">Abrir turno</h2>

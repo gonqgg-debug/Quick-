@@ -225,8 +225,21 @@ export function PosScreen() {
   }
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-background text-foreground">
-      <Toaster theme="light" position="top-center" />
+    <div className="fixed inset-0 flex flex-col bg-background font-display text-foreground">
+      <Toaster
+        theme="light"
+        position="top-center"
+        className="toaster group font-display"
+        toastOptions={{
+          classNames: {
+            toast:
+              "group toast font-display group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg",
+            description: "group-[.toast]:text-muted-foreground",
+            actionButton: "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
+            cancelButton: "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
+          },
+        }}
+      />
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2 md:px-4">
         <div className="flex min-w-0 items-center gap-2">
           <p className="shrink-0 text-lg font-semibold">Cobro</p>
@@ -283,7 +296,7 @@ export function PosScreen() {
       ) : null}
 
       <Dialog open={cartOpen} onOpenChange={setCartOpen}>
-        <DialogContent className="bottom-0 left-0 top-auto flex h-[88dvh] max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-b-none rounded-t-2xl p-0 sm:bottom-0 sm:rounded-b-none sm:rounded-t-2xl">
+        <DialogContent className="bottom-0 left-0 top-auto flex h-[88dvh] max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-b-none rounded-t-2xl p-0 font-display sm:bottom-0 sm:rounded-b-none sm:rounded-t-2xl">
           <DialogTitle className="sr-only">Carrito</DialogTitle>
           <DialogDescription className="sr-only">Productos de esta venta y el botón de cobrar.</DialogDescription>
           <PosCart
@@ -299,7 +312,7 @@ export function PosScreen() {
       <PosPayDialog open={payOpen} lines={lines} onOpenChange={setPayOpen} onConfirm={(metodo, monto) => void confirmSale(metodo, monto)} />
 
       <Dialog open={closeShiftOpen} onOpenChange={setCloseShiftOpen}>
-        <DialogContent>
+        <DialogContent className="font-display">
           <DialogHeader>
             <DialogTitle>Cerrar turno {shift?.periodo}</DialogTitle>
             <DialogDescription>
@@ -333,7 +346,7 @@ export function PosScreen() {
       </Dialog>
 
       <Dialog open={clearOpen} onOpenChange={setClearOpen}>
-        <DialogContent>
+        <DialogContent className="font-display">
           <DialogHeader>
             <DialogTitle>Vaciar carrito</DialogTitle>
             <DialogDescription>Se quitan todos los productos de esta venta. No se cobra nada.</DialogDescription>

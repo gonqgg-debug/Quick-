@@ -54,7 +54,7 @@ export function PosPayDialog({ open, lines, onOpenChange, onConfirm }: PosPayDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-md">
+      <DialogContent className="max-h-[92dvh] overflow-y-auto font-display sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Cobrar</DialogTitle>
           <DialogDescription>Total {formatPrice(total)}</DialogDescription>
