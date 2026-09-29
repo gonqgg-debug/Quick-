@@ -115,6 +115,7 @@ export const ADMIN_FINANZAS_NAV: AdminNavItem[] = [
   ADMIN_REPORTE_CONTABLE,
   ADMIN_CAJA,
   { href: "/admin/ventas", label: "Ventas", icon: "sales", status: "live" },
+  { href: "/admin/ventas/pos", label: "Caja POS", icon: "cash", status: "live" },
   ADMIN_VENTAS_HISTORICO,
   { href: "/admin/compras", label: "Compras", icon: "purchases", status: "live" },
   { href: "/admin/facturas", label: "Facturas", icon: "invoices", status: "live" },

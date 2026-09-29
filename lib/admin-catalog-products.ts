@@ -16,7 +16,7 @@ export type {
   AdminCatalogProductList,
 } from "@/lib/admin-catalog-products-shared";
 
-const SELECT_FIELDS = "id, nombre, marca, categoria, precio, codigo_odoo, codigo_barras, foto_url, activo";
+const SELECT_FIELDS = "id, nombre, marca, categoria, precio, codigo_odoo, codigo_barras, foto_url, activo, stock";
 const EXPORT_MAX = 5000;
 const BATCH_MAX = 2000;
 const IDS_MAX = 2000;
@@ -39,7 +39,9 @@ function mapRow(row: {
   codigo_barras: string | null;
   foto_url: string | null;
   activo: boolean;
+  stock: number | null;
 }): AdminCatalogProduct {
+  const stock = row.stock == null ? null : Math.trunc(Number(row.stock));
   return {
     id: String(row.id),
     nombre: String(row.nombre),
@@ -50,6 +52,7 @@ function mapRow(row: {
     codigoBarras: row.codigo_barras ? String(row.codigo_barras) : null,
     fotoUrl: row.foto_url ? String(row.foto_url) : null,
     activo: Boolean(row.activo),
+    stock: stock == null || Number.isNaN(stock) ? null : stock,
   };
 }
 
@@ -204,6 +207,7 @@ export async function updateAdminCatalogProduct(input: {
   categoria?: unknown;
   precio?: unknown;
   activo?: unknown;
+  stock?: unknown;
 }): Promise<AdminCatalogProduct> {
   if (!input.id) {
     throw new Error("Falta el producto");
@@ -214,6 +218,7 @@ export async function updateAdminCatalogProduct(input: {
     categoria?: string;
     precio?: number;
     activo?: boolean;
+    stock?: number | null;
   } = {};
   if (input.nombre !== undefined) {
     const nombre = String(input.nombre ?? "").trim();
@@ -246,6 +251,17 @@ export async function updateAdminCatalogProduct(input: {
     }
     patch.activo = input.activo;
   }
+  if (input.stock !== undefined) {
+    if (input.stock == null || input.stock === "") {
+      patch.stock = null;
+    } else {
+      const stock = typeof input.stock === "number" ? input.stock : Number(String(input.stock).trim());
+      if (!Number.isInteger(stock) || stock < -1_000_000 || stock > 1_000_000) {
+        throw new Error("Stock inválido");
+      }
+      patch.stock = stock;
+    }
+  }
   if (Object.keys(patch).length === 0) {
     throw new Error("Nada que actualizar");
   }
@@ -270,6 +286,7 @@ export async function updateAdminCatalogProduct(input: {
     codigoOdoo: product.codigoOdoo,
     codigoBarras: product.codigoBarras,
     activo: product.activo,
+    stock: product.stock,
   });
   return product;
 }

@@ -28,6 +28,7 @@ type PatchPayload = {
   categoria?: string;
   precio?: number;
   activo?: boolean;
+  stock?: number | null;
 };
 
 export function AdminCatalogProducts() {
@@ -525,7 +526,7 @@ export function AdminCatalogProducts() {
         ) : (
           <div>
             <div className="overflow-x-auto rounded-[24px] border" style={{ borderColor: "#E5E7EB" }}>
-              <table className="w-full min-w-[1180px] text-left text-sm">
+              <table className="w-full min-w-[1260px] text-left text-sm">
                 <thead>
                   <tr
                     className="text-xs font-bold uppercase tracking-wide text-brand-muted"
@@ -544,6 +545,7 @@ export function AdminCatalogProducts() {
                     <th className="px-3 py-3">Marca</th>
                     <th className="px-3 py-3">Categoría</th>
                     <th className="whitespace-nowrap px-3 py-3 text-right">Precio</th>
+                    <th className="whitespace-nowrap px-3 py-3 text-right">Stock</th>
                     <th className="whitespace-nowrap px-3 py-3">Cód. Odoo</th>
                     <th className="whitespace-nowrap px-3 py-3">Barras</th>
                     <th className="px-3 py-3">Estado</th>
@@ -858,6 +860,12 @@ function ProductRow({
         )}
       </td>
       <td className="whitespace-nowrap px-3 py-2.5 text-right font-bold tabular-nums">{formatPrice(product.precio)}</td>
+      <td
+        className="whitespace-nowrap px-3 py-2.5 text-right font-semibold tabular-nums"
+        style={{ color: product.stock != null && product.stock < 0 ? brand.error : undefined }}
+      >
+        {product.stock == null ? "—" : product.stock}
+      </td>
       <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-brand-muted">
         {product.codigoOdoo ? (
           <span className="cursor-help underline decoration-dotted decoration-gray-300" title={product.codigoOdoo}>
@@ -920,6 +928,7 @@ function ProductEditModal({
   const [categoryMode, setCategoryMode] = useState<"select" | "new">("select");
   const [draftNewCategoria, setDraftNewCategoria] = useState("");
   const [draftPrecio, setDraftPrecio] = useState(String(product.precio));
+  const [draftStock, setDraftStock] = useState(product.stock == null ? "" : String(product.stock));
   const [draftActivo, setDraftActivo] = useState(product.activo);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -933,12 +942,14 @@ function ProductEditModal({
   const resolvedCategoria = categoryMode === "new" ? draftNewCategoria.trim() : draftCategoria.trim();
   const originalCategoria = isUncategorized(product.categoria) ? "" : product.categoria;
   const parsedPrecio = parsePriceDraft(draftPrecio);
+  const parsedStock = parseStockDraft(draftStock);
   const dirty =
     Boolean(imageFile) ||
     draftNombre.trim() !== product.nombre.trim() ||
     draftMarca.trim() !== (product.marca || "") ||
     resolvedCategoria !== originalCategoria ||
     (parsedPrecio == null ? draftPrecio.trim() !== String(product.precio) : parsedPrecio !== product.precio) ||
+    (parsedStock === "invalid" ? true : parsedStock !== product.stock) ||
     draftActivo !== product.activo;
 
   useEffect(() => {
@@ -1023,6 +1034,10 @@ function ProductEditModal({
       setFormError("Precio inválido");
       return;
     }
+    if (parsedStock === "invalid") {
+      setFormError("Stock inválido");
+      return;
+    }
     const nextActivo = activoOverride ?? draftActivo;
     setSaving(true);
     setFormError(null);
@@ -1054,6 +1069,9 @@ function ProductEditModal({
       }
       if (parsedPrecio !== product.precio) {
         patch.precio = parsedPrecio;
+      }
+      if (parsedStock !== product.stock) {
+        patch.stock = parsedStock;
       }
       if (nextActivo !== product.activo) {
         patch.activo = nextActivo;
@@ -1219,6 +1237,18 @@ function ProductEditModal({
                 </label>
               </div>
               <label className={labelClass}>
+                Stock
+                <input
+                  value={draftStock}
+                  inputMode="numeric"
+                  placeholder="Sin control"
+                  onChange={(event) => setDraftStock(event.target.value)}
+                  className={fieldClass}
+                  style={{ borderColor: "#E5E7EB", color: brand.ink }}
+                />
+                <span className="mt-1 block text-xs text-brand-muted">Vacío = la caja no controla existencia.</span>
+              </label>
+              <label className={labelClass}>
                 Precio
                 <span className="relative mt-1.5 block">
                   <span
@@ -1347,6 +1377,21 @@ function parsePriceDraft(raw: string): number | null {
     return null;
   }
   return Math.round(parsed * 100) / 100;
+}
+
+function parseStockDraft(raw: string): number | null | "invalid" {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (!/^-?\d+$/.test(trimmed)) {
+    return "invalid";
+  }
+  const stock = Number(trimmed);
+  if (!Number.isSafeInteger(stock) || Math.abs(stock) > 1_000_000) {
+    return "invalid";
+  }
+  return stock;
 }
 
 function PencilIcon() {
