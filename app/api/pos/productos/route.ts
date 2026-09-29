@@ -18,6 +18,7 @@ export async function GET() {
         precio: product.precio,
         fotoUrl: product.fotoUrl,
         categoria: product.categoria,
+        codigoBarras: product.codigoBarras,
         stock: product.stockBase,
       })),
       fetchedAt: new Date().toISOString(),

@@ -1,3 +1,4 @@
+import { normalizeBarcode } from "@/lib/barcode";
 import { suggestedPagoConAmounts } from "@/lib/cash-payment";
 import { formatPrice, toMoney } from "@/lib/money";
 
@@ -5,6 +6,13 @@ export const POS_METODOS = ["efectivo", "tarjeta", "transferencia"] as const;
 export type PosMetodoPago = (typeof POS_METODOS)[number];
 
 export const POS_LOW_STOCK = 5;
+/** Tope del descuento manual (línea + ticket), en porcentaje del subtotal de lista. */
+export const POS_DESCUENTO_TOPE_PCT = 20;
+/** ITBIS incluido en el precio. 18/118 del total es el impuesto. */
+export const ITBIS_PORCIENTO = 18;
+export const QUICKCOINS_PESOS_POR_COIN = 10;
+export const QUICKCOINS_VALOR_COIN = 1;
+export const QUICKCOINS_MINIMO_CANJE = 50;
 export const POS_CATALOG_REFRESH_MS = 5 * 60 * 1000;
 export const POS_SYNC_INTERVAL_MS = 15_000;
 export const POS_MAX_QTY = 9999;
@@ -16,6 +24,7 @@ export type PosStoredProduct = {
   precio: number;
   fotoUrl: string | null;
   categoria: string;
+  codigoBarras: string | null;
   /** Last stock reported by the server. Null means inventory is not tracked. */
   stockBase: number | null;
 };
@@ -29,7 +38,30 @@ export type PosSaleItem = {
   productoId: string;
   nombre: string;
   cantidad: number;
+  /** Net unit price charged, after discounts and QuickCoins. */
   precioUnitario: number;
+  /** List unit price. Omitted on sales saved before discounts existed. */
+  precioLista?: number;
+  /** Manual line discount in DOP for the whole line, not per unit. */
+  descuento?: number;
+};
+
+export type PosDescuento =
+  | { tipo: "ninguno" }
+  | { tipo: "porcentaje"; valor: number }
+  | { tipo: "monto"; valor: number };
+
+export const POS_SIN_DESCUENTO: PosDescuento = { tipo: "ninguno" };
+
+export type PosQuickcoinsSync = "pendiente_sync" | "sincronizada" | "no_aplica";
+
+export type PosQuickcoinsDraft = {
+  telefono: string;
+  nombre: string;
+  canjePuntos: number;
+  ganarPuntos: number;
+  descuentoCanje: number;
+  coinsSync: PosQuickcoinsSync;
 };
 
 export type PosSaleStatus = "pendiente_sync" | "sincronizada";
@@ -48,6 +80,9 @@ export type PosSaleDraft = {
   attempts: number;
   turnoClientId?: string | null;
   cajero?: string | null;
+  descuentoTicket?: number;
+  descuentoTotal?: number;
+  quickcoins?: PosQuickcoinsDraft | null;
 };
 
 export type PosShiftEstado = "abierto" | "cerrado";
@@ -78,8 +113,11 @@ export type ShiftTotals = {
 export type CartLine = {
   productoId: string;
   nombre: string;
+  /** List unit price captured when the product was added. */
   precioUnitario: number;
   cantidad: number;
+  descuentoTipo?: "ninguno" | "porcentaje" | "monto";
+  descuentoValor?: number;
 };
 
 export type PosVentaInput = {
@@ -90,6 +128,9 @@ export type PosVentaInput = {
   items: PosSaleItem[];
   turnoClientId: string | null;
   creadoPor: string | null;
+  descuentoTicket: number;
+  descuentoTotal: number;
+  quickcoins: PosQuickcoinsDraft | null;
 };
 
 export const POS_FONDO_RAPIDO = [0, 500, 1000, 2000, 5000] as const;
@@ -114,8 +155,141 @@ export function cartTotal(lines: Array<{ precioUnitario: number; cantidad: numbe
   return centsToMoney(cents);
 }
 
+export function lineListCents(line: { precioUnitario: number; cantidad: number }): number {
+  return moneyCents(line.precioUnitario) * line.cantidad;
+}
+
+export function lineManualDiscountCents(line: CartLine): number {
+  const list = lineListCents(line);
+  const tipo = line.descuentoTipo ?? "ninguno";
+  const valor = line.descuentoValor ?? 0;
+  if (tipo === "porcentaje") {
+    const pct = Math.min(100, Math.max(0, valor));
+    return Math.min(list, Math.round((list * pct) / 100));
+  }
+  if (tipo === "monto") {
+    return Math.min(list, Math.max(0, moneyCents(valor)));
+  }
+  return 0;
+}
+
+export function discountCapCents(lines: Array<{ precioUnitario: number; cantidad: number }>): number {
+  const list = lines.reduce((sum, line) => sum + lineListCents(line), 0);
+  return Math.round((list * POS_DESCUENTO_TOPE_PCT) / 100);
+}
+
+export function ticketDiscountCents(afterLineCents: number, ticket: PosDescuento): number {
+  if (afterLineCents <= 0 || ticket.tipo === "ninguno") return 0;
+  if (ticket.tipo === "porcentaje") {
+    const pct = Math.min(100, Math.max(0, ticket.valor));
+    return Math.min(afterLineCents, Math.round((afterLineCents * pct) / 100));
+  }
+  return Math.min(afterLineCents, Math.max(0, moneyCents(ticket.valor)));
+}
+
+export function manualDiscountWithinCap(lines: CartLine[], ticket: PosDescuento): boolean {
+  const lineCents = lines.reduce((sum, line) => sum + lineManualDiscountCents(line), 0);
+  const list = lines.reduce((sum, line) => sum + lineListCents(line), 0);
+  const ticketCents = ticketDiscountCents(list - lineCents, ticket);
+  return lineCents + ticketCents <= discountCapCents(lines);
+}
+
+export type PosPricing = {
+  listCents: number;
+  lineDiscountCents: number;
+  ticketDiscountCents: number;
+  coinDiscountCents: number;
+  totalCents: number;
+  items: PosSaleItem[];
+};
+
+function allocateCents(weights: number[], pool: number): number[] {
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  if (pool <= 0 || total <= 0) return weights.map(() => 0);
+  const base = weights.map((weight) => Math.floor((pool * weight) / total));
+  let left = pool - base.reduce((sum, value) => sum + value, 0);
+  const order = weights.map((weight, index) => ({ weight, index })).sort((a, b) => b.weight - a.weight);
+  for (const entry of order) {
+    if (left <= 0) break;
+    base[entry.index] += 1;
+    left -= 1;
+  }
+  return base;
+}
+
+export function priceCart(lines: CartLine[], ticket: PosDescuento, coinCents = 0): PosPricing | { error: string } {
+  if (!manualDiscountWithinCap(lines, ticket)) {
+    return { error: `El descuento pasa del ${POS_DESCUENTO_TOPE_PCT}%` };
+  }
+  const listCents = lines.reduce((sum, line) => sum + lineListCents(line), 0);
+  const lineDiscounts = lines.map((line) => lineManualDiscountCents(line));
+  const lineDiscountCents = lineDiscounts.reduce((sum, value) => sum + value, 0);
+  const afterLines = listCents - lineDiscountCents;
+  const ticketCents = ticketDiscountCents(afterLines, ticket);
+  const coinDiscountCents = Math.min(Math.max(0, coinCents), afterLines - ticketCents);
+  const weights = lines.map((line, index) => lineListCents(line) - lineDiscounts[index]);
+  const shared = allocateCents(weights, ticketCents + coinDiscountCents);
+  const items: PosSaleItem[] = [];
+  let totalCents = 0;
+  lines.forEach((line, index) => {
+    const target = Math.max(0, weights[index] - shared[index]);
+    const unitCents = line.cantidad > 0 ? Math.round(target / line.cantidad) : 0;
+    const linePay = unitCents * line.cantidad;
+    totalCents += linePay;
+    items.push({
+      productoId: line.productoId,
+      nombre: line.nombre,
+      cantidad: line.cantidad,
+      precioLista: centsToMoney(moneyCents(line.precioUnitario)),
+      descuento: centsToMoney(lineDiscounts[index]),
+      precioUnitario: centsToMoney(unitCents),
+    });
+  });
+  return {
+    listCents,
+    lineDiscountCents,
+    ticketDiscountCents: ticketCents,
+    coinDiscountCents,
+    totalCents,
+    items,
+  };
+}
+
+export function cartAmountDue(lines: CartLine[], ticket: PosDescuento = POS_SIN_DESCUENTO, coinCents = 0): number {
+  const priced = priceCart(lines, ticket, coinCents);
+  if ("error" in priced) return cartTotal(lines);
+  return centsToMoney(priced.totalCents);
+}
+
+export function quickcoinsEarn(paidCents: number, pesosPorCoin = QUICKCOINS_PESOS_POR_COIN): number {
+  const step = moneyCents(pesosPorCoin);
+  if (step <= 0) return 0;
+  return Math.floor(paidCents / step);
+}
+
+export function quickcoinsDiscountCents(puntos: number, valorCoin = QUICKCOINS_VALOR_COIN): number {
+  if (!Number.isInteger(puntos) || puntos <= 0) return 0;
+  return moneyCents(valorCoin) * puntos;
+}
+
+export function findProductsByBarcode<T extends { codigoBarras?: string | null }>(products: T[], raw: string): T[] {
+  const code = normalizeBarcode(raw);
+  if (!code) return [];
+  return products.filter((product) => product.codigoBarras === code);
+}
+
 export function cashChangeAmount(recibido: number, total: number): number {
   return centsToMoney(moneyCents(recibido) - moneyCents(total));
+}
+
+export function splitItbis(total: number): { base: number; itbis: number; total: number } {
+  const totalCents = moneyCents(total);
+  const itbisCents = Math.round((totalCents * ITBIS_PORCIENTO) / (100 + ITBIS_PORCIENTO));
+  return {
+    base: centsToMoney(totalCents - itbisCents),
+    itbis: centsToMoney(itbisCents),
+    total: centsToMoney(totalCents),
+  };
 }
 
 export function normalizePosText(value: string): string {
@@ -201,6 +375,8 @@ export function addProductToCart(lines: CartLine[], product: Pick<PosProduct, "i
         nombre: product.nombre,
         precioUnitario: product.precio,
         cantidad: 1,
+        descuentoTipo: "ninguno",
+        descuentoValor: 0,
       },
     ];
   }
@@ -344,6 +520,27 @@ export function isPosShiftRecord(value: PosShiftRecord | { error: string }): val
   return !("error" in value);
 }
 
+export function setLineDiscount(
+  lines: CartLine[],
+  productoId: string,
+  descuento: PosDescuento,
+  ticket: PosDescuento
+): CartLine[] | { error: string } {
+  const next = lines.map((line) =>
+    line.productoId === productoId
+      ? {
+          ...line,
+          descuentoTipo: descuento.tipo,
+          descuentoValor: descuento.tipo === "ninguno" ? 0 : descuento.valor,
+        }
+      : line
+  );
+  if (!manualDiscountWithinCap(next, ticket)) {
+    return { error: `El descuento pasa del ${POS_DESCUENTO_TOPE_PCT}%` };
+  }
+  return next;
+}
+
 export function buildSale(input: {
   clientId: string;
   createdAt: string;
@@ -352,6 +549,8 @@ export function buildSale(input: {
   montoRecibido: number | null;
   turnoClientId: string;
   cajero: string;
+  ticket?: PosDescuento;
+  quickcoins?: PosQuickcoinsDraft | null;
 }): PosSaleDraft | { error: string } {
   if (!UUID_RE.test(input.clientId)) {
     return { error: "Identificador de venta inválido" };
@@ -366,7 +565,13 @@ export function buildSale(input: {
   if (input.lines.length === 0) {
     return { error: "El carrito está vacío" };
   }
-  const total = cartTotal(input.lines);
+  const ticket = input.ticket ?? POS_SIN_DESCUENTO;
+  const coinCents = quickcoinsDiscountCents(input.quickcoins?.canjePuntos ?? 0);
+  const priced = priceCart(input.lines, ticket, coinCents);
+  if ("error" in priced) return priced;
+  const total = centsToMoney(priced.totalCents);
+  const descuentoTicket = centsToMoney(priced.ticketDiscountCents);
+  const descuentoTotal = centsToMoney(priced.lineDiscountCents + priced.ticketDiscountCents + priced.coinDiscountCents);
   let montoRecibido: number | null = null;
   let cambio: number | null = null;
   if (input.metodoPago === "efectivo") {
@@ -384,12 +589,7 @@ export function buildSale(input: {
   return {
     clientId: input.clientId,
     createdAt: input.createdAt,
-    items: input.lines.map((line) => ({
-      productoId: line.productoId,
-      nombre: line.nombre,
-      cantidad: line.cantidad,
-      precioUnitario: centsToMoney(moneyCents(line.precioUnitario)),
-    })),
+    items: priced.items,
     metodoPago: input.metodoPago,
     montoRecibido,
     cambio,
@@ -400,6 +600,17 @@ export function buildSale(input: {
     attempts: 0,
     turnoClientId: input.turnoClientId,
     cajero,
+    descuentoTicket,
+    descuentoTotal,
+    quickcoins: input.quickcoins
+      ? {
+          ...input.quickcoins,
+          canjePuntos: Math.floor(priced.coinDiscountCents / Math.max(1, moneyCents(QUICKCOINS_VALOR_COIN))),
+          ganarPuntos: quickcoinsEarn(priced.totalCents),
+          descuentoCanje: centsToMoney(priced.coinDiscountCents),
+          coinsSync: "pendiente_sync",
+        }
+      : null,
   };
 }
 
@@ -469,11 +680,15 @@ export function parsePosVentaInput(body: unknown): { ok: true; value: PosVentaIn
       return { ok: false, error: "Precio inválido" };
     }
     const nombre = readString(item, "nombre").trim().slice(0, 200);
+    const precioLista = readNumber(item, "precio_lista", "precioLista");
+    const descuento = readNumber(item, "descuento");
     items.push({
       productoId,
       nombre,
       cantidad,
       precioUnitario: centsToMoney(moneyCents(precio)),
+      precioLista: precioLista == null ? undefined : centsToMoney(moneyCents(precioLista)),
+      descuento: descuento == null ? undefined : centsToMoney(moneyCents(descuento)),
     });
   }
   const fechaRaw = readString(record, "fecha", "createdAt").trim();
@@ -506,9 +721,49 @@ export function parsePosVentaInput(body: unknown): { ok: true; value: PosVentaIn
     }
     montoRecibido = centsToMoney(moneyCents(monto));
   }
+  const descuentoTicket = centsToMoney(moneyCents(readNumber(record, "descuento_ticket", "descuentoTicket") ?? 0));
+  const descuentoTotal = centsToMoney(moneyCents(readNumber(record, "descuento_total", "descuentoTotal") ?? 0));
+  const coinsRaw = record.quickcoins;
+  let quickcoins: PosQuickcoinsDraft | null = null;
+  let canjePuntos = 0;
+  if (coinsRaw && typeof coinsRaw === "object") {
+    const coins = coinsRaw as Record<string, unknown>;
+    const telefono = readString(coins, "telefono").replace(/\D/g, "");
+    canjePuntos = readNumber(coins, "canje_puntos", "canjePuntos") ?? 0;
+    const ganarPuntos = readNumber(coins, "ganar_puntos", "ganarPuntos") ?? 0;
+    if (!telefono || telefono.length < 10 || telefono.length > 15) {
+      return { ok: false, error: "Teléfono de QuickCoins inválido" };
+    }
+    if (!Number.isInteger(canjePuntos) || canjePuntos < 0 || !Number.isInteger(ganarPuntos) || ganarPuntos < 0) {
+      return { ok: false, error: "QuickCoins inválidos" };
+    }
+    if (canjePuntos > 0 && canjePuntos < QUICKCOINS_MINIMO_CANJE) {
+      return { ok: false, error: `El mínimo para canjear es ${QUICKCOINS_MINIMO_CANJE} QuickCoins` };
+    }
+    quickcoins = {
+      telefono,
+      nombre: readString(coins, "nombre").trim().slice(0, 80) || "Cliente",
+      canjePuntos,
+      ganarPuntos,
+      descuentoCanje: centsToMoney(quickcoinsDiscountCents(canjePuntos)),
+      coinsSync: "pendiente_sync",
+    };
+  }
+  if (items.some((item) => item.precioLista != null)) {
+    const listLines = items.map((item) => ({
+      precioUnitario: item.precioLista ?? item.precioUnitario,
+      cantidad: item.cantidad,
+    }));
+    const listCents = listLines.reduce((sum, item) => sum + lineListCents(item), 0);
+    const netCents = items.reduce((sum, item) => sum + moneyCents(item.precioUnitario) * item.cantidad, 0);
+    const manualCents = listCents - netCents - quickcoinsDiscountCents(canjePuntos);
+    if (manualCents > discountCapCents(listLines) + 1) {
+      return { ok: false, error: `El descuento pasa del ${POS_DESCUENTO_TOPE_PCT}%` };
+    }
+  }
   return {
     ok: true,
-    value: { clientId, fecha, metodoPago, montoRecibido, items, turnoClientId, creadoPor },
+    value: { clientId, fecha, metodoPago, montoRecibido, items, turnoClientId, creadoPor, descuentoTicket, descuentoTotal, quickcoins },
   };
 }
 

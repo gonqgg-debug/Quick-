@@ -2,21 +2,40 @@
 
 import { useState } from "react";
 import { formatPrice } from "@/lib/money";
-import { cartTotal, lineSubtotal, type CartLine } from "@/lib/pos";
+import { centsToMoney, lineListCents, lineManualDiscountCents, lineSubtotal, type CartLine } from "@/lib/pos";
 import { brand } from "@/lib/theme";
 
 type PosCartProps = {
   lines: CartLine[];
+  subtotal: number;
+  descuento: number;
+  coins: number;
+  total: number;
   onQty: (productoId: string, cantidad: number) => void;
   onRemove: (productoId: string) => void;
   onClear: () => void;
   onCheckout: () => void;
+  onDiscountLine: (productoId: string) => void;
+  onDiscountTicket: () => void;
+  onQuickcoins: () => void;
 };
 
-export function PosCart({ lines, onQty, onRemove, onClear, onCheckout }: PosCartProps) {
+export function PosCart({
+  lines,
+  subtotal,
+  descuento,
+  coins,
+  total,
+  onQty,
+  onRemove,
+  onClear,
+  onCheckout,
+  onDiscountLine,
+  onDiscountTicket,
+  onQuickcoins,
+}: PosCartProps) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [confirmClear, setConfirmClear] = useState(false);
-  const total = cartTotal(lines);
   const count = lines.reduce((sum, line) => sum + line.cantidad, 0);
 
   function commitQty(line: CartLine) {
@@ -83,7 +102,14 @@ export function PosCart({ lines, onQty, onRemove, onClear, onCheckout }: PosCart
                   <p className="font-semibold leading-tight">{line.nombre}</p>
                   <p className="mt-0.5 text-sm text-brand-muted">{formatPrice(line.precioUnitario)} c/u</p>
                 </div>
-                <p className="shrink-0 text-base font-bold tabular-nums">{formatPrice(lineSubtotal(line))}</p>
+                <div className="shrink-0 text-right">
+                  <p className="text-base font-bold tabular-nums">
+                    {formatPrice(centsToMoney(lineListCents(line) - lineManualDiscountCents(line)))}
+                  </p>
+                  {lineManualDiscountCents(line) > 0 ? (
+                    <p className="text-xs font-bold text-brand-muted line-through tabular-nums">{formatPrice(lineSubtotal(line))}</p>
+                  ) : null}
+                </div>
                 <button
                   type="button"
                   onClick={() => onRemove(line.productoId)}
@@ -126,6 +152,14 @@ export function PosCart({ lines, onQty, onRemove, onClear, onCheckout }: PosCart
                 />
                 <button
                   type="button"
+                  onClick={() => onDiscountLine(line.productoId)}
+                  className="ml-auto h-12 rounded-xl border px-3 text-sm font-extrabold"
+                  style={{ borderColor: "#D1D5DB" }}
+                >
+                  Desc.
+                </button>
+                <button
+                  type="button"
                   onClick={() => onQty(line.productoId, line.cantidad + 1)}
                   className="flex h-12 w-12 items-center justify-center rounded-xl text-2xl font-bold text-white"
                   style={{ backgroundColor: brand.green }}
@@ -142,9 +176,29 @@ export function PosCart({ lines, onQty, onRemove, onClear, onCheckout }: PosCart
       <div className="shrink-0 border-t px-4 pb-4 pt-3" style={{ borderColor: "#E5E7EB" }}>
         <div className="flex items-baseline justify-between text-sm text-brand-muted">
           <span>Subtotal</span>
-          <span className="font-semibold tabular-nums">{formatPrice(total)}</span>
+          <span className="font-semibold tabular-nums">{formatPrice(subtotal)}</span>
         </div>
-        <div className="mt-1 flex items-baseline justify-between">
+        {descuento > 0 ? (
+          <button type="button" onClick={onDiscountTicket} className="mt-1 flex w-full items-baseline justify-between text-sm font-bold" style={{ color: brand.green }}>
+            <span>Descuento</span>
+            <span className="tabular-nums">−{formatPrice(descuento)}</span>
+          </button>
+        ) : null}
+        {coins > 0 ? (
+          <div className="mt-1 flex items-baseline justify-between text-sm font-bold" style={{ color: brand.orange }}>
+            <span>QuickCoins</span>
+            <span className="tabular-nums">−{formatPrice(coins)}</span>
+          </div>
+        ) : null}
+        <div className="mt-2 flex gap-2">
+          <button type="button" onClick={onDiscountTicket} className="h-11 flex-1 rounded-xl border text-sm font-extrabold" style={{ borderColor: "#D1D5DB" }}>
+            Descuento
+          </button>
+          <button type="button" onClick={onQuickcoins} className="h-11 flex-1 rounded-xl border text-sm font-extrabold" style={{ borderColor: brand.orange, color: "#9A3412" }}>
+            QuickCoins
+          </button>
+        </div>
+        <div className="mt-2 flex items-baseline justify-between">
           <span className="text-base font-bold">Total</span>
           <span className="font-display text-4xl font-extrabold tabular-nums leading-none" style={{ color: brand.ink }}>
             {formatPrice(total)}
