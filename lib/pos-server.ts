@@ -11,23 +11,42 @@ type ProductRow = {
   stock: number | null;
 };
 
+function missingStockColumn(message: string): boolean {
+  return /stock/i.test(message) && /does not exist|schema cache|column/i.test(message);
+}
+
 export async function listPosProducts(): Promise<PosProduct[]> {
   const supabase = getSupabaseAdminClient();
   const pageSize = 1000;
   const products: PosProduct[] = [];
   let from = 0;
+  let includeStock = true;
 
   for (;;) {
-    const { data, error } = await supabase
+    const first = await supabase
       .from("products")
-      .select("id, nombre, precio, foto_url, categoria, stock")
+      .select(includeStock ? "id, nombre, precio, foto_url, categoria, stock" : "id, nombre, precio, foto_url, categoria")
       .eq("activo", true)
       .order("nombre", { ascending: true })
       .range(from, from + pageSize - 1);
-    if (error) {
-      throw new Error(error.message);
+    let rows: ProductRow[];
+    if (first.error && includeStock && missingStockColumn(first.error.message)) {
+      includeStock = false;
+      const retry = await supabase
+        .from("products")
+        .select("id, nombre, precio, foto_url, categoria")
+        .eq("activo", true)
+        .order("nombre", { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (retry.error) {
+        throw new Error(retry.error.message);
+      }
+      rows = (retry.data ?? []) as unknown as ProductRow[];
+    } else if (first.error) {
+      throw new Error(first.error.message);
+    } else {
+      rows = (first.data ?? []) as unknown as ProductRow[];
     }
-    const rows = (data ?? []) as ProductRow[];
     for (const row of rows) {
       products.push({
         id: row.id,

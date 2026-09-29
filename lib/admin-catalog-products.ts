@@ -16,7 +16,12 @@ export type {
   AdminCatalogProductList,
 } from "@/lib/admin-catalog-products-shared";
 
-const SELECT_FIELDS = "id, nombre, marca, categoria, precio, codigo_odoo, codigo_barras, foto_url, activo, stock";
+const SELECT_FIELDS_BASE = "id, nombre, marca, categoria, precio, codigo_odoo, codigo_barras, foto_url, activo";
+const SELECT_FIELDS = `${SELECT_FIELDS_BASE}, stock`;
+
+function missingStockColumn(message: string): boolean {
+  return /stock/i.test(message) && /does not exist|schema cache|column/i.test(message);
+}
 const EXPORT_MAX = 5000;
 const BATCH_MAX = 2000;
 const IDS_MAX = 2000;
@@ -96,19 +101,34 @@ export async function listAdminCatalogProducts(
   const from = (filters.page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  const listQuery = applyListFilters(
-    supabase
-      .from("products")
-      .select(SELECT_FIELDS, { count: "exact" })
-      .order("nombre", { ascending: true })
-      .range(from, to),
-    filters
-  );
+  const listQuery = (fields: string) =>
+    applyListFilters(
+      supabase.from("products").select(fields, { count: "exact" }).order("nombre", { ascending: true }).range(from, to),
+      filters
+    );
 
   const [{ data, error, count }, { data: categoryRows, error: categoryError }] = await Promise.all([
-    listQuery,
+    listQuery(SELECT_FIELDS),
     supabase.from("products").select("categoria").order("categoria", { ascending: true }),
   ]);
+  if (error && missingStockColumn(error.message)) {
+    const retry = await listQuery(SELECT_FIELDS_BASE);
+    if (retry.error) {
+      throw retry.error;
+    }
+    const categories = Array.from(
+      new Set((categoryRows ?? []).map((row) => String(row.categoria ?? "").trim()).filter(Boolean))
+    ).sort((left, right) => left.localeCompare(right, "es"));
+    return {
+      products: ((retry.data ?? []) as unknown as Array<Parameters<typeof mapRow>[0]>).map((row) =>
+        mapRow({ ...row, stock: null })
+      ),
+      total: retry.count ?? 0,
+      page: filters.page,
+      pageSize,
+      categories,
+    };
+  }
   if (error) {
     throw error;
   }
@@ -121,7 +141,7 @@ export async function listAdminCatalogProducts(
   ).sort((left, right) => left.localeCompare(right, "es"));
 
   return {
-    products: (data ?? []).map((row) => mapRow(row as Parameters<typeof mapRow>[0])),
+    products: ((data ?? []) as unknown as Array<Parameters<typeof mapRow>[0]>).map((row) => mapRow(row)),
     total: count ?? 0,
     page: filters.page,
     pageSize,
@@ -160,24 +180,41 @@ export async function fetchAdminCatalogProductsForExport(
     const unique = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).slice(0, EXPORT_MAX);
     for (let i = 0; i < unique.length; i += 100) {
       const chunk = unique.slice(i, i + 100);
-      const { data, error } = await supabase.from("products").select(SELECT_FIELDS).in("id", chunk);
+      const first = await supabase.from("products").select(SELECT_FIELDS).in("id", chunk);
+      let batch = first.data as unknown as Array<Parameters<typeof mapRow>[0]> | null;
+      let error = first.error;
+      if (error && missingStockColumn(error.message)) {
+        const retry = await supabase.from("products").select(SELECT_FIELDS_BASE).in("id", chunk);
+        batch = (retry.data ?? []).map((row) => ({ ...row, stock: null })) as unknown as Array<Parameters<typeof mapRow>[0]>;
+        error = retry.error;
+      }
       if (error) {
         throw error;
       }
-      products.push(...(data ?? []).map((row) => mapRow(row as Parameters<typeof mapRow>[0])));
+      products.push(...(batch ?? []).map((row) => mapRow(row)));
     }
     return products.sort((left, right) => left.nombre.localeCompare(right.nombre, "es"));
   }
 
   for (let from = 0; from < EXPORT_MAX; from += 1000) {
-    const { data, error } = await applyListFilters(
+    const first = await applyListFilters(
       supabase.from("products").select(SELECT_FIELDS).order("nombre", { ascending: true }).range(from, from + 999),
       filters
     );
+    let raw = first.data as unknown as Array<Parameters<typeof mapRow>[0]> | null;
+    let error = first.error;
+    if (error && missingStockColumn(error.message)) {
+      const retry = await applyListFilters(
+        supabase.from("products").select(SELECT_FIELDS_BASE).order("nombre", { ascending: true }).range(from, from + 999),
+        filters
+      );
+      raw = ((retry.data ?? []) as unknown as Array<Parameters<typeof mapRow>[0]>).map((row) => ({ ...row, stock: null }));
+      error = retry.error;
+    }
     if (error) {
       throw error;
     }
-    const batch = (data ?? []).map((row) => mapRow(row as Parameters<typeof mapRow>[0]));
+    const batch = (raw ?? []).map((row) => mapRow(row));
     products.push(...batch);
     if (batch.length < 1000) {
       break;
