@@ -1,11 +1,15 @@
+import { normalizeBarcode } from "@/lib/barcode";
 import { toMoney } from "@/lib/money";
-import type {
-  PosAbrirTurnoInput,
-  PosAdvertencia,
-  PosCerrarTurnoInput,
-  PosStoredProduct,
-  PosTurnoResumen,
-  PosVentaInput,
+import {
+  QUICKCOINS_MINIMO_CANJE,
+  QUICKCOINS_PESOS_POR_COIN,
+  QUICKCOINS_VALOR_COIN,
+  type PosAbrirTurnoInput,
+  type PosAdvertencia,
+  type PosCerrarTurnoInput,
+  type PosStoredProduct,
+  type PosTurnoResumen,
+  type PosVentaInput,
 } from "@/lib/pos";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
@@ -19,10 +23,11 @@ type ProductRow = {
   precio: number | string;
   foto_url: string | null;
   categoria: string | null;
+  codigo_barras: string | null;
   stock: number | null;
 };
 
-const PRODUCT_SELECT = "id, nombre, marca, precio, foto_url, categoria";
+const PRODUCT_SELECT = "id, nombre, marca, precio, foto_url, categoria, codigo_barras";
 
 function missingStockColumn(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String((error as { message?: string } | null)?.message ?? "");
@@ -52,6 +57,7 @@ async function loadActiveProducts(includeStock: boolean): Promise<PosStoredProdu
         precio: toMoney(row.precio),
         fotoUrl: row.foto_url ? String(row.foto_url) : null,
         categoria: String(row.categoria ?? ""),
+        codigoBarras: normalizeBarcode(row.codigo_barras ? String(row.codigo_barras) : null),
         stockBase: !includeStock || row.stock == null ? null : Math.trunc(Number(row.stock)),
       });
     }
@@ -82,25 +88,90 @@ export type PosVentaResult = {
   montoRecibido: number | null;
   stockAdvertencia: boolean;
   alreadySynced: boolean;
+  coinsApplied: boolean;
 };
+
+function missingDbObject(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String((error as { message?: string } | null)?.message ?? "");
+  return /does not exist|schema cache|42883|42703|PGRST202|PGRST204|PGRST205/i.test(message);
+}
+
+function saleItemPayload(input: PosVentaInput) {
+  return input.items.map((item) => ({
+    producto_id: item.productoId,
+    nombre: item.nombre,
+    cantidad: item.cantidad,
+    precio_unitario: item.precioUnitario,
+    precio_lista: item.precioLista ?? item.precioUnitario,
+    descuento: item.descuento ?? 0,
+  }));
+}
+
+async function attachSaleDiscounts(input: PosVentaInput, ventaId: string): Promise<void> {
+  const supabase = getSupabaseAdminClient();
+  const header = await supabase
+    .from("ventas_pos")
+    .update({ descuento_total: input.descuentoTotal })
+    .eq("client_id", input.clientId);
+  if (header.error) {
+    if (missingDbObject(header.error)) return;
+    throw header.error;
+  }
+  for (const item of input.items) {
+    const line = await supabase
+      .from("ventas_pos_items")
+      .update({ descuento: item.descuento ?? 0, precio_lista: item.precioLista ?? item.precioUnitario })
+      .eq("venta_id", ventaId)
+      .eq("producto_id", item.productoId);
+    if (line.error) {
+      if (missingDbObject(line.error)) return;
+      throw line.error;
+    }
+  }
+}
 
 export async function registrarVentaPos(input: PosVentaInput): Promise<PosVentaResult> {
   const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase.rpc("registrar_venta_pos", {
-    p_client_id: input.clientId,
-    p_fecha: input.fecha,
-    p_metodo_pago: input.metodoPago,
-    p_monto_recibido: input.montoRecibido,
-    p_creado_por: input.creadoPor || "staff",
-    p_items: input.items.map((item) => ({
-      producto_id: item.productoId,
-      nombre: item.nombre,
-      cantidad: item.cantidad,
-      precio_unitario: item.precioUnitario,
-    })),
-  });
-  if (error) {
-    throw error;
+  const coins = input.quickcoins;
+  const wantsCoins = Boolean(coins && (coins.canjePuntos > 0 || coins.ganarPuntos > 0));
+  let data: unknown = null;
+  let usedWrapper = false;
+  if (wantsCoins && coins) {
+    const wrapped = await supabase.rpc("registrar_venta_pos_y_coins", {
+      p_client_id: input.clientId,
+      p_fecha: input.fecha,
+      p_metodo_pago: input.metodoPago,
+      p_monto_recibido: input.montoRecibido,
+      p_creado_por: input.creadoPor || coins.nombre || "staff",
+      p_items: saleItemPayload(input),
+      p_telefono: coins.telefono,
+      p_nombre: coins.nombre,
+      p_canje: coins.canjePuntos,
+      p_ganar: coins.ganarPuntos,
+      p_descuento_total: input.descuentoTotal,
+    });
+    if (wrapped.error) {
+      if (!(missingDbObject(wrapped.error) && coins.canjePuntos === 0)) {
+        throw wrapped.error;
+      }
+    } else {
+      data = wrapped.data;
+      usedWrapper = true;
+    }
+  }
+  if (!usedWrapper) {
+    const plain = await supabase.rpc("registrar_venta_pos", {
+      p_client_id: input.clientId,
+      p_fecha: input.fecha,
+      p_metodo_pago: input.metodoPago,
+      p_monto_recibido: input.montoRecibido,
+      p_creado_por: input.creadoPor || "staff",
+      p_items: saleItemPayload(input),
+    });
+    if (plain.error) {
+      throw plain.error;
+    }
+    data = plain.data;
   }
   if (input.turnoClientId) {
     const linked = await supabase
@@ -124,7 +195,7 @@ export async function registrarVentaPos(input: PosVentaInput): Promise<PosVentaR
     stock_advertencia?: boolean;
     already_synced?: boolean;
   };
-  return {
+  const result: PosVentaResult = {
     id: String(row.id ?? ""),
     clientId: String(row.client_id ?? input.clientId),
     total: toMoney(row.total),
@@ -133,7 +204,12 @@ export async function registrarVentaPos(input: PosVentaInput): Promise<PosVentaR
     montoRecibido: row.monto_recibido == null ? null : toMoney(row.monto_recibido),
     stockAdvertencia: Boolean(row.stock_advertencia),
     alreadySynced: Boolean(row.already_synced),
+    coinsApplied: usedWrapper,
   };
+  if (!usedWrapper && result.id) {
+    await attachSaleDiscounts(input, result.id);
+  }
+  return result;
 }
 
 type AdvertenciaRow = {
@@ -282,4 +358,95 @@ export async function listPosTurnos(): Promise<PosTurnoResumen[]> {
     throw error;
   }
   return ((data ?? []) as TurnoRow[]).map(mapTurno);
+}
+
+export type QuickcoinsCuenta = {
+  telefono: string;
+  nombre: string;
+  saldo: number;
+  encontrado: boolean;
+  pesosPorCoin: number;
+  valorCoin: number;
+  minimoCanje: number;
+};
+
+function phoneDigits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+async function quickcoinsRules(): Promise<{ pesosPorCoin: number; valorCoin: number; minimoCanje: number }> {
+  const fallback = {
+    pesosPorCoin: QUICKCOINS_PESOS_POR_COIN,
+    valorCoin: QUICKCOINS_VALOR_COIN,
+    minimoCanje: QUICKCOINS_MINIMO_CANJE,
+  };
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("quickcoins_reglas")
+    .select("pesos_por_coin, valor_coin, minimo_canje")
+    .eq("id", 1)
+    .maybeSingle();
+  if (error || !data) return fallback;
+  const row = data as { pesos_por_coin?: number | string; valor_coin?: number | string; minimo_canje?: number };
+  return {
+    pesosPorCoin: toMoney(row.pesos_por_coin) || fallback.pesosPorCoin,
+    valorCoin: toMoney(row.valor_coin) || fallback.valorCoin,
+    minimoCanje: Number(row.minimo_canje) || fallback.minimoCanje,
+  };
+}
+
+export async function lookupQuickcoins(telefonoRaw: string): Promise<QuickcoinsCuenta> {
+  const telefono = phoneDigits(telefonoRaw);
+  const rules = await quickcoinsRules();
+  if (telefono.length < 10 || telefono.length > 15) {
+    throw new Error("Teléfono de QuickCoins inválido");
+  }
+  const supabase = getSupabaseAdminClient();
+  const customer = await supabase
+    .from("customers")
+    .select("id, nombre, apellido")
+    .eq("phone_number", telefono)
+    .maybeSingle();
+  if (customer.error) throw customer.error;
+  if (!customer.data) {
+    return { telefono, nombre: "", saldo: 0, encontrado: false, ...rules };
+  }
+  const row = customer.data as { id: string; nombre: string; apellido: string };
+  const moves = await supabase.from("quickcoins_movimientos").select("tipo, puntos").eq("customer_id", row.id);
+  if (moves.error) {
+    if (missingDbObject(moves.error)) {
+      return {
+        telefono,
+        nombre: `${row.nombre} ${row.apellido}`.replace(" -", "").trim(),
+        saldo: 0,
+        encontrado: true,
+        ...rules,
+      };
+    }
+    throw moves.error;
+  }
+  const saldo = ((moves.data ?? []) as Array<{ tipo: string; puntos: number }>).reduce((sum, move) => {
+    return sum + (move.tipo === "canjear" ? -Number(move.puntos) : Number(move.puntos));
+  }, 0);
+  const apellido = row.apellido === "-" ? "" : row.apellido;
+  return {
+    telefono,
+    nombre: `${row.nombre} ${apellido}`.trim(),
+    saldo,
+    encontrado: true,
+    ...rules,
+  };
+}
+
+export async function crearClienteQuickcoins(telefonoRaw: string, nombreRaw: string): Promise<QuickcoinsCuenta> {
+  const telefono = phoneDigits(telefonoRaw);
+  const nombre = nombreRaw.trim().slice(0, 80);
+  if (!nombre) throw new Error("Escribe el nombre");
+  if (telefono.length < 10 || telefono.length > 15) throw new Error("Teléfono de QuickCoins inválido");
+  const supabase = getSupabaseAdminClient();
+  const existing = await lookupQuickcoins(telefono);
+  if (existing.encontrado) return existing;
+  const inserted = await supabase.from("customers").insert({ phone_number: telefono, nombre, apellido: "-" }).select("id").maybeSingle();
+  if (inserted.error && !/duplicate|unique/i.test(inserted.error.message ?? "")) throw inserted.error;
+  return lookupQuickcoins(telefono);
 }

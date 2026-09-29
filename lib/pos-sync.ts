@@ -1,6 +1,7 @@
 import {
   countPendingPosWork,
   markSaleAttempt,
+  markSaleCoins,
   markSaleSynced,
   markShiftAttempt,
   markShiftCloseSynced,
@@ -10,6 +11,7 @@ import {
   pendingOpenShifts,
   saveServerCatalog,
 } from "@/lib/pos-db";
+import { normalizeBarcode } from "@/lib/barcode";
 import { toMoney } from "@/lib/money";
 import type { PosShiftRecord, PosStoredProduct } from "@/lib/pos";
 
@@ -34,6 +36,8 @@ type ProductPayload = {
   fotoUrl?: unknown;
   foto_url?: unknown;
   categoria?: unknown;
+  codigoBarras?: unknown;
+  codigo_barras?: unknown;
   stock?: unknown;
 };
 
@@ -47,6 +51,8 @@ function mapStored(row: ProductPayload): PosStoredProduct | null {
   const fotoRaw = row.fotoUrl ?? row.foto_url;
   const fotoUrl = typeof fotoRaw === "string" && fotoRaw.trim() ? fotoRaw.trim() : null;
   const categoria = typeof row.categoria === "string" ? row.categoria : "";
+  const barcodeRaw = row.codigoBarras ?? row.codigo_barras;
+  const codigoBarras = normalizeBarcode(typeof barcodeRaw === "string" ? barcodeRaw : null);
   let stockBase: number | null = null;
   if (row.stock != null && row.stock !== "") {
     const stock = typeof row.stock === "number" ? row.stock : Number(row.stock);
@@ -61,6 +67,7 @@ function mapStored(row: ProductPayload): PosStoredProduct | null {
     precio: toMoney(row.precio),
     fotoUrl,
     categoria,
+    codigoBarras,
     stockBase,
   };
 }
@@ -195,11 +202,23 @@ export async function syncPendingSales(): Promise<SyncResult> {
             monto_recibido: sale.montoRecibido,
             turno_client_id: sale.turnoClientId ?? null,
             creado_por: sale.cajero ?? null,
+            descuento_ticket: sale.descuentoTicket ?? 0,
+            descuento_total: sale.descuentoTotal ?? 0,
+            quickcoins: sale.quickcoins
+              ? {
+                  telefono: sale.quickcoins.telefono,
+                  nombre: sale.quickcoins.nombre,
+                  canje_puntos: sale.quickcoins.canjePuntos,
+                  ganar_puntos: sale.quickcoins.ganarPuntos,
+                }
+              : null,
             items: sale.items.map((item) => ({
               producto_id: item.productoId,
               nombre: item.nombre,
               cantidad: item.cantidad,
               precio_unitario: item.precioUnitario,
+              precio_lista: item.precioLista ?? item.precioUnitario,
+              descuento: item.descuento ?? 0,
             })),
           });
         } catch {
@@ -218,7 +237,10 @@ export async function syncPendingSales(): Promise<SyncResult> {
           await markSaleAttempt(sale.clientId, lastError);
           break;
         }
-        const body = (await response.json().catch(() => null)) as { stockAdvertencia?: boolean } | null;
+        const body = (await response.json().catch(() => null)) as { stockAdvertencia?: boolean; coinsApplied?: boolean } | null;
+        if (sale.quickcoins) {
+          await markSaleCoins(sale.clientId, body?.coinsApplied ? "sincronizada" : "no_aplica");
+        }
         await markSaleSynced(sale.clientId, Boolean(body?.stockAdvertencia));
         synced += 1;
       }

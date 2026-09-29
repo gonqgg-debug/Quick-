@@ -27,6 +27,12 @@ class PosDatabase extends Dexie {
       shifts: "clientId, estado, abiertoEn",
       meta: "key",
     });
+    this.version(3).stores({
+      products: "id, nombre, categoria, codigoBarras",
+      sales: "clientId, status, createdAt, turnoClientId",
+      shifts: "clientId, estado, abiertoEn",
+      meta: "key",
+    });
   }
 }
 
@@ -175,6 +181,16 @@ export function oldestPendingSale(): Promise<PosSaleDraft | null> {
   return enqueue(async () => {
     const rows = await getPosDb().sales.where("status").equals("pendiente_sync").sortBy("createdAt");
     return rows[0] ?? null;
+  });
+}
+
+export function markSaleCoins(clientId: string, coinsSync: "sincronizada" | "no_aplica"): Promise<void> {
+  return enqueue(async () => {
+    const current = await getPosDb().sales.get(clientId);
+    if (!current?.quickcoins) return;
+    await getPosDb().sales.update(clientId, {
+      quickcoins: { ...current.quickcoins, coinsSync },
+    });
   });
 }
 

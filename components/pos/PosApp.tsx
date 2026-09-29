@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Logo } from "@/components/brand/Logo";
 import { PosCart } from "@/components/pos/PosCart";
 import { PosCheckout } from "@/components/pos/PosCheckout";
+import { PosDiscount } from "@/components/pos/PosDiscount";
+import { PosQuickcoins, type PosCoinsAccount } from "@/components/pos/PosQuickcoins";
 import { PosCloseShift, PosOpenShift } from "@/components/pos/PosShift";
 import { StaffLogin, staffLogout } from "@/components/staff/StaffLogin";
 import {
@@ -18,24 +20,34 @@ import { formatPrice } from "@/lib/money";
 import {
   POS_CATALOG_REFRESH_MS,
   POS_SYNC_INTERVAL_MS,
+  POS_SIN_DESCUENTO,
   addProductToCart,
   buildOpenShift,
   buildSale,
   buildShiftClose,
-  cartTotal,
+  cartAmountDue,
+  centsToMoney,
+  findProductsByBarcode,
   isPosSaleDraft,
   isPosShiftRecord,
+  manualDiscountWithinCap,
   posCategories,
+  priceCart,
+  quickcoinsDiscountCents,
+  setLineDiscount,
   productInitials,
   productMatchesQuery,
   setCartQty,
   stockBadge,
   type CartLine,
+  type PosDescuento,
   type PosMetodoPago,
   type PosProduct,
   type PosSaleDraft,
   type PosShiftRecord,
 } from "@/lib/pos";
+import { looksLikeBarcode } from "@/lib/barcode";
+import { printPosTicket, printTicketInBrowser } from "@/lib/pos-print";
 import { refreshCatalogFromNetwork, syncPendingSales } from "@/lib/pos-sync";
 import { brand, categoryEmoji } from "@/lib/theme";
 
@@ -46,6 +58,8 @@ type SuccessSale = {
   total: number;
   cambio: number | null;
   metodo: PosMetodoPago;
+  sale: PosSaleDraft;
+  printNote: string | null;
 };
 
 export function PosApp() {
@@ -69,6 +83,12 @@ export function PosApp() {
   const [shift, setShift] = useState<PosShiftRecord | null>(null);
   const [closeSales, setCloseSales] = useState<PosSaleDraft[]>([]);
   const [closeOpen, setCloseOpen] = useState(false);
+  const [ticketDiscount, setTicketDiscount] = useState<PosDescuento>(POS_SIN_DESCUENTO);
+  const [discountTarget, setDiscountTarget] = useState<"ticket" | string | null>(null);
+  const [scanNote, setScanNote] = useState<string | null>(null);
+  const [coinsOpen, setCoinsOpen] = useState(false);
+  const [coinsAccount, setCoinsAccount] = useState<PosCoinsAccount | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const reloadLocal = useCallback(async () => {
     const [catalog, queued, open] = await Promise.all([readPosCatalog(), countPendingPosWork(), readOpenShift()]);
@@ -214,7 +234,47 @@ export function PosApp() {
     [products, category, query]
   );
   const units = cart.reduce((sum, line) => sum + line.cantidad, 0);
-  const total = cartTotal(cart);
+  const coinCents = quickcoinsDiscountCents(coinsAccount?.canjePuntos ?? 0);
+  const priced = useMemo(() => priceCart(cart, ticketDiscount, coinCents), [cart, ticketDiscount, coinCents]);
+  const subtotal = "error" in priced ? 0 : centsToMoney(priced.listCents);
+  const descuento = "error" in priced ? 0 : centsToMoney(priced.lineDiscountCents + priced.ticketDiscountCents);
+  const coinsMoney = "error" in priced ? 0 : centsToMoney(priced.coinDiscountCents);
+  const total = cartAmountDue(cart, ticketDiscount, coinCents);
+
+  function applyDiscount(descuento: PosDescuento) {
+    if (discountTarget == null) return;
+    if (discountTarget === "ticket") {
+      if (!manualDiscountWithinCap(cart, descuento)) {
+        setFormError(`El descuento pasa del 20%`);
+        return;
+      }
+      setTicketDiscount(descuento);
+    } else {
+      const next = setLineDiscount(cart, discountTarget, descuento, ticketDiscount);
+      if ("error" in next) {
+        setFormError(next.error);
+        return;
+      }
+      setCart(next);
+    }
+    setFormError(null);
+    setDiscountTarget(null);
+  }
+
+  function onSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    if (!looksLikeBarcode(query)) return;
+    const matches = findProductsByBarcode(products, query);
+    if (matches.length === 1) {
+      addProduct(matches[0]);
+      setScanNote(null);
+    } else {
+      setScanNote(matches.length === 0 ? "No está en el catálogo" : "Hay más de un producto con ese código");
+    }
+    setQuery("");
+    searchRef.current?.focus();
+  }
 
   function addProduct(product: PosProduct) {
     setCart((current) => addProductToCart(current, product));
@@ -304,21 +364,88 @@ export function PosApp() {
       montoRecibido,
       turnoClientId: shift.clientId,
       cajero: shift.abiertoPor,
+      ticket: ticketDiscount,
+      quickcoins: coinsAccount
+        ? {
+            telefono: coinsAccount.telefono,
+            nombre: coinsAccount.nombre,
+            canjePuntos: coinsAccount.canjePuntos,
+            ganarPuntos: 0,
+            descuentoCanje: coinsMoney,
+            coinsSync: "pendiente_sync",
+          }
+        : null,
     });
     if (!isPosSaleDraft(sale)) {
       setFormError(sale.error);
       return;
     }
+    if ((sale.quickcoins?.canjePuntos ?? 0) > 0 && (typeof navigator === "undefined" || !navigator.onLine)) {
+      setFormError("Sin conexión, no se pueden canjear QuickCoins");
+      return;
+    }
     setSaving(true);
     setFormError(null);
     try {
-      const next = await saveLocalSale(sale);
+      let stored = sale;
+      if ((sale.quickcoins?.canjePuntos ?? 0) > 0) {
+        const response = await fetch("/api/pos/venta", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            client_id: sale.clientId,
+            fecha: sale.createdAt,
+            metodo_pago: sale.metodoPago,
+            monto_recibido: sale.montoRecibido,
+            turno_client_id: sale.turnoClientId,
+            creado_por: sale.cajero,
+            descuento_ticket: sale.descuentoTicket ?? 0,
+            descuento_total: sale.descuentoTotal ?? 0,
+            quickcoins: {
+              telefono: sale.quickcoins?.telefono,
+              nombre: sale.quickcoins?.nombre,
+              canje_puntos: sale.quickcoins?.canjePuntos,
+              ganar_puntos: sale.quickcoins?.ganarPuntos,
+            },
+            items: sale.items.map((item) => ({
+              producto_id: item.productoId,
+              nombre: item.nombre,
+              cantidad: item.cantidad,
+              precio_unitario: item.precioUnitario,
+              precio_lista: item.precioLista,
+              descuento: item.descuento ?? 0,
+            })),
+          }),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string; stockAdvertencia?: boolean } | null;
+        if (!response.ok) {
+          setFormError(body?.error || "No pudimos canjear QuickCoins");
+          return;
+        }
+        stored = {
+          ...sale,
+          status: "sincronizada",
+          stockAdvertencia: Boolean(body?.stockAdvertencia),
+          quickcoins: sale.quickcoins ? { ...sale.quickcoins, coinsSync: "sincronizada" } : null,
+        };
+      }
+      const next = await saveLocalSale(stored);
       setProducts(next);
       setPending(await countPendingPosWork());
       setCart([]);
+      setTicketDiscount(POS_SIN_DESCUENTO);
+      setCoinsAccount(null);
       setCheckoutOpen(false);
       setCartOpen(false);
-      setSuccess({ total: sale.total, cambio: sale.cambio, metodo: sale.metodoPago });
+      const printed = await printPosTicket(stored, { openDrawer: stored.metodoPago === "efectivo", request: false });
+      setSuccess({
+        total: stored.total,
+        cambio: stored.cambio,
+        metodo: stored.metodoPago,
+        sale: stored,
+        printNote: printed.ok ? null : printed.message,
+      });
       void runSync();
     } catch {
       setFormError("No pudimos guardar la venta en este dispositivo.");
@@ -398,9 +525,14 @@ export function PosApp() {
         <section className="flex min-w-0 flex-1 flex-col">
           <div className="shrink-0 space-y-2 px-3 pb-2 pt-3">
             <input
+              ref={searchRef}
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar producto"
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setScanNote(null);
+              }}
+              onKeyDown={onSearchKeyDown}
+              placeholder="Buscar producto o escanear"
               aria-label="Buscar producto"
               className="h-12 w-full rounded-2xl border bg-white px-4 text-base font-medium outline-none"
               style={{ borderColor: "#D1D5DB" }}
@@ -425,6 +557,7 @@ export function PosApp() {
                 );
               })}
             </div>
+            {scanNote ? <p className="text-sm font-bold" style={{ color: brand.error }}>{scanNote}</p> : null}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-28 lg:pb-4">
             {visible.length === 0 ? (
@@ -499,10 +632,20 @@ export function PosApp() {
         <aside className="hidden h-full w-[34%] min-w-[320px] max-w-[440px] shrink-0 border-l lg:block" style={{ borderColor: "#E5E7EB" }}>
           <PosCart
             lines={cart}
+            subtotal={subtotal}
+            descuento={descuento}
+            coins={coinsMoney}
+            total={total}
             onQty={(productoId, cantidad) => setCart((current) => setCartQty(current, productoId, cantidad))}
             onRemove={(productoId) => setCart((current) => current.filter((line) => line.productoId !== productoId))}
-            onClear={() => setCart([])}
+            onClear={() => {
+              setCart([]);
+              setTicketDiscount(POS_SIN_DESCUENTO);
+            }}
             onCheckout={() => setCheckoutOpen(true)}
+            onDiscountLine={(productoId) => setDiscountTarget(productoId)}
+            onDiscountTicket={() => setDiscountTarget("ticket")}
+            onQuickcoins={() => setCoinsOpen(true)}
           />
         </aside>
       </div>
@@ -525,13 +668,23 @@ export function PosApp() {
           <div className="relative flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-3xl bg-white">
             <PosCart
               lines={cart}
+              subtotal={subtotal}
+              descuento={descuento}
+              coins={coinsMoney}
+              total={total}
               onQty={(productoId, cantidad) => setCart((current) => setCartQty(current, productoId, cantidad))}
               onRemove={(productoId) => setCart((current) => current.filter((line) => line.productoId !== productoId))}
-              onClear={() => setCart([])}
+              onClear={() => {
+                setCart([]);
+                setTicketDiscount(POS_SIN_DESCUENTO);
+              }}
               onCheckout={() => {
                 setCartOpen(false);
                 setCheckoutOpen(true);
               }}
+              onDiscountLine={(productoId) => setDiscountTarget(productoId)}
+              onDiscountTicket={() => setDiscountTarget("ticket")}
+              onQuickcoins={() => setCoinsOpen(true)}
             />
           </div>
         </div>
@@ -545,6 +698,33 @@ export function PosApp() {
           busy={saving}
           onClose={() => setCloseOpen(false)}
           onConfirm={(contado, notas) => void confirmClose(contado, notas)}
+        />
+      ) : null}
+
+      {coinsOpen ? (
+        <PosQuickcoins
+          online={online}
+          lines={cart}
+          ticket={ticketDiscount}
+          current={coinsAccount}
+          onClose={() => setCoinsOpen(false)}
+          onApply={(account) => {
+            if (account && account.canjePuntos > 0 && !online) {
+              setFormError("Sin conexión, no se pueden canjear QuickCoins");
+              return;
+            }
+            setCoinsAccount(account);
+            setCoinsOpen(false);
+            setFormError(null);
+          }}
+        />
+      ) : null}
+
+      {discountTarget != null ? (
+        <PosDiscount
+          title={discountTarget === "ticket" ? "Descuento del ticket" : "Descuento de línea"}
+          onClose={() => setDiscountTarget(null)}
+          onApply={applyDiscount}
         />
       ) : null}
 
@@ -581,10 +761,33 @@ export function PosApp() {
                 Cambio {formatPrice(success.cambio)}
               </p>
             ) : null}
+            {success.printNote ? <p className="mt-3 text-sm font-semibold text-brand-muted">{success.printNote}</p> : null}
+            <button
+              type="button"
+              onClick={() =>
+                void printPosTicket(success.sale, {
+                  openDrawer: success.sale.metodoPago === "efectivo",
+                  request: true,
+                }).then((result) => {
+                  setSuccess((current) => (current ? { ...current, printNote: result.ok ? "Ticket enviado" : result.message } : current));
+                })
+              }
+              className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl text-lg font-extrabold text-white"
+              style={{ backgroundColor: brand.navy }}
+            >
+              {success.sale.metodoPago === "efectivo" ? "Imprimir y abrir caja" : "Reimprimir"}
+            </button>
+            <button
+              type="button"
+              onClick={() => printTicketInBrowser(success.sale)}
+              className="mt-2 flex h-11 w-full items-center justify-center text-sm font-bold text-brand-muted"
+            >
+              Imprimir en este navegador
+            </button>
             <button
               type="button"
               onClick={() => setSuccess(null)}
-              className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl text-lg font-extrabold text-white"
+              className="mt-2 flex h-14 w-full items-center justify-center rounded-2xl text-lg font-extrabold text-white"
               style={{ backgroundColor: brand.green }}
             >
               Nueva venta
