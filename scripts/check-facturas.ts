@@ -1,4 +1,4 @@
-import { documentosDesdeValor } from "../lib/factura-documentos";
+import { documentosDesdeValor } from "../lib/contabilidad/factura-documentos";
 import {
   FACTURA_ESTADOS,
   FACTURAS_AGENT_ENDPOINTS,
@@ -8,7 +8,7 @@ import {
   leerLinea,
   referenciaFactura,
   resolverUnidades,
-} from "../lib/facturas-shared";
+} from "../lib/contabilidad/facturas-shared";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {

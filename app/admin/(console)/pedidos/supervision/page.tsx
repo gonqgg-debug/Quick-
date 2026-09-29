@@ -1,12 +1,5 @@
-import { AdminPedidosSupervision } from "@/components/admin/AdminPedidosSupervision";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export const metadata = {
-  title: "Supervisión | Administración",
-  description: "Cola en vivo y métricas del día de pedidos",
-};
-
-export default function AdminPedidosSupervisionPage() {
-  return <AdminPedidosSupervision />;
+export default function Page() {
+  redirect("/admin/operacion/supervision");
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAgentApi } from "@/lib/agent-auth";
-import { loadCompraCaptura } from "@/lib/compra-captura";
+import { loadCompraCaptura } from "@/lib/contabilidad/compra-captura";
 
 export const dynamic = "force-dynamic";
 

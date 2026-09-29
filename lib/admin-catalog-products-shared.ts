@@ -10,6 +10,10 @@ export type AdminCatalogProduct = {
   codigoBarras: string | null;
   fotoUrl: string | null;
   activo: boolean;
+  existencia: number | null;
+  costoPromedio: number | null;
+  ultimoCosto: number | null;
+  puntoReorden: number | null;
 };
 
 export type AdminCatalogProductFilters = {

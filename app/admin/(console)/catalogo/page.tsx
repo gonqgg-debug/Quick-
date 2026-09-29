@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function AdminCatalogoPage() {
-  redirect("/admin/catalogo/productos");
+export default function Page() {
+  redirect("/admin/inventario/productos");
 }

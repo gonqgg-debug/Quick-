@@ -33,7 +33,7 @@ export type AdminNavItem = {
   children?: AdminNavChild[];
 };
 
-export type AdminNavSectionId = "pedidos" | "clientes" | "expansion" | "catalogo" | "finanzas";
+export type AdminNavSectionId = "operacion" | "clientes" | "expansion" | "inventario" | "contabilidad";
 
 export type AdminNavSection = {
   id: AdminNavSectionId;
@@ -49,35 +49,38 @@ export const ADMIN_HOME: AdminNavItem = {
 };
 
 export const ADMIN_PARAMETROS: AdminNavItem = {
-  href: "/admin/parametros",
+  href: "/admin/contabilidad/parametros",
   label: "Parámetros",
   icon: "settings",
   status: "live",
 };
 
 export const ADMIN_VENTAS_HISTORICO: AdminNavItem = {
-  href: "/admin/ventas/historico",
+  href: "/admin/operacion/ventas/historico",
   label: "Histórico",
   icon: "pnl",
   status: "live",
 };
 
 export const ADMIN_CAJA: AdminNavItem = {
-  href: "/admin/caja",
+  href: "/admin/operacion/caja",
   label: "Caja",
   icon: "cash",
   status: "live",
   children: [
-    { href: "/admin/caja/balances", label: "Balances", icon: "cash" },
-    { href: "/admin/caja/recuento", label: "Recuento", icon: "cash" },
-    { href: "/admin/caja/turnos", label: "Turnos", icon: "history" },
-    { href: "/admin/caja/ledger", label: "Ledger", icon: "purchases" },
+    { href: "/admin/operacion/caja/balances", label: "Balances", icon: "cash" },
+    { href: "/admin/operacion/caja/recuento", label: "Recuento", icon: "cash" },
+    { href: "/admin/operacion/caja/turnos", label: "Turnos", icon: "history" },
+    { href: "/admin/operacion/caja/ledger", label: "Ledger", icon: "purchases" },
   ],
 };
 
-export const ADMIN_PEDIDOS_NAV: AdminNavItem[] = [
-  { href: "/admin/pedidos/supervision", label: "Supervisión", icon: "goals", status: "live" },
-  { href: "/admin/historial", label: "Historial de Delivery", icon: "history", status: "live" },
+export const ADMIN_OPERACION_NAV: AdminNavItem[] = [
+  { href: "/admin/operacion/supervision", label: "Supervisión", icon: "goals", status: "live" },
+  { href: "/admin/operacion/historial", label: "Historial de Delivery", icon: "history", status: "live" },
+  ADMIN_CAJA,
+  { href: "/admin/operacion/ventas", label: "Ventas del día", icon: "sales", status: "live" },
+  ADMIN_VENTAS_HISTORICO,
 ];
 
 export const ADMIN_CLIENTES_NAV: AdminNavItem[] = [
@@ -89,53 +92,61 @@ export const ADMIN_EXPANSION_NAV: AdminNavItem[] = [
   { href: "/admin/expansion", label: "Pipeline", icon: "goals", status: "live" },
 ];
 
-export const ADMIN_CATALOGO_NAV: AdminNavItem[] = [
-  { href: "/admin/catalogo/productos", label: "Productos", icon: "products", status: "live" },
-  { href: "/admin/catalogo/importar", label: "Importar", icon: "import", status: "live" },
-  { href: "/admin/catalogo/imagenes", label: "Imágenes", icon: "images", status: "live" },
-  { href: "/admin/catalogo/solicitudes", label: "Solicitudes", icon: "requests", status: "live" },
+export const ADMIN_INVENTARIO_NAV: AdminNavItem[] = [
+  {
+    href: "/admin/inventario/productos",
+    label: "Productos",
+    icon: "products",
+    status: "live",
+    children: [
+      { href: "/admin/inventario/productos", label: "Lista", icon: "products" },
+      { href: "/admin/inventario/importar", label: "Importar", icon: "import" },
+      { href: "/admin/inventario/imagenes", label: "Imágenes", icon: "images" },
+      { href: "/admin/inventario/solicitudes", label: "Solicitudes", icon: "requests" },
+    ],
+  },
+  { href: "/admin/inventario/existencias", label: "Existencias", icon: "products", status: "live" },
+  { href: "/admin/inventario/movimientos", label: "Movimientos", icon: "history", status: "live" },
+  { href: "/admin/inventario/conteos", label: "Conteos", icon: "cash", status: "live" },
+  { href: "/admin/inventario/facturas", label: "Facturas", icon: "invoices", status: "live" },
 ];
 
 export const ADMIN_REPORTE: AdminNavItem = {
-  href: "/admin/reporte",
+  href: "/admin/contabilidad/reporte",
   label: "Reporte",
   icon: "report",
   status: "live",
 };
 
 export const ADMIN_REPORTE_CONTABLE: AdminNavItem = {
-  href: "/admin/reporte/contable",
-  label: "Contable",
+  href: "/admin/contabilidad/libro",
+  label: "Libro contable",
   icon: "report",
   status: "live",
 };
 
-export const ADMIN_FINANZAS_NAV: AdminNavItem[] = [
+export const ADMIN_CONTABILIDAD_NAV: AdminNavItem[] = [
+  { href: "/admin/contabilidad/compras", label: "Cuentas por pagar", icon: "purchases", status: "live" },
+  { href: "/admin/contabilidad/proveedores", label: "Proveedores", icon: "suppliers", status: "live" },
   ADMIN_REPORTE,
   ADMIN_REPORTE_CONTABLE,
-  ADMIN_CAJA,
-  { href: "/admin/ventas", label: "Ventas", icon: "sales", status: "live" },
-  ADMIN_VENTAS_HISTORICO,
-  { href: "/admin/compras", label: "Compras", icon: "purchases", status: "live" },
-  { href: "/admin/facturas", label: "Facturas", icon: "invoices", status: "live" },
-  { href: "/admin/proveedores", label: "Proveedores", icon: "suppliers", status: "live" },
   ADMIN_PARAMETROS,
 ];
 
 /** Live admin links, home first. Flat list of every routed item. */
 export const ADMIN_NAV: AdminNavItem[] = [
   ADMIN_HOME,
-  ...ADMIN_PEDIDOS_NAV,
+  ...ADMIN_OPERACION_NAV,
   ...ADMIN_CLIENTES_NAV,
   ...ADMIN_EXPANSION_NAV,
-  ...ADMIN_CATALOGO_NAV,
-  ...ADMIN_FINANZAS_NAV,
+  ...ADMIN_INVENTARIO_NAV,
+  ...ADMIN_CONTABILIDAD_NAV,
 ];
 
 export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
-  { id: "pedidos", label: "Pedidos", items: ADMIN_PEDIDOS_NAV },
+  { id: "operacion", label: "Operación", items: ADMIN_OPERACION_NAV },
   { id: "clientes", label: "Clientes", items: ADMIN_CLIENTES_NAV },
   { id: "expansion", label: "Expansión", items: ADMIN_EXPANSION_NAV },
-  { id: "catalogo", label: "Catálogo", items: ADMIN_CATALOGO_NAV },
-  { id: "finanzas", label: "Finanzas", items: ADMIN_FINANZAS_NAV },
+  { id: "inventario", label: "Inventario", items: ADMIN_INVENTARIO_NAV },
+  { id: "contabilidad", label: "Contabilidad", items: ADMIN_CONTABILIDAD_NAV },
 ];

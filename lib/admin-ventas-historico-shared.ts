@@ -1,4 +1,4 @@
-import { isMonthKey, monthStartFromInput } from "@/lib/admin-parametros-shared";
+import { isMonthKey, monthStartFromInput } from "@/lib/contabilidad/parametros-shared";
 
 export type MetaMesNivel = "ok" | "cuidado" | "bajo";
 

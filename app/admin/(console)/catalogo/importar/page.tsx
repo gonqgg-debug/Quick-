@@ -1,12 +1,5 @@
-import { AdminCatalogImport } from "@/components/admin/AdminCatalogImport";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export const metadata = {
-  title: "Importar catálogo | Administración",
-  description: "Importar productos desde Excel o CSV",
-};
-
-export default function AdminCatalogImportPage() {
-  return <AdminCatalogImport />;
+export default function Page() {
+  redirect("/admin/inventario/importar");
 }

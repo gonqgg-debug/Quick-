@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAgentApi } from "@/lib/agent-auth";
-import { compraFailure, createCompra } from "@/lib/admin-compras";
+import { compraFailure, createCompra } from "@/lib/contabilidad/compras";
 import { listAgentCompras, parseAgentRange } from "@/lib/agent-read";
-import { readCompraBody } from "@/lib/compra-request";
+import { readCompraBody } from "@/lib/contabilidad/compra-request";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;

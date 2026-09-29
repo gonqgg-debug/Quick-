@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
-import { loadReporteContable } from "@/lib/admin-reporte-contable";
-import { parseReporteMesParam } from "@/lib/admin-reporte-shared";
+import { loadReporteContable } from "@/lib/contabilidad/reporte-contable";
+import { parseReporteMesParam } from "@/lib/contabilidad/reporte-shared";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

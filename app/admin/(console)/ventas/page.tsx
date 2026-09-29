@@ -1,12 +1,5 @@
-import { AdminVentas } from "@/components/admin/AdminVentas";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export const metadata = {
-  title: "Ventas | Administración",
-  description: "Captura diaria de ventas reales",
-};
-
-export default function AdminVentasPage() {
-  return <AdminVentas />;
+export default function Page() {
+  redirect("/admin/operacion/ventas");
 }

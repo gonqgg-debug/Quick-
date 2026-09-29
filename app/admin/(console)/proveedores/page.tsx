@@ -1,12 +1,5 @@
-import { AdminProveedores } from "@/components/admin/AdminProveedores";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export const metadata = {
-  title: "Proveedores | Administración",
-  description: "Proveedores y condiciones de crédito",
-};
-
-export default function AdminProveedoresPage() {
-  return <AdminProveedores />;
+export default function Page() {
+  redirect("/admin/contabilidad/proveedores");
 }

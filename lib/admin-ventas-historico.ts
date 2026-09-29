@@ -1,5 +1,5 @@
-import { getParametrosConfig, listMetasMensuales } from "@/lib/admin-parametros";
-import { formatMetaMes, monthStartFromInput } from "@/lib/admin-parametros-shared";
+import { getParametrosConfig, listMetasMensuales } from "@/lib/contabilidad/parametros";
+import { formatMetaMes, monthStartFromInput } from "@/lib/contabilidad/parametros-shared";
 import {
   nivelPorcentajeMeta,
   parseHistoricoMesParam,

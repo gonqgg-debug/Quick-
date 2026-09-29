@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAgentApi } from "@/lib/agent-auth";
-import { loadReporteContable } from "@/lib/admin-reporte-contable";
+import { loadReporteContable } from "@/lib/contabilidad/reporte-contable";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

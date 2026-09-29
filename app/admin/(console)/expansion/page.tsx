@@ -1,4 +1,4 @@
-import { AdminExpansion } from "@/components/admin/AdminExpansion";
+import { AdminExpansion } from "@/components/admin/expansion/AdminExpansion";
 
 export const dynamic = "force-dynamic";
 

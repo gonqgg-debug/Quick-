@@ -1,10 +1,5 @@
-export const dynamic = "force-dynamic";
+import { redirect } from "next/navigation";
 
-export const metadata = {
-  title: "Recuento de caja | Administración",
-  description: "Calculadora de billetes contra el saldo esperado",
-};
-
-export default function AdminCajaRecuentoPage() {
-  return null;
+export default function Page() {
+  redirect("/admin/operacion/caja/recuento");
 }

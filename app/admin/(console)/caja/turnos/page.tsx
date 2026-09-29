@@ -1,12 +1,5 @@
-import { AdminCajaTurnos } from "@/components/admin/AdminCajaTurnos";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export const metadata = {
-  title: "Turnos de caja | Administración",
-  description: "Cierres de turno y diferencias contra el sistema",
-};
-
-export default function AdminCajaTurnosPage() {
-  return <AdminCajaTurnos />;
+export default function Page() {
+  redirect("/admin/operacion/caja/turnos");
 }

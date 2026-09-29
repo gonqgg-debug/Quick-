@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
-import { getParametrosConfig, parseParametrosPatch, updateParametrosConfig } from "@/lib/admin-parametros";
+import { getParametrosConfig, parseParametrosPatch, updateParametrosConfig } from "@/lib/contabilidad/parametros";
 
 export const dynamic = "force-dynamic";
 

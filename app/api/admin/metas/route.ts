@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
-import { createMetaMensual, listMetasMensuales, parseMetaInput } from "@/lib/admin-parametros";
+import { createMetaMensual, listMetasMensuales, parseMetaInput } from "@/lib/contabilidad/parametros";
 
 export const dynamic = "force-dynamic";
 

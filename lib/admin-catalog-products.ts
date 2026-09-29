@@ -50,6 +50,10 @@ function mapRow(row: {
     codigoBarras: row.codigo_barras ? String(row.codigo_barras) : null,
     fotoUrl: row.foto_url ? String(row.foto_url) : null,
     activo: Boolean(row.activo),
+    existencia: null,
+    costoPromedio: null,
+    ultimoCosto: null,
+    puntoReorden: null,
   };
 }
 
