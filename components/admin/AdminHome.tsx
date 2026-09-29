@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { AdminDashboard } from "@/components/admin/AdminDashboard";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { AdminDashboardData } from "@/lib/admin-dashboard-shared";
-import { brand } from "@/lib/theme";
 
 type AdminHomeProps = {
   greetingName: string;
@@ -27,7 +30,6 @@ export function AdminHome({ greetingName }: AdminHomeProps) {
   const [session, setSession] = useState<TestSession | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,7 +54,9 @@ export function AdminHome({ greetingName }: AdminHomeProps) {
         }
       } catch (loadError) {
         if (!cancelled) {
-          setDashboardError(loadError instanceof Error ? loadError.message : "No pudimos cargar el dashboard");
+          const message = loadError instanceof Error ? loadError.message : "No pudimos cargar el dashboard";
+          setDashboardError(message);
+          toast.error(message);
         }
       } finally {
         if (!cancelled) {
@@ -67,7 +71,6 @@ export function AdminHome({ greetingName }: AdminHomeProps) {
 
   async function generateLink() {
     setBusy(true);
-    setError(null);
     setCopied(false);
     try {
       const response = await fetch("/api/admin/sesiones-prueba", {
@@ -87,7 +90,7 @@ export function AdminHome({ greetingName }: AdminHomeProps) {
       }
       setSession({ sessionId: body.sessionId, url: body.url });
     } catch (generateError) {
-      setError(generateError instanceof Error ? generateError.message : "No pudimos generar el link");
+      toast.error(generateError instanceof Error ? generateError.message : "No pudimos generar el link");
     } finally {
       setBusy(false);
     }
@@ -100,28 +103,21 @@ export function AdminHome({ greetingName }: AdminHomeProps) {
     try {
       await navigator.clipboard.writeText(session.url);
       setCopied(true);
+      toast.success("Link copiado");
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
-      setError("No pudimos copiar el link");
+      toast.error("No pudimos copiar el link");
     }
   }
 
   return (
     <div className="mx-auto max-w-6xl">
-      <p className="text-xs font-medium uppercase tracking-wide" style={{ color: "#6B7280" }}>
-        Hoy
-      </p>
-      <h1 className="mt-1 text-2xl font-semibold" style={{ color: "#111827" }}>
-        Hola, {greetingName}
-      </h1>
-      {dashboard ? (
-        <p className="mt-1 text-sm" style={{ color: "#6B7280" }}>
-          {dashboard.mesActivo}
-        </p>
-      ) : null}
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Hoy</p>
+      <h1 className="mt-1 text-2xl font-semibold text-foreground">Hola, {greetingName}</h1>
+      {dashboard ? <p className="mt-1 text-sm text-muted-foreground">{dashboard.mesActivo}</p> : null}
 
       {dashboardError ? (
-        <p className="mt-4 rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-sm" style={{ color: brand.error }}>
+        <p className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {dashboardError}
         </p>
       ) : null}
@@ -129,11 +125,9 @@ export function AdminHome({ greetingName }: AdminHomeProps) {
       {dashboardLoading ? (
         <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
           {Array.from({ length: 10 }, (_, index) => (
-            <div
+            <Skeleton
               key={index}
-              className={`h-24 animate-pulse rounded-lg bg-gray-100 ${
-                index >= 8 ? "col-span-2 md:col-span-3 lg:col-span-2" : ""
-              }`}
+              className={`h-24 rounded-lg bg-muted ${index >= 8 ? "col-span-2 md:col-span-3 lg:col-span-2" : ""}`}
             />
           ))}
         </div>
@@ -141,54 +135,42 @@ export function AdminHome({ greetingName }: AdminHomeProps) {
         <AdminDashboard data={dashboard} />
       ) : null}
 
-      <section className="mt-6 rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-sm">
-        <h2 className="text-base font-semibold" style={{ color: "#111827" }}>
-          Herramientas rápidas
-        </h2>
-        <p className="mt-1 text-sm" style={{ color: "#6B7280" }}>
-          Genera un catálogo como si un cliente lo pidiera por WhatsApp, marcado como prueba.
-        </p>
-        <button
-          type="button"
-          onClick={() => void generateLink()}
-          disabled={busy}
-          className="mt-4 rounded-md px-4 text-sm font-medium text-white disabled:opacity-60"
-          style={{ backgroundColor: "#111827", minHeight: 40, minWidth: 200 }}
-        >
-          {busy ? "Generando..." : "Generar link de prueba"}
-        </button>
+      <Card className="mt-6 shadow-sm">
+        <CardHeader className="space-y-1 p-5 pb-0">
+          <CardTitle className="text-base font-semibold">Herramientas rápidas</CardTitle>
+          <CardDescription>
+            Genera un catálogo como si un cliente lo pidiera por WhatsApp, marcado como prueba.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-5 pt-4">
+          <Button
+            type="button"
+            variant="default"
+            onClick={() => void generateLink()}
+            disabled={busy}
+            className="h-10 min-w-[200px]"
+          >
+            {busy ? "Generando..." : "Generar link de prueba"}
+          </Button>
 
-        {error ? (
-          <p className="mt-3 rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-sm" style={{ color: brand.error }}>
-            {error}
-          </p>
-        ) : null}
-
-        {session ? (
-          <div className="mt-4 rounded-lg border border-[#E5E7EB] px-3 py-3">
-            <p className="text-xs font-medium uppercase tracking-wide" style={{ color: "#6B7280" }}>
-              Link generado
-            </p>
-            <a
-              href={session.url}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-1 block break-all text-sm font-medium"
-              style={{ color: "#111827" }}
-            >
-              {displayUrl(session.url)}
-            </a>
-            <button
-              type="button"
-              onClick={() => void copyLink()}
-              className="mt-3 rounded-md border border-[#E5E7EB] bg-white px-4 text-sm font-medium"
-              style={{ minHeight: 36, color: "#111827" }}
-            >
-              {copied ? "Copiado" : "Copiar"}
-            </button>
-          </div>
-        ) : null}
-      </section>
+          {session ? (
+            <div className="mt-4 rounded-lg border border-border px-3 py-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Link generado</p>
+              <a
+                href={session.url}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 block break-all text-sm font-medium text-foreground"
+              >
+                {displayUrl(session.url)}
+              </a>
+              <Button type="button" variant="outline" onClick={() => void copyLink()} className="mt-3 h-9">
+                {copied ? "Copiado" : "Copiar"}
+              </Button>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
     </div>
   );
 }

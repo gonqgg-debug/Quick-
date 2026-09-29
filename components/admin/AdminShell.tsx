@@ -14,6 +14,7 @@ import {
   type AdminNavSectionId,
 } from "@/lib/admin-nav";
 import { PRODUCT_REQUESTS_CHANGED_EVENT } from "@/lib/product-requests-shared";
+import { Toaster } from "@/components/ui/sonner";
 import { brand } from "@/lib/theme";
 
 type AdminShellProps = {
@@ -305,6 +306,7 @@ export function AdminShell({ email, children }: AdminShellProps) {
           inert={!menuOpen}
         />
       </div>
+      <Toaster theme="light" />
     </div>
   );
 }
