@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
 import {
   addProductToCart,
+  cartAmountDue,
+  findProductsByBarcode,
+  manualDiscountWithinCap,
+  priceCart,
+  quickcoinsEarn,
+  setLineDiscount,
   buildSale,
   cartTotal,
   cashChangeAmount,
+  moneyCents,
+  splitItbis,
   isPosSaleDraft,
   parsePosVentaInput,
   pendingQtyByProduct,
@@ -30,6 +38,7 @@ const product: PosStoredProduct = {
   precio: 35,
   fotoUrl: null,
   categoria: "Bebidas",
+  codigoBarras: "7501234567890",
   stockBase: 5,
 };
 
@@ -175,5 +184,29 @@ const short = parsePosVentaInput({
   items: [{ producto_id: product.id, cantidad: 1, precio_unitario: 35 }],
 });
 assert.equal(short.ok, false);
+
+const discounted = setLineDiscount(
+  [{ productoId: product.id, nombre: product.nombre, precioUnitario: 100, cantidad: 1 }],
+  product.id,
+  { tipo: "porcentaje", valor: 10 },
+  { tipo: "ninguno" }
+);
+assert.ok(Array.isArray(discounted));
+if (Array.isArray(discounted)) {
+  assert.equal(cartAmountDue(discounted, { tipo: "ninguno" }), 90);
+  assert.equal(manualDiscountWithinCap(discounted, { tipo: "porcentaje", valor: 20 }), false);
+  const priced = priceCart(discounted, { tipo: "ninguno" }, 0);
+  assert.ok(!("error" in priced));
+}
+assert.equal(findProductsByBarcode([product], "7501234567890").length, 1);
+assert.equal(findProductsByBarcode([product], "cafe").length, 0);
+assert.equal(quickcoinsEarn(10000), 10);
+assert.equal(quickcoinsEarn(900), 0);
+const incluido = splitItbis(118);
+assert.equal(incluido.base, 100);
+assert.equal(incluido.itbis, 18);
+assert.equal(incluido.total, 118);
+const agua = splitItbis(35);
+assert.equal(moneyCents(agua.base) + moneyCents(agua.itbis), moneyCents(35));
 
 console.log("pos logic ok");
