@@ -37,6 +37,7 @@ export const CAJA_TABS = [
   { href: "/admin/operacion/caja/recuento", label: "Recuento" },
   { href: "/admin/operacion/caja/turnos", label: "Turnos" },
   { href: "/admin/operacion/caja/ledger", label: "Ledger" },
+  { href: "/admin/ventas/pos", label: "Advertencias" },
 ] as const;
 
 export function defaultTurnoPeriodo(now = Date.now()): CajaTurnoPeriodo {

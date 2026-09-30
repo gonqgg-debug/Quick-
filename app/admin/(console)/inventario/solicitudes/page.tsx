@@ -1,4 +1,6 @@
 import { AdminProductRequests } from "@/components/admin/inventario/AdminProductRequests";
+import { AdminPageTabs } from "@/components/admin/shell/AdminPageTabs";
+import { ADMIN_PRODUCTO_TABS } from "@/lib/admin-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -8,5 +10,10 @@ export const metadata = {
 };
 
 export default function AdminCatalogSolicitudesPage() {
-  return <AdminProductRequests />;
+  return (
+    <>
+      <AdminPageTabs label="Productos" tabs={ADMIN_PRODUCTO_TABS} />
+      <AdminProductRequests />
+    </>
+  );
 }

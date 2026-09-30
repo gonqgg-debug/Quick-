@@ -1,4 +1,6 @@
 import { AdminMovimientos } from "@/components/admin/inventario/AdminMovimientos";
+import { AdminPageTabs } from "@/components/admin/shell/AdminPageTabs";
+import { ADMIN_EXISTENCIAS_TABS } from "@/lib/admin-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -8,5 +10,12 @@ export const metadata = {
 };
 
 export default function Page() {
-  return <AdminMovimientos />;
+  return (
+    <>
+      <div className="mx-auto max-w-6xl">
+        <AdminPageTabs label="Existencias" tabs={ADMIN_EXISTENCIAS_TABS} />
+      </div>
+      <AdminMovimientos />
+    </>
+  );
 }

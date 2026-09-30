@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AdminCajaNav } from "@/components/admin/operacion/AdminCajaNav";
+import { AdminPosLink } from "@/components/admin/shell/AdminPageTabs";
 import { formatPrice } from "@/lib/money";
 import { metodoPagoLabel, shiftDifferenceLabel, type PosAdvertencia, type PosTurnoResumen } from "@/lib/pos";
 import { brand } from "@/lib/theme";
@@ -100,8 +102,15 @@ export function AdminPosAdvertencias() {
   }, [loadTurnos]);
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <h1 className="font-display text-2xl font-bold">Caja POS</h1>
+    <div className="mx-auto max-w-6xl">
+      <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Operación</p>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-display text-2xl font-bold">Advertencias</h1>
+        <AdminPosLink />
+      </div>
+      <div className="mt-5">
+        <AdminCajaNav />
+      </div>
       <h2 className="mt-6 font-display text-xl font-bold">Turnos del personal</h2>
       <p className="mt-2 max-w-2xl text-sm text-brand-muted">
         Apertura y cierre de cada caja. El efectivo esperado es el fondo más las ventas en efectivo de ese turno.

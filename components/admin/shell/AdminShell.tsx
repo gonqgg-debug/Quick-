@@ -8,7 +8,7 @@ import { createAdminBrowserClient } from "@/lib/admin-browser";
 import {
   ADMIN_HOME,
   ADMIN_NAV_SECTIONS,
-  type AdminNavChild,
+  navItemActive,
   type AdminNavIcon,
   type AdminNavItem,
   type AdminNavSectionId,
@@ -21,32 +21,22 @@ type AdminShellProps = {
   children: React.ReactNode;
 };
 
-type OpenState = Record<AdminNavSectionId | "caja" | "productos", boolean>;
+type OpenState = Record<AdminNavSectionId, boolean>;
 
 const NAV_STORAGE_KEY = "quick-admin-nav-open";
 
-function isActivePath(pathname: string, href: string): boolean {
-  if (href === "/admin" || href === "/admin/operacion/ventas" || href === "/admin/contabilidad/reporte") {
-    return pathname === href;
-  }
-  if (href === "/admin/clientes") {
-    if (pathname.startsWith("/admin/clientes/mensajes-masivos")) {
-      return false;
-    }
-    return pathname === href || pathname.startsWith(`${href}/`);
-  }
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
 function sectionForPath(pathname: string): AdminNavSectionId | null {
+  if (
+    pathname.startsWith("/admin/clientes") ||
+    pathname.startsWith("/admin/expansion") ||
+    pathname.startsWith("/admin/contabilidad/fiscal") ||
+    pathname.startsWith("/admin/contabilidad/parametros") ||
+    pathname.startsWith("/admin/parametros")
+  ) {
+    return "mas";
+  }
   if (pathname.startsWith("/admin/operacion") || pathname.startsWith("/admin/historial") || pathname.startsWith("/admin/pedidos") || pathname.startsWith("/admin/caja") || pathname.startsWith("/admin/ventas")) {
     return "operacion";
-  }
-  if (pathname.startsWith("/admin/clientes")) {
-    return "clientes";
-  }
-  if (pathname.startsWith("/admin/expansion")) {
-    return "expansion";
   }
   if (pathname.startsWith("/admin/inventario") || pathname.startsWith("/admin/catalogo") || pathname.startsWith("/admin/facturas")) {
     return "inventario";
@@ -55,33 +45,24 @@ function sectionForPath(pathname: string): AdminNavSectionId | null {
     pathname.startsWith("/admin/contabilidad") ||
     pathname.startsWith("/admin/reporte") ||
     pathname.startsWith("/admin/compras") ||
-    pathname.startsWith("/admin/proveedores") ||
-    pathname.startsWith("/admin/parametros")
+    pathname.startsWith("/admin/proveedores")
   ) {
     return "contabilidad";
   }
   return null;
 }
 
-function defaultOpen(): OpenState {
+function onlySection(id: AdminNavSectionId | null): OpenState {
   return {
-    operacion: true,
-    clientes: true,
-    expansion: true,
-    inventario: true,
-    contabilidad: true,
-    caja: true,
-    productos: true,
+    operacion: id === "operacion",
+    inventario: id === "inventario",
+    contabilidad: id === "contabilidad",
+    mas: id === "mas",
   };
 }
 
-function readSavedOpen(): Partial<OpenState> | null {
-  try {
-    const raw = window.localStorage.getItem(NAV_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Partial<OpenState>) : null;
-  } catch {
-    return null;
-  }
+function defaultOpen(): OpenState {
+  return onlySection("operacion");
 }
 
 function persistOpen(next: OpenState) {
@@ -138,42 +119,21 @@ export function AdminShell({ email, children }: AdminShellProps) {
   }, []);
 
   useEffect(() => {
-    const saved = readSavedOpen();
-    setOpen((prev) => {
-      const next = { ...prev, ...saved };
-      const section = sectionForPath(pathname);
-      if (section) {
-        next[section] = true;
-      }
-      if (pathname.startsWith("/admin/operacion/caja") || pathname.startsWith("/admin/caja")) {
-        next.caja = true;
-      }
-      if (pathname.startsWith("/admin/inventario")) {
-        next.productos = true;
-      }
-      return next;
-    });
-    // Restore collapsed sections once; later navigations only expand the active group.
+    setOpen(onlySection(sectionForPath(pathname) ?? "operacion"));
+    // Open only the section for this page. Later navigations keep a single group open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
+    const section = sectionForPath(pathname);
+    if (!section) {
+      return;
+    }
     setOpen((prev) => {
-      const section = sectionForPath(pathname);
-      const needsCaja = (pathname.startsWith("/admin/operacion/caja") || pathname.startsWith("/admin/caja")) && !prev.caja;
-      if ((!section || prev[section]) && !needsCaja) {
+      if (prev[section] && !Object.entries(prev).some(([key, value]) => key !== section && value)) {
         return prev;
       }
-      const next = { ...prev };
-      if (section) {
-        next[section] = true;
-      }
-      if (pathname.startsWith("/admin/operacion/caja") || pathname.startsWith("/admin/caja")) {
-        next.caja = true;
-      }
-      if (pathname.startsWith("/admin/inventario")) {
-        next.productos = true;
-      }
+      const next = onlySection(section);
       persistOpen(next);
       return next;
     });
@@ -213,9 +173,9 @@ export function AdminShell({ email, children }: AdminShellProps) {
     };
   }, [menuOpen]);
 
-  function toggleOpen(key: keyof OpenState) {
+  function toggleOpen(key: AdminNavSectionId) {
     setOpen((prev) => {
-      const next = { ...prev, [key]: !prev[key] };
+      const next = prev[key] ? onlySection(null) : onlySection(key);
       persistOpen(next);
       return next;
     });
@@ -423,7 +383,7 @@ function AdminNav({
       <LiveItem item={ADMIN_HOME} pathname={pathname} pendingRequests={pendingRequests} onNavigate={onNavigate} />
       {ADMIN_NAV_SECTIONS.map((section) => {
         const expanded = open[section.id];
-        const hasActive = section.items.some((item) => isActivePath(pathname, item.href));
+        const hasActive = section.items.some((item) => navItemActive(pathname, item));
         const sectionDomId = idPrefix ? `${idPrefix}-section-${section.id}` : `nav-section-${section.id}`;
         return (
           <div key={section.id}>
@@ -453,14 +413,6 @@ function AdminNav({
                       item={item}
                       pathname={pathname}
                       pendingRequests={pendingRequests}
-                      nestedOpen={item.href === "/admin/operacion/caja" ? open.caja : item.href === "/admin/inventario/productos" ? open.productos : false}
-                      onToggleNested={
-                        item.href === "/admin/operacion/caja"
-                          ? () => onToggle("caja")
-                          : item.href === "/admin/inventario/productos"
-                            ? () => onToggle("productos")
-                            : undefined
-                      }
                       onNavigate={onNavigate}
                     />
                   ),
@@ -478,97 +430,31 @@ function LiveItem({
   item,
   pathname,
   pendingRequests,
-  nestedOpen = false,
-  onToggleNested,
   onNavigate,
 }: {
   item: AdminNavItem;
   pathname: string;
   pendingRequests: number;
-  nestedOpen?: boolean;
-  onToggleNested?: () => void;
   onNavigate?: () => void;
 }) {
-  const active = isActivePath(pathname, item.href);
-  const hasChildren = Boolean(item.children?.length);
-  const childrenOpen = hasChildren ? nestedOpen : false;
+  const active = navItemActive(pathname, item);
 
-  return (
-    <div>
-      <div className="flex items-center gap-0.5">
-        <Link
-          href={item.children?.[0]?.href ?? item.href}
-          onClick={onNavigate}
-          className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition-colors ${
-            active && !hasChildren ? "" : "hover:bg-black/[0.04]"
-          }`}
-          style={{
-            backgroundColor: active && !hasChildren ? `${brand.green}1F` : "transparent",
-            color: active ? brand.green : brand.ink,
-          }}
-        >
-          <NavGlyph name={item.icon} />
-          <span className="truncate">{item.label}</span>
-          {item.href === "/admin/inventario/solicitudes" ? <PendingBadge count={pendingRequests} /> : null}
-        </Link>
-        {hasChildren ? (
-          <button
-            type="button"
-            onClick={onToggleNested}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-brand-muted transition-colors hover:bg-black/[0.04] hover:text-brand-ink"
-            aria-expanded={childrenOpen}
-            aria-label={childrenOpen ? `Cerrar ${item.label}` : `Abrir ${item.label}`}
-          >
-            <Chevron open={childrenOpen} />
-          </button>
-        ) : null}
-      </div>
-      {hasChildren ? (
-        <Collapse open={childrenOpen}>
-          <div className="mb-1 ml-4 mt-0.5 flex flex-col gap-0.5 border-l pl-2" style={{ borderColor: "#D9DDD6" }}>
-            {item.children?.map((child) => (
-              <ChildLink
-                key={child.href}
-                child={child}
-                pathname={pathname}
-                pendingRequests={pendingRequests}
-                onNavigate={onNavigate}
-              />
-            ))}
-          </div>
-        </Collapse>
-      ) : null}
-    </div>
-  );
-}
-
-function ChildLink({
-  child,
-  pathname,
-  pendingRequests,
-  onNavigate,
-}: {
-  child: AdminNavChild;
-  pathname: string;
-  pendingRequests: number;
-  onNavigate?: () => void;
-}) {
-  const childActive = pathname === child.href || pathname.startsWith(`${child.href}/`);
   return (
     <Link
-      href={child.href}
+      href={item.href}
       onClick={onNavigate}
-      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-semibold transition-colors ${
-        childActive ? "" : "hover:bg-black/[0.04]"
+      className={`flex min-w-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition-colors ${
+        active ? "" : "hover:bg-black/[0.04]"
       }`}
       style={{
-        backgroundColor: childActive ? `${brand.green}1F` : "transparent",
-        color: childActive ? brand.green : brand.muted,
+        backgroundColor: active ? `${brand.green}1F` : "transparent",
+        color: active ? brand.green : brand.ink,
       }}
+      aria-current={active ? "page" : undefined}
     >
-      <NavGlyph name={child.icon} className="h-3.5 w-3.5 shrink-0" />
-      <span>{child.label}</span>
-      {child.href === "/admin/inventario/solicitudes" ? <PendingBadge count={pendingRequests} /> : null}
+      <NavGlyph name={item.icon} />
+      <span className="truncate">{item.label}</span>
+      {item.href === "/admin/inventario/productos" ? <PendingBadge count={pendingRequests} /> : null}
     </Link>
   );
 }

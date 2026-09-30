@@ -1,4 +1,6 @@
 import { AdminReporte } from "@/components/admin/contabilidad/AdminReporte";
+import { AdminPageTabs } from "@/components/admin/shell/AdminPageTabs";
+import { ADMIN_REPORTE_TABS } from "@/lib/admin-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -8,5 +10,12 @@ export const metadata = {
 };
 
 export default function AdminReportePage() {
-  return <AdminReporte />;
+  return (
+    <>
+      <div className="mx-auto max-w-6xl">
+        <AdminPageTabs label="Reportes" tabs={ADMIN_REPORTE_TABS} />
+      </div>
+      <AdminReporte />
+    </>
+  );
 }

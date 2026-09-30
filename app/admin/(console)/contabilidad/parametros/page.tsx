@@ -1,4 +1,6 @@
 import { AdminParametros } from "@/components/admin/contabilidad/AdminParametros";
+import { AdminPageTabs } from "@/components/admin/shell/AdminPageTabs";
+import { ADMIN_AJUSTES_TABS } from "@/lib/admin-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -8,5 +10,12 @@ export const metadata = {
 };
 
 export default function AdminParametrosPage() {
-  return <AdminParametros />;
+  return (
+    <>
+      <div className="mx-auto max-w-5xl">
+        <AdminPageTabs label="Ajustes" tabs={ADMIN_AJUSTES_TABS} />
+      </div>
+      <AdminParametros />
+    </>
+  );
 }

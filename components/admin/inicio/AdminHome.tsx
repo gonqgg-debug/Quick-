@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AdminDashboard } from "@/components/admin/inicio/AdminDashboard";
+import { AdminPosLink } from "@/components/admin/shell/AdminPageTabs";
 import type { AdminDashboardData } from "@/lib/admin-dashboard-shared";
 import { brand } from "@/lib/theme";
 
@@ -148,15 +149,18 @@ export function AdminHome({ greetingName }: AdminHomeProps) {
         <p className="mt-1 text-sm" style={{ color: "#6B7280" }}>
           Genera un catálogo como si un cliente lo pidiera por WhatsApp, marcado como prueba.
         </p>
-        <button
-          type="button"
-          onClick={() => void generateLink()}
-          disabled={busy}
-          className="mt-4 rounded-md px-4 text-sm font-medium text-white disabled:opacity-60"
-          style={{ backgroundColor: "#111827", minHeight: 40, minWidth: 200 }}
-        >
-          {busy ? "Generando..." : "Generar link de prueba"}
-        </button>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <AdminPosLink />
+          <button
+            type="button"
+            onClick={() => void generateLink()}
+            disabled={busy}
+            className="rounded-md px-4 text-sm font-medium text-white disabled:opacity-60"
+            style={{ backgroundColor: "#111827", minHeight: 40, minWidth: 200 }}
+          >
+            {busy ? "Generando..." : "Generar link de prueba"}
+          </button>
+        </div>
 
         {error ? (
           <p className="mt-3 rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-sm" style={{ color: brand.error }}>
