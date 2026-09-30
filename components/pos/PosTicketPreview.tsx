@@ -1,17 +1,29 @@
 "use client";
 
 import { ITBIS_PORCIENTO } from "@/lib/pos";
+import { NEGOCIO_RECIBO_DEFAULT, type NegocioRecibo } from "@/lib/pos-fiscal";
 import { ticketPreview, type TicketSale } from "@/lib/pos-print";
 
-export function PosTicketPreview({ sale }: { sale: TicketSale }) {
-  const ticket = ticketPreview(sale);
+export function PosTicketPreview({
+  sale,
+  negocio = NEGOCIO_RECIBO_DEFAULT,
+}: {
+  sale: TicketSale;
+  negocio?: NegocioRecibo;
+}) {
+  const ticket = ticketPreview(sale, negocio);
   return (
     <article
       className="mx-auto w-full max-w-[280px] rounded-sm bg-white px-4 py-4 text-left font-mono text-[13px] leading-snug text-black shadow-md"
       aria-label="Vista previa del ticket"
     >
-      <p className="text-center text-lg font-extrabold tracking-wide">QUICK!</p>
-      <p className="text-center">Mini Market</p>
+      <div className="text-center">
+        {ticket.header.map((row, index) => (
+          <p key={`${row}-${index}`} className={index === 0 ? "text-lg font-extrabold tracking-wide" : undefined}>
+            {row}
+          </p>
+        ))}
+      </div>
       <p className="mt-2">{ticket.when}</p>
       {ticket.cajero ? <p>Cajero: {ticket.cajero}</p> : null}
       <p className="my-2 border-t border-dashed border-black" />

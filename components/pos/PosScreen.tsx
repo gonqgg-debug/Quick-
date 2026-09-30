@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { StaffLogin } from "@/components/staff/StaffLogin";
 import { PosCart } from "@/components/pos/PosCart";
@@ -10,17 +10,19 @@ import { PosOpenShift } from "@/components/pos/PosOpenShift";
 import { PosPayDialog } from "@/components/pos/PosPayDialog";
 import { PosQuickcoins, type PosCoinsAccount } from "@/components/pos/PosQuickcoins";
 import { PosTicketPreview } from "@/components/pos/PosTicketPreview";
-import { pullCatalog, queuePosSale, syncPendingSales } from "@/components/pos/pos-sync";
+import { pullCatalog, pullFiscal, queuePosSale, syncPendingSales } from "@/components/pos/pos-sync";
 import {
   clearShift,
   countPendingSales,
   readLocalProducts,
+  readSale,
   readShift,
   salesSince,
   saveShift,
   type PosSaleRecord,
   type PosShift,
 } from "@/lib/pos-db";
+import { loadCachedNegocio, NEGOCIO_RECIBO_DEFAULT, type NegocioRecibo } from "@/lib/pos-fiscal";
 import { findProductsByBarcode } from "@/lib/pos";
 import { formatPrice } from "@/lib/money";
 import { printPosTicket, printTicketInBrowser } from "@/lib/pos-print";
@@ -78,6 +80,9 @@ export function PosScreen() {
   const [shiftReady, setShiftReady] = useState(false);
   const [closeShiftOpen, setCloseShiftOpen] = useState(false);
   const [shiftSummary, setShiftSummary] = useState({ count: 0, total: 0 });
+  const [negocio, setNegocio] = useState<NegocioRecibo>(NEGOCIO_RECIBO_DEFAULT);
+  const receiptRef = useRef<PosSaleRecord | null>(null);
+  receiptRef.current = receipt;
 
   const refreshPending = useCallback(async () => {
     setPending(await countPendingSales().catch(() => 0));
@@ -91,6 +96,13 @@ export function PosScreen() {
     }
     setLink("syncing");
     const result = await syncPendingSales();
+    const open = receiptRef.current;
+    if (open) {
+      const saved = await readSale(open.clientId).catch(() => undefined);
+      if (saved?.ncf && saved.ncf !== open.ncf) {
+        setReceipt(saved);
+      }
+    }
     setPending(result.pending);
     if (result.stop === "unauthorized") {
       setLink("unauthorized");
@@ -114,6 +126,10 @@ export function PosScreen() {
       return;
     }
     setGate("ready");
+    const fiscal = await pullFiscal();
+    if (fiscal) {
+      setNegocio(fiscal);
+    }
     if (result.offline || !navigator.onLine) {
       setLink("offline");
     } else if (result.unauthorized) {
@@ -125,6 +141,7 @@ export function PosScreen() {
   }, [refreshPending, syncNow]);
 
   useEffect(() => {
+    setNegocio(loadCachedNegocio());
     void load();
     void readShift()
       .then(setShift)
@@ -258,7 +275,15 @@ export function PosScreen() {
       resetSale();
       setPayOpen(false);
       setCartOpen(false);
-      setReceipt(record);
+      let shown = record;
+      if (typeof navigator !== "undefined" && navigator.onLine) {
+        await syncNow();
+        const saved = await readSale(clientId).catch(() => undefined);
+        if (saved) {
+          shown = saved;
+        }
+      }
+      setReceipt(shown);
       setPrintNote(null);
       await refreshPending();
     } catch (error) {
@@ -266,7 +291,6 @@ export function PosScreen() {
       toast.error("No se pudo guardar la venta en este equipo. Inténtalo otra vez.");
       return;
     }
-    void syncNow();
   }
 
   async function askCloseShift() {
@@ -419,7 +443,7 @@ export function PosScreen() {
             <DialogTitle>Recibo</DialogTitle>
             <DialogDescription>Precios con ITBIS incluido.</DialogDescription>
           </DialogHeader>
-          {receipt ? <PosTicketPreview sale={receipt} /> : null}
+          {receipt ? <PosTicketPreview sale={receipt} negocio={negocio} /> : null}
           {printNote ? <p className="text-center text-sm text-muted-foreground">{printNote}</p> : null}
           <DialogFooter>
             <Button
@@ -428,7 +452,7 @@ export function PosScreen() {
               className="h-12"
               onClick={() => {
                 if (!receipt) return;
-                printTicketInBrowser(receipt);
+                printTicketInBrowser(receipt, negocio);
               }}
             >
               Imprimir aquí
@@ -438,7 +462,7 @@ export function PosScreen() {
               className="h-12"
               onClick={() => {
                 if (!receipt) return;
-                void printPosTicket(receipt, { openDrawer: receipt.metodoPago === "efectivo", request: true }).then((result) => {
+                void printPosTicket(receipt, { openDrawer: receipt.metodoPago === "efectivo", request: true }, negocio).then((result) => {
                   setPrintNote(result.ok ? "Ticket enviado a la impresora" : result.message);
                 });
               }}

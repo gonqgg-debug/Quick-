@@ -1,5 +1,6 @@
 import { formatPrice } from "@/lib/money";
 import { ITBIS_PORCIENTO, metodoPagoLabel, splitItbis } from "@/lib/pos";
+import { fiscalHeaderLines, NEGOCIO_RECIBO_DEFAULT, type NegocioRecibo } from "@/lib/pos-fiscal";
 
 export type TicketSale = {
   createdAt: string;
@@ -17,6 +18,7 @@ export type TicketSale = {
   montoRecibido: number | null;
   cambio: number | null;
   cajero?: string | null;
+  ncf?: string | null;
 };
 
 const STORAGE_KEY = "quick-pos-printer";
@@ -65,6 +67,7 @@ function line(bytes: number[], value = ""): void {
 }
 
 export type TicketPreview = {
+  header: string[];
   when: string;
   cajero: string | null;
   lines: Array<{ nombre: string; detalle: string; descuento: string | null; importe: string }>;
@@ -79,10 +82,11 @@ export type TicketPreview = {
   ganar: string | null;
 };
 
-export function ticketPreview(sale: TicketSale): TicketPreview {
+export function ticketPreview(sale: TicketSale, negocio: NegocioRecibo = NEGOCIO_RECIBO_DEFAULT): TicketPreview {
   const when = new Date(sale.createdAt);
   const tax = splitItbis(sale.total);
   return {
+    header: fiscalHeaderLines(negocio, sale.ncf ?? null),
     when: Number.isNaN(when.getTime()) ? sale.createdAt : when.toLocaleString("es-DO"),
     cajero: sale.cajero ?? null,
     lines: sale.items.map((item) => ({
@@ -103,14 +107,21 @@ export function ticketPreview(sale: TicketSale): TicketPreview {
   };
 }
 
-export function buildEscPosTicket(sale: TicketSale, openDrawer: boolean): Uint8Array {
+export function buildEscPosTicket(
+  sale: TicketSale,
+  openDrawer: boolean,
+  negocio: NegocioRecibo = NEGOCIO_RECIBO_DEFAULT
+): Uint8Array {
   const bytes: number[] = [];
+  const header = fiscalHeaderLines(negocio, sale.ncf ?? null);
   bytes.push(0x1b, 0x40);
   bytes.push(0x1b, 0x61, 0x01);
   bytes.push(0x1b, 0x45, 0x01);
-  line(bytes, "QUICK!");
+  line(bytes, header[0] ?? "QUICK!");
   bytes.push(0x1b, 0x45, 0x00);
-  line(bytes, "Mini Market");
+  for (const row of header.slice(1)) {
+    line(bytes, row);
+  }
   line(bytes);
   bytes.push(0x1b, 0x61, 0x00);
   const when = new Date(sale.createdAt);
@@ -168,9 +179,10 @@ async function writeSerial(port: SerialPortLike, payload: Uint8Array): Promise<v
 
 export async function printPosTicket(
   sale: TicketSale,
-  options: { openDrawer: boolean; request: boolean }
+  options: { openDrawer: boolean; request: boolean },
+  negocio: NegocioRecibo = NEGOCIO_RECIBO_DEFAULT
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const payload = buildEscPosTicket(sale, options.openDrawer);
+  const payload = buildEscPosTicket(sale, options.openDrawer, negocio);
   const saved = (typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null) as PrinterKind | null;
   const usb = usbApi();
   const serial = serialApi();
@@ -206,12 +218,23 @@ export async function printPosTicket(
   }
 }
 
-export function printTicketInBrowser(sale: TicketSale): void {
-  const preview = ticketPreview(sale);
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+export function printTicketInBrowser(sale: TicketSale, negocio: NegocioRecibo = NEGOCIO_RECIBO_DEFAULT): void {
+  const preview = ticketPreview(sale, negocio);
+  const header = preview.header
+    .map((row, index) => (index === 0 ? `<h1>${escapeHtml(row)}</h1>` : `<p style="text-align:center;margin:0">${escapeHtml(row)}</p>`))
+    .join("");
   const rows = preview.lines
     .map(
       (item) =>
-        `<tr><td>${item.detalle}<br>${item.nombre}${item.descuento ? `<br>${item.descuento}` : ""}</td><td>${item.importe}</td></tr>`
+        `<tr><td>${escapeHtml(item.detalle)}<br>${escapeHtml(item.nombre)}${item.descuento ? `<br>${escapeHtml(item.descuento)}` : ""}</td><td>${escapeHtml(item.importe)}</td></tr>`
     )
     .join("");
   const html = `<!doctype html><html><head><title>Ticket</title><style>
@@ -220,17 +243,16 @@ export function printTicketInBrowser(sale: TicketSale): void {
     td:last-child{text-align:right}
     h1{font-size:20px;text-align:center;margin:0}
   </style></head><body>
-    <h1>QUICK!</h1>
-    <p style="text-align:center">Mini Market</p>
-    <p>${preview.when}${preview.cajero ? `<br>Cajero: ${preview.cajero}` : ""}</p>
+    ${header}
+    <p>${escapeHtml(preview.when)}${preview.cajero ? `<br>Cajero: ${escapeHtml(preview.cajero)}` : ""}</p>
     <table>${rows}</table>
-    ${preview.descuento ? `<p>Descuento ${preview.descuento}</p>` : ""}
-    ${preview.quickcoins ? `<p>QuickCoins ${preview.quickcoins}</p>` : ""}
-    <p>Base ${preview.base}<br>ITBIS ${ITBIS_PORCIENTO}% ${preview.itbis}<br>Precios con ITBIS incluido</p>
-    <p><strong>Total ${preview.total}</strong></p>
-    <p>${preview.metodo}</p>
-    ${preview.recibido ? `<p>Recibido ${preview.recibido}</p>` : ""}
-    ${preview.cambio ? `<p>Cambio ${preview.cambio}</p>` : ""}
+    ${preview.descuento ? `<p>Descuento ${escapeHtml(preview.descuento)}</p>` : ""}
+    ${preview.quickcoins ? `<p>QuickCoins ${escapeHtml(preview.quickcoins)}</p>` : ""}
+    <p>Base ${escapeHtml(preview.base)}<br>ITBIS ${ITBIS_PORCIENTO}% ${escapeHtml(preview.itbis)}<br>Precios con ITBIS incluido</p>
+    <p><strong>Total ${escapeHtml(preview.total)}</strong></p>
+    <p>${escapeHtml(preview.metodo)}</p>
+    ${preview.recibido ? `<p>Recibido ${escapeHtml(preview.recibido)}</p>` : ""}
+    ${preview.cambio ? `<p>Cambio ${escapeHtml(preview.cambio)}</p>` : ""}
     <script>window.onload=function(){window.print()}<\/script>
   </body></html>`;
   const popup = window.open("", "ticket", "width=420,height=720");

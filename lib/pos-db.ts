@@ -31,6 +31,7 @@ export type PosSaleRecord = {
   descuentoTotal?: number;
   quickcoins?: PosQuickcoinsSale | null;
   cajero?: string | null;
+  ncf?: string | null;
 };
 
 class PosDatabase extends Dexie {
@@ -114,6 +115,10 @@ export async function saveSaleAndStock(sale: PosSaleRecord): Promise<void> {
       await db.products.update(item.productoId, { stock: product.stock - item.cantidad });
     }
   });
+}
+
+export async function readSale(clientId: string): Promise<PosSaleRecord | undefined> {
+  return posDb().sales.get(clientId);
 }
 
 export async function countPendingSales(): Promise<number> {

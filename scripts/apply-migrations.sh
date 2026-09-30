@@ -20,6 +20,7 @@ files=(
   supabase/migrations/20260929140000_inventario.sql
   supabase/migrations/20260929160000_pos_descuentos_quickcoins.sql
   supabase/migrations/20260930120000_pos_usa_inventario.sql
+  supabase/migrations/20260930140000_pos_ncf.sql
 )
 
 for file in "${files[@]}"; do

@@ -55,6 +55,13 @@ export const ADMIN_PARAMETROS: AdminNavItem = {
   status: "live",
 };
 
+export const ADMIN_FISCAL: AdminNavItem = {
+  href: "/admin/contabilidad/fiscal",
+  label: "Datos fiscales",
+  icon: "settings",
+  status: "live",
+};
+
 export const ADMIN_VENTAS_HISTORICO: AdminNavItem = {
   href: "/admin/operacion/ventas/historico",
   label: "Histórico",
@@ -132,6 +139,7 @@ export const ADMIN_CONTABILIDAD_NAV: AdminNavItem[] = [
   { href: "/admin/contabilidad/proveedores", label: "Proveedores", icon: "suppliers", status: "live" },
   ADMIN_REPORTE,
   ADMIN_REPORTE_CONTABLE,
+  ADMIN_FISCAL,
   ADMIN_PARAMETROS,
 ];
 

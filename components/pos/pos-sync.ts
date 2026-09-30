@@ -1,6 +1,7 @@
 "use client";
 
 import { countPendingSales, posDb, readLocalProducts, replaceLocalCatalog, saveSaleAndStock, type PosSaleRecord } from "@/lib/pos-db";
+import { cacheNegocio, normalizeNegocioRecibo, type NegocioRecibo } from "@/lib/pos-fiscal";
 import { saleTotal, type PosProduct } from "@/lib/pos-shared";
 
 export type SyncStop = "ok" | "offline" | "unauthorized" | "error";
@@ -73,10 +74,11 @@ export async function syncPendingSales(): Promise<{ pending: number; stop: SyncS
           await posDb().sales.update(sale.clientId, { lastError: "Sigue en cola. Se reintenta sola." });
           break;
         }
-        const body = (await response.json()) as { stockAdvertencia?: boolean };
+        const body = (await response.json()) as { stockAdvertencia?: boolean; ncf?: string | null };
         await posDb().sales.update(sale.clientId, {
           status: body.stockAdvertencia ? "sincronizada_advertencia" : "sincronizada",
           lastError: null,
+          ...(typeof body.ncf === "string" && body.ncf.trim() ? { ncf: body.ncf.trim() } : {}),
         });
       } catch {
         stop = "offline";
@@ -88,6 +90,24 @@ export async function syncPendingSales(): Promise<{ pending: number; stop: SyncS
     syncing = false;
   }
   return { pending: await countPendingSales(), stop };
+}
+
+export async function pullFiscal(): Promise<NegocioRecibo | null> {
+  try {
+    const response = await fetch("/api/pos/fiscal", { credentials: "include", cache: "no-store" });
+    if (!response.ok) {
+      return null;
+    }
+    const body = (await response.json().catch(() => null)) as { negocio?: Partial<NegocioRecibo> } | null;
+    if (!body?.negocio) {
+      return null;
+    }
+    const negocio = normalizeNegocioRecibo(body.negocio);
+    cacheNegocio(negocio);
+    return negocio;
+  } catch {
+    return null;
+  }
 }
 
 export async function pullCatalog(): Promise<{ products: PosProduct[]; unauthorized: boolean; offline: boolean; failed: boolean }> {

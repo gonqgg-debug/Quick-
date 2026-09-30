@@ -13,6 +13,7 @@ import {
   type PosTurnoResumen,
   type PosVentaInput,
 } from "@/lib/pos";
+import { asignarNcfVenta } from "@/lib/pos-fiscal-server";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
 const PAGE = 1000;
@@ -121,6 +122,7 @@ export type PosVentaResult = {
   stockAdvertencia: boolean;
   alreadySynced: boolean;
   coinsApplied: boolean;
+  ncf: string | null;
 };
 
 function missingDbObject(error: unknown): boolean {
@@ -237,6 +239,7 @@ export async function registrarVentaPos(input: PosVentaInput): Promise<PosVentaR
     stockAdvertencia: Boolean(row.stock_advertencia),
     alreadySynced: Boolean(row.already_synced),
     coinsApplied: usedWrapper,
+    ncf: null,
   };
   if (!usedWrapper && result.id) {
     await attachSaleDiscounts(input, result.id);
@@ -276,6 +279,7 @@ export async function registrarVentaPos(input: PosVentaInput): Promise<PosVentaR
     }
     throw error;
   }
+  result.ncf = await asignarNcfVenta(result.clientId);
   return result;
 }
 
@@ -325,6 +329,7 @@ export async function registrarVentaCobro(input: PosVentaInput): Promise<PosVent
     stockAdvertencia: Boolean(row.stockAdvertencia ?? row.stock_advertencia),
     alreadySynced: Boolean(row.alreadySynced ?? row.already_synced),
     coinsApplied: false,
+    ncf: null,
   };
 
   if (result.id) {
@@ -357,6 +362,7 @@ export async function registrarVentaCobro(input: PosVentaInput): Promise<PosVent
   if (inventario.aplicadas.some((linea) => linea.stockAntes < linea.cantidad)) {
     result.stockAdvertencia = true;
   }
+  result.ncf = await asignarNcfVenta(result.clientId);
   return result;
 }
 
