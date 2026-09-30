@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
         "inventario.ajustado",
       ],
     },
-    nota: "Ventas, compras, caja, catálogo y contable no incluyen teléfonos, direcciones ni chats de clientes. Expansión sí incluye teléfono y correo de brokers y desarrolladores: ese directorio es el CRM. El stock y el costo viven por tienda en inventario. POST de compras registra una cuenta por pagar con RNC, NCF y captura. POST de facturas guarda lo que Phillip lee, incluida la foto original. Con aplicarInventario: true esa factura mete unidades y costo. POST y PATCH de expansión crean y mueven el pipeline.",
+    nota: "Ventas, compras, caja, catálogo y contable no incluyen teléfonos, direcciones ni chats de clientes. Expansión sí incluye teléfono y correo de brokers y desarrolladores: ese directorio es el CRM. El stock y el costo viven por tienda en inventario. La caja de mostrador está en /pos. POST de compras registra una cuenta por pagar con RNC, NCF y captura. POST de facturas guarda lo que Phillip lee, incluida la foto original. Con aplicarInventario: true esa factura mete unidades y costo. POST y PATCH de expansión crean y mueven el pipeline.",
     endpoints: [
       { method: "GET", path: "/api/agent/metas?fecha=YYYY-MM-DD", describe: "Meta del día (la misma que Hoy) y la venta de esa fecha. Con mes=YYYY-MM devuelve cada día del mes." },
       { method: "GET", path: "/api/agent/ventas?fecha=YYYY-MM-DD", describe: "Ventas diarias de un día, o from y to (máximo 93 días)" },

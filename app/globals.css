@@ -180,3 +180,24 @@ body {
     width: 60px;
   }
 }
+
+@keyframes pos-tap {
+  0% {
+    transform: scale(0.97);
+    box-shadow: 0 0 0 3px #7eb341;
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(126, 179, 65, 0);
+  }
+}
+
+.pos-tap {
+  animation: pos-tap 220ms ease-out;
+}
+
+.pos-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 168px 180px;
+  touch-action: manipulation;
+}

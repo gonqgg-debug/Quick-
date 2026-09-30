@@ -79,6 +79,8 @@ export const ADMIN_OPERACION_NAV: AdminNavItem[] = [
   { href: "/admin/operacion/supervision", label: "Supervisión", icon: "goals", status: "live" },
   { href: "/admin/operacion/historial", label: "Historial de Delivery", icon: "history", status: "live" },
   ADMIN_CAJA,
+  { href: "/pos", label: "Caja POS", icon: "cash", status: "live" },
+  { href: "/admin/ventas/pos", label: "Advertencias POS", icon: "cash", status: "live" },
   { href: "/admin/operacion/ventas", label: "Ventas del día", icon: "sales", status: "live" },
   ADMIN_VENTAS_HISTORICO,
 ];

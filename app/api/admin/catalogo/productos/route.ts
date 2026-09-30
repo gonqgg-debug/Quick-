@@ -61,6 +61,7 @@ async function leerProducto(id: string): Promise<AdminCatalogProduct | null> {
     codigoBarras: data.codigo_barras ? String(data.codigo_barras) : null,
     fotoUrl: data.foto_url ? String(data.foto_url) : null,
     activo: Boolean(data.activo),
+    stock: null,
     existencia: null,
     costoPromedio: null,
     ultimoCosto: null,
@@ -103,6 +104,7 @@ export async function PATCH(request: NextRequest) {
       categoria?: unknown;
       precio?: unknown;
       activo?: unknown;
+      stock?: unknown;
       puntoReorden?: unknown;
       tienda?: unknown;
     };
@@ -110,7 +112,9 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Falta el producto" }, { status: 400 });
     }
     const tienda = normalizarTienda(body.tienda);
-    const tocaProducto = ["nombre", "marca", "categoria", "precio", "activo"].some((key) => Object.prototype.hasOwnProperty.call(body, key));
+    const tocaProducto = ["nombre", "marca", "categoria", "precio", "activo", "stock"].some((key) =>
+      Object.prototype.hasOwnProperty.call(body, key)
+    );
     if (!tocaProducto && body.puntoReorden === undefined) {
       return NextResponse.json({ error: "Nada que actualizar" }, { status: 400 });
     }
@@ -122,6 +126,7 @@ export async function PATCH(request: NextRequest) {
           categoria: body.categoria,
           precio: body.precio,
           activo: body.activo,
+          stock: body.stock,
         })
       : await leerProducto(body.id);
     if (!product) {

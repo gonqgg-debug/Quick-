@@ -27,14 +27,16 @@ type StaffChromeProps = {
   children: React.ReactNode;
 };
 
-const DESKTOP_TABS: { id: StaffSection; href: string; label: string }[] = [
+const DESKTOP_TABS: { id: StaffSection | "pos"; href: string; label: string }[] = [
   { id: "orders", href: "/staff", label: "Pedidos" },
   { id: "chats", href: "/staff/chats", label: "Chat" },
+  { id: "pos", href: "/pos", label: "Caja" },
 ];
 
-const MOBILE_TABS: { id: "orders" | "chats"; href: string; label: string }[] = [
+const MOBILE_TABS: { id: "orders" | "chats" | "pos"; href: string; label: string }[] = [
   { id: "orders", href: "/staff", label: "Pedidos" },
   { id: "chats", href: "/staff/chats", label: "Chat" },
+  { id: "pos", href: "/pos", label: "Caja" },
 ];
 
 export function StaffChrome({
@@ -173,7 +175,7 @@ export function StaffChrome({
                 style={{ color: isActive ? brand.green : brand.muted }}
               >
                 <span className="relative">
-                  {tab.id === "orders" ? <OrdersIcon /> : <ChatIcon />}
+                  {tab.id === "orders" ? <OrdersIcon /> : tab.id === "chats" ? <ChatIcon /> : <CashIcon />}
                   {tab.id === "chats" && pendingCount > 0 ? (
                     <span
                       className="absolute -right-2.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
@@ -334,6 +336,15 @@ function OrdersIcon() {
     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M8 6h12M8 12h12M8 18h12" strokeLinecap="round" />
       <path d="M4 6h.01M4 12h.01M4 18h.01" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="6" width="18" height="12" rx="2" />
+      <circle cx="12" cy="12" r="2.2" />
     </svg>
   );
 }

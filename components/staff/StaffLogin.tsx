@@ -6,9 +6,15 @@ import { brand } from "@/lib/theme";
 
 type StaffLoginProps = {
   onSuccess: () => Promise<void> | void;
+  heading?: string;
+  description?: string;
 };
 
-export function StaffLogin({ onSuccess }: StaffLoginProps) {
+export function StaffLogin({
+  onSuccess,
+  heading = "Panel del personal",
+  description = "Escribe la contraseña para continuar.",
+}: StaffLoginProps) {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -42,8 +48,8 @@ export function StaffLogin({ onSuccess }: StaffLoginProps) {
     <main className="min-h-screen bg-white px-4 py-10" style={{ color: brand.ink }}>
       <div className="mx-auto w-full max-w-sm">
         <Logo className="h-14" />
-        <h1 className="font-display mt-6 text-2xl font-bold">Panel del personal</h1>
-        <p className="mt-2 text-sm text-brand-muted">Escribe la contraseña para continuar.</p>
+        <h1 className="font-display mt-6 text-2xl font-bold">{heading}</h1>
+        <p className="mt-2 text-sm text-brand-muted">{description}</p>
         <p className="mt-1 text-sm text-brand-muted">
           <a href="/empleados" className="font-semibold underline-offset-2 hover:underline" style={{ color: brand.green }}>
             ¿Buscas Administración?

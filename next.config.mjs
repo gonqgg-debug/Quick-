@@ -1,3 +1,41 @@
+import withPWAInit from "@ducanh2912/next-pwa";
+
+const withPWA = withPWAInit({
+  dest: "public",
+  disable: process.env.NODE_ENV === "development",
+  register: true,
+  cacheOnFrontEndNav: true,
+  aggressiveFrontEndNavCaching: true,
+  reloadOnOnline: false,
+  extendDefaultRuntimeCaching: true,
+  workboxOptions: {
+    disableDevLogs: true,
+    runtimeCaching: [
+      {
+        urlPattern: ({ url, sameOrigin }) =>
+          sameOrigin && (url.pathname === "/pos" || url.pathname.startsWith("/pos/")),
+        handler: "NetworkFirst",
+        options: {
+          cacheName: "pos-shell",
+          expiration: {
+            maxEntries: 24,
+            maxAgeSeconds: 7 * 24 * 60 * 60,
+          },
+          networkTimeoutSeconds: 4,
+        },
+      },
+      {
+        urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith("/api/pos/"),
+        handler: "NetworkOnly",
+        method: "GET",
+        options: {
+          cacheName: "pos-api",
+        },
+      },
+    ],
+  },
+});
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
@@ -17,4 +55,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default withPWA(nextConfig);

@@ -4,6 +4,7 @@ import {
   publicarInventario,
   resolverProducto,
 } from "@/lib/inventario/movimientos";
+import { getSupabaseAdminClient } from "@/lib/supabase";
 import type { InventarioOrigen } from "@/lib/inventario/shared";
 
 export type LineaVentaInput = {
@@ -68,6 +69,96 @@ export async function registrarVentas(input: {
 
   if (aplicadas.length) {
     await publicarInventario("inventario.vendido", { tienda, origen, aplicadas, omitidas });
+  }
+  return { aplicadas, omitidas };
+}
+
+function notaVentaPos(clientId: string, productoId: string): string {
+  return `pos:${clientId}:${productoId}`;
+}
+
+function esClaveRepetida(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "23505");
+}
+
+/** Baja la existencia de la tienda por una venta ya guardada en la caja. Reintentar no duplica el movimiento. */
+export async function aplicarVentaMostrador(input: {
+  clientId: string;
+  tienda?: unknown;
+  lineas: Array<{ productoId: string; cantidad: number; nombre?: string }>;
+}): Promise<{
+  aplicadas: Array<{ productoId: string; nombre: string; cantidad: number; stockAntes: number; stockDespues: number }>;
+  omitidas: Array<{ productoId: string; motivo: string }>;
+}> {
+  const tienda = normalizarTienda(input.tienda);
+  const porProducto = new Map<string, { cantidad: number; nombre: string }>();
+  for (const linea of input.lineas) {
+    if (!linea.productoId || !(linea.cantidad > 0)) {
+      continue;
+    }
+    const previa = porProducto.get(linea.productoId);
+    porProducto.set(linea.productoId, {
+      cantidad: roundCantidad((previa?.cantidad ?? 0) + linea.cantidad),
+      nombre: linea.nombre?.trim() || previa?.nombre || "Producto",
+    });
+  }
+  const notas = Array.from(porProducto.keys()).map((productoId) => notaVentaPos(input.clientId, productoId));
+  const supabase = getSupabaseAdminClient();
+  const ya = new Set<string>();
+  if (notas.length) {
+    const { data, error } = await supabase
+      .from("inventario_movimientos")
+      .select("nota")
+      .eq("tipo", "venta")
+      .eq("origen", "pos")
+      .in("nota", notas);
+    if (error) {
+      throw error;
+    }
+    for (const row of data ?? []) {
+      if (typeof row.nota === "string") {
+        ya.add(row.nota);
+      }
+    }
+  }
+
+  const aplicadas: Array<{ productoId: string; nombre: string; cantidad: number; stockAntes: number; stockDespues: number }> = [];
+  const omitidas: Array<{ productoId: string; motivo: string }> = [];
+  for (const [productoId, linea] of Array.from(porProducto)) {
+    const nota = notaVentaPos(input.clientId, productoId);
+    if (ya.has(nota)) {
+      continue;
+    }
+    try {
+      const escrito = await escribirMovimiento({
+        productoId,
+        tienda,
+        tipo: "venta",
+        cantidad: linea.cantidad,
+        origen: "pos",
+        nota,
+      });
+      aplicadas.push({
+        productoId,
+        nombre: linea.nombre,
+        cantidad: linea.cantidad,
+        stockAntes: escrito.stockAntes,
+        stockDespues: escrito.stockDespues,
+      });
+    } catch (error) {
+      if (esClaveRepetida(error)) {
+        continue;
+      }
+      const message = error instanceof Error ? error.message : String((error as { message?: string } | null)?.message ?? "");
+      if (/foreign key|23503/i.test(message)) {
+        omitidas.push({ productoId, motivo: "producto_no_encontrado" });
+        continue;
+      }
+      throw error;
+    }
+  }
+  if (aplicadas.length) {
+    await publicarInventario("inventario.vendido", { tienda, origen: "pos", ventaId: input.clientId, aplicadas, omitidas });
   }
   return { aplicadas, omitidas };
 }

@@ -174,7 +174,7 @@ export async function listAgentCatalogo(search: URLSearchParams) {
     }
   }
   return {
-    nota: "stock, costoPromedio y ultimoCosto son de la tienda pedida (quick si no mandas tienda). precio es el de venta. activo indica si el producto se ofrece.",
+    nota: "stock, costoPromedio y ultimoCosto son de la tienda pedida (quick si no mandas tienda). precio es el de venta. activo indica si el producto se ofrece. La caja de mostrador usa /pos y products.stock.",
     tienda,
     productos: page.map((row) => {
       const existencia = stock.get(String(row.id));
