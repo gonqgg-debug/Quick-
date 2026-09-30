@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { looksLikeBarcode } from "@/lib/barcode";
 import { categoryEmoji } from "@/lib/theme";
 import { foldText, posThumbUrl, productInitials, stockBadge, type PosProduct } from "@/lib/pos-shared";
 import { formatPrice } from "@/lib/money";
@@ -17,9 +18,10 @@ type PosCatalogProps = {
   loadError: boolean;
   flashId: string | null;
   onAdd: (product: PosProduct) => void;
+  onScan: (code: string) => void;
 };
 
-export function PosCatalog({ products, loading, offlineEmpty, loadError, flashId, onAdd }: PosCatalogProps) {
+export function PosCatalog({ products, loading, offlineEmpty, loadError, flashId, onAdd, onScan }: PosCatalogProps) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("todos");
 
@@ -42,7 +44,7 @@ export function PosCatalog({ products, loading, offlineEmpty, loadError, flashId
       if (!needle) {
         return true;
       }
-      return foldText(`${product.nombre} ${product.categoria}`).includes(needle);
+      return foldText(`${product.nombre} ${product.categoria} ${product.codigoBarras ?? ""}`).includes(needle);
     });
   }, [products, query, category]);
 
@@ -56,6 +58,13 @@ export function PosCatalog({ products, loading, offlineEmpty, loadError, flashId
           className="h-12 text-base"
           autoComplete="off"
           enterKeyHint="search"
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            if (!looksLikeBarcode(query)) return;
+            onScan(query);
+            setQuery("");
+          }}
         />
         <div className="overflow-x-auto pb-1">
           <Tabs value={category} onValueChange={setCategory}>
@@ -135,7 +144,7 @@ function ProductTile({ product, flash, onAdd }: { product: PosProduct; flash: bo
               alt=""
               loading="lazy"
               decoding="async"
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain p-2"
               onError={() => {
                 if (src && product.fotoUrl && src !== product.fotoUrl) {
                   setSrc(product.fotoUrl);

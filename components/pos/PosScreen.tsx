@@ -5,8 +5,11 @@ import { toast } from "sonner";
 import { StaffLogin } from "@/components/staff/StaffLogin";
 import { PosCart } from "@/components/pos/PosCart";
 import { PosCatalog } from "@/components/pos/PosCatalog";
+import { PosDiscount } from "@/components/pos/PosDiscount";
 import { PosOpenShift } from "@/components/pos/PosOpenShift";
 import { PosPayDialog } from "@/components/pos/PosPayDialog";
+import { PosQuickcoins, type PosCoinsAccount } from "@/components/pos/PosQuickcoins";
+import { PosTicketPreview } from "@/components/pos/PosTicketPreview";
 import { pullCatalog, queuePosSale, syncPendingSales } from "@/components/pos/pos-sync";
 import {
   clearShift,
@@ -15,10 +18,29 @@ import {
   readShift,
   salesSince,
   saveShift,
+  type PosSaleRecord,
   type PosShift,
 } from "@/lib/pos-db";
+import { findProductsByBarcode } from "@/lib/pos";
 import { formatPrice } from "@/lib/money";
-import { saleTotal, type PosMetodoPago, type PosProduct, type PosSaleItem } from "@/lib/pos-shared";
+import { printPosTicket, printTicketInBrowser } from "@/lib/pos-print";
+import {
+  POS_SIN_DESCUENTO,
+  QUICKCOINS_VALOR_COIN,
+  addProductToCart,
+  cartAmountDue,
+  centsToMoney,
+  manualDiscountWithinCap,
+  moneyCents,
+  priceCart,
+  quickcoinsDiscountCents,
+  quickcoinsEarn,
+  setCartQty,
+  setLineDiscount,
+  type CartLine,
+  type PosDescuento,
+} from "@/lib/pos";
+import { type PosMetodoPago, type PosProduct } from "@/lib/pos-shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +59,13 @@ type LinkState = "online" | "offline" | "syncing" | "unauthorized";
 export function PosScreen() {
   const [gate, setGate] = useState<Gate>("loading");
   const [products, setProducts] = useState<PosProduct[]>([]);
-  const [lines, setLines] = useState<PosSaleItem[]>([]);
+  const [lines, setLines] = useState<CartLine[]>([]);
+  const [ticketDiscount, setTicketDiscount] = useState<PosDescuento>(POS_SIN_DESCUENTO);
+  const [discountTarget, setDiscountTarget] = useState<"ticket" | string | null>(null);
+  const [coins, setCoins] = useState<PosCoinsAccount | null>(null);
+  const [coinsOpen, setCoinsOpen] = useState(false);
+  const [receipt, setReceipt] = useState<PosSaleRecord | null>(null);
+  const [printNote, setPrintNote] = useState<string | null>(null);
   const [flashId, setFlashId] = useState<string | null>(null);
   const [link, setLink] = useState<LinkState>("online");
   const [pending, setPending] = useState(0);
@@ -143,61 +171,96 @@ export function PosScreen() {
   }, [syncNow]);
 
   function addProduct(product: PosProduct) {
-    setLines((current) => {
-      const existing = current.find((line) => line.productoId === product.id);
-      if (!existing) {
-        return [
-          ...current,
-          { productoId: product.id, nombre: product.nombre, cantidad: 1, precioUnitario: product.precio },
-        ];
-      }
-      return current.map((line) =>
-        line.productoId === product.id ? { ...line, cantidad: Math.min(999, line.cantidad + 1) } : line
-      );
-    });
+    setLines((current) => addProductToCart(current, product));
     setFlashId(product.id);
     window.setTimeout(() => setFlashId((current) => (current === product.id ? null : current)), 180);
   }
 
-  function changeQty(productoId: string, cantidad: number) {
-    setLines((current) => {
-      if (cantidad <= 0) {
-        return current.filter((line) => line.productoId !== productoId);
-      }
-      return current.map((line) =>
-        line.productoId === productoId ? { ...line, cantidad: Math.min(999, Math.floor(cantidad)) } : line
-      );
-    });
+  function scanCode(code: string) {
+    const matches = findProductsByBarcode(products, code);
+    if (matches.length === 1) {
+      addProduct(matches[0]);
+      return;
+    }
+    toast.error(matches.length === 0 ? "Ese código no está en el catálogo" : "Hay más de un producto con ese código");
   }
 
+  function changeQty(productoId: string, cantidad: number) {
+    setLines((current) => setCartQty(current, productoId, cantidad));
+  }
+
+  function resetSale() {
+    setLines([]);
+    setTicketDiscount(POS_SIN_DESCUENTO);
+    setCoins(null);
+  }
+
+  function applyDiscount(descuento: PosDescuento) {
+    if (discountTarget == null) return;
+    if (discountTarget === "ticket") {
+      if (!manualDiscountWithinCap(lines, descuento)) {
+        toast.error("El descuento pasa del 20%");
+        return;
+      }
+      setTicketDiscount(descuento);
+    } else {
+      const next = setLineDiscount(lines, discountTarget, descuento, ticketDiscount);
+      if ("error" in next) {
+        toast.error(next.error);
+        return;
+      }
+      setLines(next);
+    }
+    setDiscountTarget(null);
+  }
+
+  const coinCents = quickcoinsDiscountCents(coins?.canjePuntos ?? 0);
+  const priced = useMemo(() => priceCart(lines, ticketDiscount, coinCents), [lines, ticketDiscount, coinCents]);
+  const priceError = "error" in priced ? priced.error : null;
+  const subtotal = "error" in priced ? 0 : centsToMoney(priced.listCents);
+  const descuento = "error" in priced ? 0 : centsToMoney(priced.lineDiscountCents + priced.ticketDiscountCents);
+  const coinsMoney = "error" in priced ? 0 : centsToMoney(priced.coinDiscountCents);
+  const total = cartAmountDue(lines, ticketDiscount, coinCents);
+
   async function confirmSale(metodo: PosMetodoPago, montoRecibido: number | null) {
-    const snapshot = lines;
-    if (snapshot.length === 0) {
+    if (lines.length === 0 || priceError || "error" in priced) {
+      toast.error(priceError ?? "Revisa el carrito");
+      return;
+    }
+    const canjeAplicado = Math.floor(priced.coinDiscountCents / Math.max(1, moneyCents(QUICKCOINS_VALOR_COIN)));
+    if (canjeAplicado > 0 && (typeof navigator === "undefined" || !navigator.onLine)) {
+      toast.error("Sin conexión no se pueden canjear QuickCoins");
       return;
     }
     const clientId = crypto.randomUUID();
-    const total = saleTotal(snapshot);
+    const quickcoins = coins
+      ? {
+          telefono: coins.telefono,
+          nombre: coins.nombre,
+          canjePuntos: canjeAplicado,
+          ganarPuntos: quickcoinsEarn(priced.totalCents),
+          descuentoCanje: centsToMoney(priced.coinDiscountCents),
+        }
+      : null;
     try {
       const record = await queuePosSale({
         clientId,
         createdAt: new Date().toISOString(),
-        items: snapshot,
+        items: priced.items,
         metodoPago: metodo,
         montoRecibido,
+        descuentoTicket: centsToMoney(priced.ticketDiscountCents),
+        descuentoTotal: centsToMoney(priced.lineDiscountCents + priced.ticketDiscountCents + priced.coinDiscountCents),
+        quickcoins,
+        cajero: shift ? `Turno ${shift.periodo}` : null,
       });
       setProducts(await readLocalProducts());
-      setLines([]);
+      resetSale();
       setPayOpen(false);
       setCartOpen(false);
+      setReceipt(record);
+      setPrintNote(null);
       await refreshPending();
-      const cambio = record.cambio ?? 0;
-      toast.success("Venta guardada", {
-        description:
-          metodo === "efectivo"
-            ? `${formatPrice(total)} · Cambio ${formatPrice(cambio)}`
-            : formatPrice(total),
-        duration: 3500,
-      });
     } catch (error) {
       console.error("[pos] no se pudo guardar la venta local", error);
       toast.error("No se pudo guardar la venta en este equipo. Inténtalo otra vez.");
@@ -205,8 +268,6 @@ export function PosScreen() {
     }
     void syncNow();
   }
-
-  const total = useMemo(() => saleTotal(lines), [lines]);
 
   async function askCloseShift() {
     if (!shift) {
@@ -261,15 +322,24 @@ export function PosScreen() {
             loadError={loadError}
             flashId={flashId}
             onAdd={addProduct}
+            onScan={scanCode}
           />
         </div>
         <aside className="hidden h-full w-[34%] min-w-[320px] max-w-[440px] border-l border-border lg:block">
           <PosCart
             lines={lines}
+            subtotal={subtotal}
+            descuento={descuento}
+            coinsMoney={coinsMoney}
+            total={total}
+            coinsLabel={coins ? `${coins.canjePuntos || "✓"} coins` : null}
             onChangeQty={changeQty}
             onRemove={(id) => changeQty(id, 0)}
             onClear={() => setClearOpen(true)}
             onCharge={() => setPayOpen(true)}
+            onDiscountLine={(id) => setDiscountTarget(id)}
+            onDiscountTicket={() => setDiscountTarget("ticket")}
+            onQuickcoins={() => setCoinsOpen(true)}
           />
         </aside>
       </div>
@@ -301,15 +371,83 @@ export function PosScreen() {
           <DialogDescription className="sr-only">Productos de esta venta y el botón de cobrar.</DialogDescription>
           <PosCart
             lines={lines}
+            subtotal={subtotal}
+            descuento={descuento}
+            coinsMoney={coinsMoney}
+            total={total}
+            coinsLabel={coins ? `${coins.canjePuntos || "✓"} coins` : null}
             onChangeQty={changeQty}
             onRemove={(id) => changeQty(id, 0)}
             onClear={() => setClearOpen(true)}
             onCharge={() => setPayOpen(true)}
+            onDiscountLine={(id) => setDiscountTarget(id)}
+            onDiscountTicket={() => setDiscountTarget("ticket")}
+            onQuickcoins={() => setCoinsOpen(true)}
           />
         </DialogContent>
       </Dialog>
 
-      <PosPayDialog open={payOpen} lines={lines} onOpenChange={setPayOpen} onConfirm={(metodo, monto) => void confirmSale(metodo, monto)} />
+      <PosPayDialog open={payOpen} total={total} onOpenChange={setPayOpen} onConfirm={(metodo, monto) => void confirmSale(metodo, monto)} />
+
+      <PosDiscount
+        open={discountTarget != null}
+        title={discountTarget === "ticket" ? "Descuento del ticket" : "Descuento de línea"}
+        onClose={() => setDiscountTarget(null)}
+        onApply={applyDiscount}
+      />
+      <PosQuickcoins
+        open={coinsOpen}
+        online={link !== "offline"}
+        lines={lines}
+        ticket={ticketDiscount}
+        current={coins}
+        onClose={() => setCoinsOpen(false)}
+        onApply={(account) => {
+          setCoins(account);
+          setCoinsOpen(false);
+        }}
+      />
+
+      <Dialog
+        open={receipt != null}
+        onOpenChange={(open) => {
+          if (!open) setReceipt(null);
+        }}
+      >
+        <DialogContent className="max-h-[92dvh] overflow-y-auto font-display">
+          <DialogHeader>
+            <DialogTitle>Recibo</DialogTitle>
+            <DialogDescription>Precios con ITBIS incluido.</DialogDescription>
+          </DialogHeader>
+          {receipt ? <PosTicketPreview sale={receipt} /> : null}
+          {printNote ? <p className="text-center text-sm text-muted-foreground">{printNote}</p> : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12"
+              onClick={() => {
+                if (!receipt) return;
+                printTicketInBrowser(receipt);
+              }}
+            >
+              Imprimir aquí
+            </Button>
+            <Button
+              type="button"
+              className="h-12"
+              onClick={() => {
+                if (!receipt) return;
+                void printPosTicket(receipt, { openDrawer: receipt.metodoPago === "efectivo", request: true }).then((result) => {
+                  setPrintNote(result.ok ? "Ticket enviado a la impresora" : result.message);
+                });
+              }}
+            >
+              Imprimir ticket
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={closeShiftOpen} onOpenChange={setCloseShiftOpen}>
         <DialogContent className="font-display">
@@ -331,9 +469,9 @@ export function PosScreen() {
               className="h-12"
               onClick={() => {
                 void clearShift().then(() => {
-                  setShift(null);
-                  setLines([]);
-                  setCloseShiftOpen(false);
+                setShift(null);
+                resetSale();
+                setCloseShiftOpen(false);
                   setCartOpen(false);
                   setPayOpen(false);
                 });
@@ -360,7 +498,7 @@ export function PosScreen() {
               variant="destructive"
               className="h-12"
               onClick={() => {
-                setLines([]);
+                resetSale();
                 setClearOpen(false);
                 setCartOpen(false);
               }}

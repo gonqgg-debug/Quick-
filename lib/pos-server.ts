@@ -327,6 +327,24 @@ export async function registrarVentaCobro(input: PosVentaInput): Promise<PosVent
     coinsApplied: false,
   };
 
+  if (result.id) {
+    await attachSaleDiscounts(input, result.id);
+  }
+  const coins = input.quickcoins;
+  if (coins && (coins.canjePuntos > 0 || coins.ganarPuntos > 0)) {
+    const coinsResult = await supabase.rpc("aplicar_quickcoins", {
+      p_venta_client_id: input.clientId,
+      p_telefono: coins.telefono,
+      p_nombre: coins.nombre,
+      p_canje: coins.canjePuntos,
+      p_ganar: coins.ganarPuntos,
+    });
+    if (coinsResult.error) {
+      throw coinsResult.error;
+    }
+    result.coinsApplied = true;
+  }
+
   const inventario = await aplicarVentaMostrador({
     clientId: result.clientId,
     tienda: POS_TIENDA,

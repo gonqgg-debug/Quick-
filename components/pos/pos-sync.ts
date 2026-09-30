@@ -47,8 +47,20 @@ export async function syncPendingSales(): Promise<{ pending: number; stop: SyncS
               nombre: item.nombre,
               cantidad: item.cantidad,
               precioUnitario: item.precioUnitario,
+              precioLista: item.precioLista,
+              descuento: item.descuento ?? 0,
             })),
             createdAt: sale.createdAt,
+            descuentoTicket: sale.descuentoTicket ?? 0,
+            descuentoTotal: sale.descuentoTotal ?? 0,
+            quickcoins: sale.quickcoins
+              ? {
+                  telefono: sale.quickcoins.telefono,
+                  nombre: sale.quickcoins.nombre,
+                  canjePuntos: sale.quickcoins.canjePuntos,
+                  ganarPuntos: sale.quickcoins.ganarPuntos,
+                }
+              : undefined,
           }),
         });
         if (response.status === 401) {

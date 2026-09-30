@@ -10,6 +10,7 @@ export type PosProduct = {
   fotoUrl: string | null;
   categoria: string;
   stock: number | null;
+  codigoBarras?: string | null;
 };
 
 export type PosSaleItem = {
@@ -17,6 +18,8 @@ export type PosSaleItem = {
   nombre: string;
   cantidad: number;
   precioUnitario: number;
+  precioLista?: number;
+  descuento?: number;
 };
 
 export type PosSaleStatus = "pendiente_sync" | "sincronizada" | "sincronizada_advertencia";
@@ -54,8 +57,9 @@ export function posThumbUrl(fotoUrl: string | null): string | null {
     url.pathname = `/storage/v1/render/image/public/${objectPath}`;
     url.search = "";
     url.searchParams.set("width", "480");
+    url.searchParams.set("height", "480");
     url.searchParams.set("quality", "60");
-    url.searchParams.set("resize", "cover");
+    url.searchParams.set("resize", "contain");
     return url.toString();
   } catch {
     return fotoUrl;

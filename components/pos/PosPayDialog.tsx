@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { cashDelta, quickCashAmounts, saleTotal, type PosMetodoPago, type PosSaleItem } from "@/lib/pos-shared";
+import { cashDelta, quickCashAmounts, type PosMetodoPago } from "@/lib/pos-shared";
 import { formatPrice, parsePrice } from "@/lib/money";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,15 +22,14 @@ const METHODS: Array<{ id: PosMetodoPago; label: string }> = [
 
 type PosPayDialogProps = {
   open: boolean;
-  lines: PosSaleItem[];
+  total: number;
   onOpenChange: (open: boolean) => void;
   onConfirm: (metodo: PosMetodoPago, montoRecibido: number | null) => void;
 };
 
-export function PosPayDialog({ open, lines, onOpenChange, onConfirm }: PosPayDialogProps) {
+export function PosPayDialog({ open, total, onOpenChange, onConfirm }: PosPayDialogProps) {
   const [metodo, setMetodo] = useState<PosMetodoPago>("efectivo");
   const [recibido, setRecibido] = useState("");
-  const total = saleTotal(lines);
   const amounts = useMemo(() => quickCashAmounts(total), [total]);
 
   useEffect(() => {

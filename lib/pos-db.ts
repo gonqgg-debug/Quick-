@@ -9,6 +9,14 @@ export type PosShift = {
   openedAt: string;
 };
 
+export type PosQuickcoinsSale = {
+  telefono: string;
+  nombre: string;
+  canjePuntos: number;
+  ganarPuntos: number;
+  descuentoCanje: number;
+};
+
 export type PosSaleRecord = {
   clientId: string;
   createdAt: string;
@@ -19,6 +27,10 @@ export type PosSaleRecord = {
   total: number;
   status: PosSaleStatus;
   lastError: string | null;
+  descuentoTicket?: number;
+  descuentoTotal?: number;
+  quickcoins?: PosQuickcoinsSale | null;
+  cajero?: string | null;
 };
 
 class PosDatabase extends Dexie {
