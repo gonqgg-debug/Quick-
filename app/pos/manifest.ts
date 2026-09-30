@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Quick Caja",
-    short_name: "Caja",
-    description: "Punto de venta Quick! Mini Market",
+    name: "Quick Cobro",
+    short_name: "Cobro",
+    description: "Cobro en mostrador",
     start_url: "/pos",
     scope: "/",
     display: "standalone",

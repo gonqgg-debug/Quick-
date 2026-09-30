@@ -1,21 +1,34 @@
 import Dexie, { type Table } from "dexie";
-import {
-  pendingQtyByProduct,
-  withOptimisticStock,
-  type PosProduct,
-  type PosSaleDraft,
-  type PosShiftRecord,
-  type PosStoredProduct,
-} from "@/lib/pos";
+import { mergeStock, type PosProduct, type PosSaleItem, type PosSaleStatus, type PosMetodoPago } from "@/lib/pos-shared";
+import type { CajaTurnoPeriodo } from "@/lib/admin-caja-shared";
+
+export type PosShift = {
+  id: "current";
+  periodo: CajaTurnoPeriodo;
+  fondoInicial: number;
+  openedAt: string;
+};
+
+export type PosSaleRecord = {
+  clientId: string;
+  createdAt: string;
+  items: PosSaleItem[];
+  metodoPago: PosMetodoPago;
+  montoRecibido: number | null;
+  cambio: number | null;
+  total: number;
+  status: PosSaleStatus;
+  lastError: string | null;
+};
 
 class PosDatabase extends Dexie {
-  products!: Table<PosStoredProduct, string>;
-  sales!: Table<PosSaleDraft, string>;
-  shifts!: Table<PosShiftRecord, string>;
-  meta!: Table<{ key: string; value: string }, string>;
+  products!: Table<PosProduct, string>;
+  sales!: Table<PosSaleRecord, string>;
+  shift!: Table<PosShift, string>;
 
   constructor() {
     super("quick-pos");
+    // Versions 1–3 match the previous register so an open tablet can upgrade.
     this.version(1).stores({
       products: "id, nombre, categoria",
       sales: "clientId, status, createdAt",
@@ -33,187 +46,82 @@ class PosDatabase extends Dexie {
       shifts: "clientId, estado, abiertoEn",
       meta: "key",
     });
+    this.version(4).stores({
+      shift: "id",
+    });
   }
 }
 
 let database: PosDatabase | null = null;
-let chain: Promise<void> = Promise.resolve();
 
-export function getPosDb(): PosDatabase {
-  if (typeof indexedDB === "undefined") {
-    throw new Error("IndexedDB no está disponible");
-  }
+export function posDb(): PosDatabase {
   if (!database) {
     database = new PosDatabase();
   }
   return database;
 }
 
-function enqueue<T>(task: () => Promise<T>): Promise<T> {
-  const run = chain.then(task, task);
-  chain = run.then(
-    () => undefined,
-    () => undefined
-  );
-  return run;
+export async function readLocalProducts(): Promise<PosProduct[]> {
+  const rows = await posDb().products.toArray();
+  return rows.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 }
 
-async function readCatalogUnlocked(): Promise<PosProduct[]> {
-  const db = getPosDb();
-  const [products, pending] = await Promise.all([
-    db.products.orderBy("nombre").toArray(),
-    db.sales.where("status").equals("pendiente_sync").toArray(),
-  ]);
-  return withOptimisticStock(products, pendingQtyByProduct(pending)).sort((left, right) =>
-    left.nombre.localeCompare(right.nombre, "es")
-  );
+export async function pendingQtyByProduct(): Promise<Map<string, number>> {
+  const pending = await posDb().sales.where("status").equals("pendiente_sync").toArray();
+  const totals = new Map<string, number>();
+  for (const sale of pending) {
+    for (const item of sale.items) {
+      totals.set(item.productoId, (totals.get(item.productoId) ?? 0) + item.cantidad);
+    }
+  }
+  return totals;
 }
 
-export function readPosCatalog(): Promise<PosProduct[]> {
-  return enqueue(() => readCatalogUnlocked());
-}
-
-export function countPendingSales(): Promise<number> {
-  return getPosDb().sales.where("status").equals("pendiente_sync").count();
-}
-
-export async function countPendingPosWork(): Promise<number> {
-  const db = getPosDb();
-  const [sales, shifts] = await Promise.all([
-    db.sales.where("status").equals("pendiente_sync").count(),
-    db.shifts.toArray(),
-  ]);
-  const shiftOps = shifts.reduce((sum, shift) => {
-    return (
-      sum +
-      (shift.aperturaSync === "pendiente_sync" ? 1 : 0) +
-      (shift.cierreSync === "pendiente_sync" ? 1 : 0)
-    );
-  }, 0);
-  return sales + shiftOps;
-}
-
-export function readOpenShift(): Promise<PosShiftRecord | null> {
-  return enqueue(async () => {
-    const rows = await getPosDb().shifts.where("estado").equals("abierto").sortBy("abiertoEn");
-    return rows[rows.length - 1] ?? null;
+export async function replaceLocalCatalog(serverProducts: PosProduct[]): Promise<PosProduct[]> {
+  const pending = await pendingQtyByProduct();
+  const merged = serverProducts.map((product) => ({
+    ...product,
+    stock: mergeStock(product.stock, pending.get(product.id) ?? 0),
+  }));
+  await posDb().transaction("rw", posDb().products, async () => {
+    await posDb().products.clear();
+    await posDb().products.bulkPut(merged);
   });
+  return merged;
 }
 
-export function readShiftSales(turnoClientId: string): Promise<PosSaleDraft[]> {
-  return enqueue(async () => getPosDb().sales.where("turnoClientId").equals(turnoClientId).sortBy("createdAt"));
-}
-
-export function saveLocalShift(shift: PosShiftRecord): Promise<void> {
-  return enqueue(async () => {
-    await getPosDb().shifts.put(shift);
-  });
-}
-
-export function pendingOpenShifts(): Promise<PosShiftRecord[]> {
-  return enqueue(async () => {
-    const rows = await getPosDb().shifts.toArray();
-    return rows
-      .filter((row) => row.aperturaSync === "pendiente_sync")
-      .sort((left, right) => left.abiertoEn.localeCompare(right.abiertoEn));
-  });
-}
-
-export function pendingCloseShifts(): Promise<PosShiftRecord[]> {
-  return enqueue(async () => {
-    const rows = await getPosDb().shifts.toArray();
-    return rows
-      .filter((row) => row.cierreSync === "pendiente_sync")
-      .sort((left, right) => (left.cerradoEn ?? "").localeCompare(right.cerradoEn ?? ""));
-  });
-}
-
-export function markShiftOpenSynced(clientId: string): Promise<void> {
-  return enqueue(async () => {
-    await getPosDb().shifts.update(clientId, { aperturaSync: "sincronizada", lastError: null });
-  });
-}
-
-export function markShiftCloseSynced(clientId: string): Promise<void> {
-  return enqueue(async () => {
-    await getPosDb().shifts.update(clientId, { cierreSync: "sincronizada", lastError: null });
-  });
-}
-
-export function markShiftAttempt(clientId: string, lastError: string): Promise<void> {
-  return enqueue(async () => {
-    await getPosDb().shifts.update(clientId, { lastError: lastError.slice(0, 300) });
-  });
-}
-
-export function readCatalogFetchedAt(): Promise<string | null> {
-  return getPosDb()
-    .meta.get("catalogFetchedAt")
-    .then((row) => row?.value ?? null);
-}
-
-export function saveServerCatalog(rows: PosStoredProduct[]): Promise<PosProduct[]> {
-  return enqueue(async () => {
-    const db = getPosDb();
-    await db.transaction("rw", db.products, db.meta, async () => {
-      await db.products.clear();
-      if (rows.length > 0) {
-        await db.products.bulkAdd(rows);
+export async function saveSaleAndStock(sale: PosSaleRecord): Promise<void> {
+  const db = posDb();
+  await db.transaction("rw", db.sales, db.products, async () => {
+    await db.sales.put(sale);
+    for (const item of sale.items) {
+      const product = await db.products.get(item.productoId);
+      if (!product || product.stock == null) {
+        continue;
       }
-      await db.meta.put({ key: "catalogFetchedAt", value: new Date().toISOString() });
-    });
-    return readCatalogUnlocked();
-  });
-}
-
-export function saveLocalSale(sale: PosSaleDraft): Promise<PosProduct[]> {
-  return enqueue(async () => {
-    const db = getPosDb();
-    const existing = await db.sales.get(sale.clientId);
-    if (!existing) {
-      await db.sales.add(sale);
+      await db.products.update(item.productoId, { stock: product.stock - item.cantidad });
     }
-    return readCatalogUnlocked();
   });
 }
 
-export function oldestPendingSale(): Promise<PosSaleDraft | null> {
-  return enqueue(async () => {
-    const rows = await getPosDb().sales.where("status").equals("pendiente_sync").sortBy("createdAt");
-    return rows[0] ?? null;
-  });
+export async function countPendingSales(): Promise<number> {
+  return posDb().sales.where("status").equals("pendiente_sync").count();
 }
 
-export function markSaleCoins(clientId: string, coinsSync: "sincronizada" | "no_aplica"): Promise<void> {
-  return enqueue(async () => {
-    const current = await getPosDb().sales.get(clientId);
-    if (!current?.quickcoins) return;
-    await getPosDb().sales.update(clientId, {
-      quickcoins: { ...current.quickcoins, coinsSync },
-    });
-  });
+export async function readShift(): Promise<PosShift | null> {
+  return (await posDb().shift.get("current")) ?? null;
 }
 
-export function markSaleSynced(clientId: string, stockAdvertencia: boolean): Promise<void> {
-  return enqueue(async () => {
-    await getPosDb().sales.update(clientId, {
-      status: "sincronizada",
-      stockAdvertencia,
-      lastError: null,
-    });
-  });
+export async function saveShift(shift: PosShift): Promise<void> {
+  await posDb().shift.put(shift);
 }
 
-export function markSaleAttempt(clientId: string, lastError: string): Promise<void> {
-  return enqueue(async () => {
-    const db = getPosDb();
-    const current = await db.sales.get(clientId);
-    if (!current || current.status !== "pendiente_sync") {
-      return;
-    }
-    await db.sales.update(clientId, {
-      attempts: current.attempts + 1,
-      lastError: lastError.slice(0, 300),
-    });
-  });
+export async function clearShift(): Promise<void> {
+  await posDb().shift.delete("current");
+}
+
+export async function salesSince(openedAt: string): Promise<{ count: number; total: number }> {
+  const rows = await posDb().sales.where("createdAt").aboveOrEqual(openedAt).toArray();
+  const total = rows.reduce((sum, row) => sum + row.total, 0);
+  return { count: rows.length, total: Math.round(total * 100) / 100 };
 }

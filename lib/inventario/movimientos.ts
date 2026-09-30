@@ -302,6 +302,32 @@ export async function listarExistencias(input: {
   return { existencias: page, nextCursor: next };
 }
 
+/** Primera existencia de un producto que todavía no tiene fila. No pisa un conteo ya guardado. */
+export async function sembrarExistenciaSiFalta(productoId: string, tiendaRaw: unknown, cantidad: number): Promise<void> {
+  if (!isInventarioUuid(productoId)) {
+    return;
+  }
+  const tienda = normalizarTienda(tiendaRaw);
+  const actuales = await existenciasPorProducto([productoId], tienda);
+  if (actuales.has(productoId)) {
+    return;
+  }
+  const supabase = getSupabaseAdminClient();
+  const { error } = await supabase.from("inventario_existencias").upsert(
+    {
+      producto_id: productoId,
+      tienda,
+      cantidad: roundCantidad(Number.isFinite(cantidad) ? cantidad : 0),
+      punto_reorden: 0,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "producto_id,tienda", ignoreDuplicates: true }
+  );
+  if (error) {
+    throw error;
+  }
+}
+
 export async function existenciasPorProducto(productoIds: string[], tiendaRaw: unknown): Promise<Map<string, Existencia>> {
   const map = new Map<string, Existencia>();
   if (!productoIds.length) {

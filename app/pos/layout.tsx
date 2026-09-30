@@ -1,12 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import { ThemeProvider } from "next-themes";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Caja | Quick!",
   description: "Punto de venta del mostrador Quick! Mini Market",
-  applicationName: "Quick Caja",
-  manifest: "/pos/manifest.webmanifest",
+  applicationName: "Quick Cobro",
   appleWebApp: {
     capable: true,
     title: "Quick Caja",
@@ -28,5 +28,9 @@ export const viewport: Viewport = {
 };
 
 export default function PosLayout({ children }: { children: React.ReactNode }) {
-  return <div className="h-dvh overflow-hidden">{children}</div>;
+  return (
+    <ThemeProvider attribute="class" forcedTheme="light" enableSystem={false}>
+      <div className="h-dvh overflow-hidden">{children}</div>
+    </ThemeProvider>
+  );
 }

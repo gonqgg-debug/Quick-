@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parsePosVentaInput } from "@/lib/pos";
-import { registrarVentaPos } from "@/lib/pos-server";
+import { registrarVentaCobro } from "@/lib/pos-server";
 import { isStaffAuthorized, unauthorized } from "@/lib/staff-auth";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
   try {
-    const venta = await registrarVentaPos(parsed.value);
+    const venta = await registrarVentaCobro(parsed.value);
     return NextResponse.json(venta);
   } catch (error) {
     const message = error instanceof Error ? error.message : "No pudimos guardar la venta";

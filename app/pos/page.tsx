@@ -1,7 +1,7 @@
-import { PosApp } from "@/components/pos/PosApp";
+import { PosScreen } from "@/components/pos/PosScreen";
 
 export const dynamic = "force-dynamic";
 
 export default function PosPage() {
-  return <PosApp />;
+  return <PosScreen />;
 }

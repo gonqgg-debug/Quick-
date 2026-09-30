@@ -1,6 +1,6 @@
 import { normalizeBarcode } from "@/lib/barcode";
 import { aplicarVentaMostrador } from "@/lib/inventario/operaciones";
-import { existenciasPorProducto, schemaInventarioFalta } from "@/lib/inventario/movimientos";
+import { existenciasPorProducto, schemaInventarioFalta, sembrarExistenciaSiFalta } from "@/lib/inventario/movimientos";
 import { toMoney } from "@/lib/money";
 import {
   QUICKCOINS_MINIMO_CANJE,
@@ -106,7 +106,8 @@ export async function listPosProducts(): Promise<PosStoredProduct[]> {
   }
   return products.map((product) => ({
     ...product,
-    stockBase: existencias.get(product.id) ?? 0,
+    stockBase:
+      existencias && existencias.has(product.id) ? (existencias.get(product.id) ?? 0) : product.stockBase,
   }));
 }
 
@@ -274,6 +275,69 @@ export async function registrarVentaPos(input: PosVentaInput): Promise<PosVentaR
       throw new Error("Falta crear las tablas de inventario. Corre la migración en Supabase.");
     }
     throw error;
+  }
+  return result;
+}
+
+/** Cobro de mostrador. La función de cinco argumentos es la que coincide con ventas_pos (created_at). */
+export async function registrarVentaCobro(input: PosVentaInput): Promise<PosVentaResult> {
+  const supabase = getSupabaseAdminClient();
+  const ids = Array.from(new Set(input.items.map((item) => item.productoId)));
+  const stockQuery = await supabase.from("products").select("id, stock").in("id", ids);
+  const stockRows =
+    stockQuery.error && missingStockColumn(stockQuery.error)
+      ? []
+      : ((stockQuery.data ?? []) as Array<{ id: string; stock: number | null }>);
+  if (stockQuery.error && !missingStockColumn(stockQuery.error)) {
+    throw stockQuery.error;
+  }
+  const existencias = await existenciasDeCaja(ids);
+  if (existencias) {
+    for (const row of stockRows) {
+      if (!existencias.has(String(row.id)) && row.stock != null) {
+        await sembrarExistenciaSiFalta(String(row.id), POS_TIENDA, Number(row.stock));
+      }
+    }
+  }
+
+  const { data, error } = await supabase.rpc("registrar_venta_pos", {
+    p_client_id: input.clientId,
+    p_metodo_pago: input.metodoPago,
+    p_monto_recibido: input.montoRecibido,
+    p_creado_por: input.creadoPor || "staff",
+    p_items: input.items.map((item) => ({
+      producto_id: item.productoId,
+      cantidad: item.cantidad,
+      precio_unitario: item.precioUnitario,
+    })),
+  });
+  if (error) {
+    throw error;
+  }
+  const row = (data ?? {}) as Record<string, unknown>;
+  const result: PosVentaResult = {
+    id: String(row.id ?? ""),
+    clientId: String(row.clientId ?? row.client_id ?? input.clientId),
+    total: toMoney(row.total),
+    cambio: row.cambio == null ? null : toMoney(row.cambio),
+    metodoPago: String(row.metodoPago ?? row.metodo_pago ?? input.metodoPago),
+    montoRecibido: input.montoRecibido,
+    stockAdvertencia: Boolean(row.stockAdvertencia ?? row.stock_advertencia),
+    alreadySynced: Boolean(row.alreadySynced ?? row.already_synced),
+    coinsApplied: false,
+  };
+
+  const inventario = await aplicarVentaMostrador({
+    clientId: result.clientId,
+    tienda: POS_TIENDA,
+    lineas: input.items.map((item) => ({
+      productoId: item.productoId,
+      cantidad: item.cantidad,
+      nombre: item.nombre,
+    })),
+  });
+  if (inventario.aplicadas.some((linea) => linea.stockAntes < linea.cantidad)) {
+    result.stockAdvertencia = true;
   }
   return result;
 }
