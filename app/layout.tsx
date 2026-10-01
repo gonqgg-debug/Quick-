@@ -48,6 +48,22 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
+      <head>
+        {process.env.NODE_ENV === "production" ? (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `fetch("https://api.localo.com/api/structured_data/s2yyToarYxw-f6tfJi4KdOVJVX7KPRb6TeSZ7bGEaGE/local_business")
+.then(response => response.json())
+.then(data => {
+  const script = document.createElement("script");
+  script.type = "application/ld+json";
+  script.textContent = JSON.stringify(data);
+  document.head.appendChild(script);
+});`,
+            }}
+          />
+        ) : null}
+      </head>
       <body
         className={`${baloo.variable} ${caveat.variable} ${inter.variable} bg-white font-sans antialiased`}
         style={{ color: "#1A1A1A", backgroundColor: "#FFFFFF" }}
