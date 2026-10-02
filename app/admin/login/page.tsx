@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { AdminLoginForm } from "@/components/admin/AdminLoginForm";
+import { AdminLoginForm } from "@/components/admin/shell/AdminLoginForm";
 
 export const dynamic = "force-dynamic";
 

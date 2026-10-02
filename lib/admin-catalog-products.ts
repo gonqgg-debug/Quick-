@@ -16,7 +16,13 @@ export type {
   AdminCatalogProductList,
 } from "@/lib/admin-catalog-products-shared";
 
-const SELECT_FIELDS = "id, nombre, marca, categoria, precio, codigo_odoo, codigo_barras, foto_url, activo";
+const SELECT_BASE = "id, nombre, marca, categoria, precio, codigo_odoo, codigo_barras, foto_url, activo";
+const SELECT_FIELDS = "id, nombre, marca, categoria, precio, codigo_odoo, codigo_barras, foto_url, activo, stock";
+
+function sinColumnaStock(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String((error as { message?: string } | null)?.message ?? "");
+  return /stock/i.test(message) && /does not exist|schema cache|42703|PGRST204/i.test(message);
+}
 const EXPORT_MAX = 5000;
 const BATCH_MAX = 2000;
 const IDS_MAX = 2000;
@@ -39,7 +45,9 @@ function mapRow(row: {
   codigo_barras: string | null;
   foto_url: string | null;
   activo: boolean;
+  stock?: number | null;
 }): AdminCatalogProduct {
+  const stock = row.stock == null ? null : Math.trunc(Number(row.stock));
   return {
     id: String(row.id),
     nombre: String(row.nombre),
@@ -50,6 +58,11 @@ function mapRow(row: {
     codigoBarras: row.codigo_barras ? String(row.codigo_barras) : null,
     fotoUrl: row.foto_url ? String(row.foto_url) : null,
     activo: Boolean(row.activo),
+    stock: stock == null || Number.isNaN(stock) ? null : stock,
+    existencia: null,
+    costoPromedio: null,
+    ultimoCosto: null,
+    puntoReorden: null,
   };
 }
 
@@ -94,19 +107,27 @@ export async function listAdminCatalogProducts(
   const from = (filters.page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  const listQuery = applyListFilters(
-    supabase
-      .from("products")
-      .select(SELECT_FIELDS, { count: "exact" })
-      .order("nombre", { ascending: true })
-      .range(from, to),
+  const listed = await applyListFilters(
+    supabase.from("products").select(SELECT_FIELDS, { count: "exact" }).order("nombre", { ascending: true }).range(from, to),
     filters
   );
+  let data = listed.data;
+  let error = listed.error;
+  let count = listed.count;
+  if (error && sinColumnaStock(error)) {
+    const again = await applyListFilters(
+      supabase.from("products").select(SELECT_BASE, { count: "exact" }).order("nombre", { ascending: true }).range(from, to),
+      filters
+    );
+    data = again.data as typeof data;
+    error = again.error;
+    count = again.count;
+  }
 
-  const [{ data, error, count }, { data: categoryRows, error: categoryError }] = await Promise.all([
-    listQuery,
-    supabase.from("products").select("categoria").order("categoria", { ascending: true }),
-  ]);
+  const { data: categoryRows, error: categoryError } = await supabase
+    .from("products")
+    .select("categoria")
+    .order("categoria", { ascending: true });
   if (error) {
     throw error;
   }
@@ -158,7 +179,11 @@ export async function fetchAdminCatalogProductsForExport(
     const unique = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).slice(0, EXPORT_MAX);
     for (let i = 0; i < unique.length; i += 100) {
       const chunk = unique.slice(i, i + 100);
-      const { data, error } = await supabase.from("products").select(SELECT_FIELDS).in("id", chunk);
+      let loaded = await supabase.from("products").select(SELECT_FIELDS).in("id", chunk);
+      if (loaded.error && sinColumnaStock(loaded.error)) {
+        loaded = (await supabase.from("products").select(SELECT_BASE).in("id", chunk)) as typeof loaded;
+      }
+      const { data, error } = loaded;
       if (error) {
         throw error;
       }
@@ -168,10 +193,17 @@ export async function fetchAdminCatalogProductsForExport(
   }
 
   for (let from = 0; from < EXPORT_MAX; from += 1000) {
-    const { data, error } = await applyListFilters(
+    let loaded = await applyListFilters(
       supabase.from("products").select(SELECT_FIELDS).order("nombre", { ascending: true }).range(from, from + 999),
       filters
     );
+    if (loaded.error && sinColumnaStock(loaded.error)) {
+      loaded = (await applyListFilters(
+        supabase.from("products").select(SELECT_BASE).order("nombre", { ascending: true }).range(from, from + 999),
+        filters
+      )) as typeof loaded;
+    }
+    const { data, error } = loaded;
     if (error) {
       throw error;
     }
@@ -204,6 +236,7 @@ export async function updateAdminCatalogProduct(input: {
   categoria?: unknown;
   precio?: unknown;
   activo?: unknown;
+  stock?: unknown;
 }): Promise<AdminCatalogProduct> {
   if (!input.id) {
     throw new Error("Falta el producto");
@@ -214,6 +247,7 @@ export async function updateAdminCatalogProduct(input: {
     categoria?: string;
     precio?: number;
     activo?: boolean;
+    stock?: number | null;
   } = {};
   if (input.nombre !== undefined) {
     const nombre = String(input.nombre ?? "").trim();
@@ -246,17 +280,32 @@ export async function updateAdminCatalogProduct(input: {
     }
     patch.activo = input.activo;
   }
+  if (input.stock !== undefined) {
+    if (input.stock == null || input.stock === "") {
+      patch.stock = null;
+    } else {
+      const stock = typeof input.stock === "number" ? input.stock : Number(String(input.stock).trim());
+      if (!Number.isInteger(stock) || stock < -1_000_000 || stock > 1_000_000) {
+        throw new Error("Stock inválido");
+      }
+      patch.stock = stock;
+    }
+  }
   if (Object.keys(patch).length === 0) {
     throw new Error("Nada que actualizar");
   }
 
   const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from("products")
-    .update(patch)
-    .eq("id", input.id)
-    .select(SELECT_FIELDS)
-    .maybeSingle();
+  let updated = await supabase.from("products").update(patch).eq("id", input.id).select(SELECT_FIELDS).maybeSingle();
+  if (updated.error && sinColumnaStock(updated.error)) {
+    if (patch.stock !== undefined) {
+      throw new Error("Falta la columna de stock de la caja. Corre la migración del POS.");
+    }
+    const resto = { ...patch };
+    delete resto.stock;
+    updated = (await supabase.from("products").update(resto).eq("id", input.id).select(SELECT_BASE).maybeSingle()) as typeof updated;
+  }
+  const { data, error } = updated;
   if (error || !data) {
     throw error ?? new Error("No pudimos guardar el producto");
   }
@@ -270,6 +319,7 @@ export async function updateAdminCatalogProduct(input: {
     codigoOdoo: product.codigoOdoo,
     codigoBarras: product.codigoBarras,
     activo: product.activo,
+    stock: product.stock,
   });
   return product;
 }

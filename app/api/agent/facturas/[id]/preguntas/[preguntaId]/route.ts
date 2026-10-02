@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAgentApi } from "@/lib/agent-auth";
-import { facturasError, handlePatchPregunta } from "@/lib/facturas-http";
+import { facturasError, handlePatchPregunta } from "@/lib/contabilidad/facturas-http";
 
 export const dynamic = "force-dynamic";
 

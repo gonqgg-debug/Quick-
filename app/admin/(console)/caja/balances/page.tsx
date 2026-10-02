@@ -1,12 +1,5 @@
-import { AdminCajaBalances } from "@/components/admin/AdminCajaBalances";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export const metadata = {
-  title: "Caja | Administración",
-  description: "Saldos esperados de caja chica y caja fuerte",
-};
-
-export default function AdminCajaBalancesPage() {
-  return <AdminCajaBalances />;
+export default function Page() {
+  redirect("/admin/operacion/caja/balances");
 }

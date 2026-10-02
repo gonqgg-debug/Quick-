@@ -3,8 +3,29 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #1a1a1a;
+  /* shadcn tokens. primary is brand.green #7EB341. */
+  --background: 0 0% 100%;
+  --foreground: 0 0% 10.2%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 10.2%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 10.2%;
+  --primary: 88 46.7% 47.8%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 14.3% 95.9%;
+  --secondary-foreground: 0 0% 10.2%;
+  --muted: 220 14.3% 95.9%;
+  --muted-foreground: 220 8.9% 46.1%;
+  --accent: 88 44.8% 94.3%;
+  --accent-foreground: 0 0% 10.2%;
+  --destructive: 0 72.2% 50.6%;
+  --destructive-foreground: 0 0% 100%;
+  --warning: 33 93% 54.9%;
+  --warning-foreground: 0 0% 10.2%;
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
+  --ring: 88 46.7% 47.8%;
+  --radius: 0.75rem;
   --brand-green: #7eb341;
   --brand-orange: #f79521;
   --brand-blue: #1f82c5;
@@ -179,4 +200,31 @@ body {
     height: 60px;
     width: 60px;
   }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+}
+
+@keyframes pos-tap {
+  0% {
+    transform: scale(0.97);
+    box-shadow: 0 0 0 3px #7eb341;
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(126, 179, 65, 0);
+  }
+}
+
+.pos-tap {
+  animation: pos-tap 220ms ease-out;
+}
+
+.pos-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 168px 180px;
+  touch-action: manipulation;
 }

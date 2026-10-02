@@ -1,12 +1,5 @@
-import { AdminHistory } from "@/components/admin/AdminHistory";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export const metadata = {
-  title: "Historial de Delivery | Administración",
-  description: "Historial de Delivery de Quick! Mini Market",
-};
-
-export default function AdminHistorialPage() {
-  return <AdminHistory />;
+export default function Page() {
+  redirect("/admin/operacion/historial");
 }

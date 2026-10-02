@@ -1,4 +1,4 @@
-import { AdminDiagnostico } from "@/components/admin/AdminDiagnostico";
+import { AdminDiagnostico } from "@/components/admin/diagnostico/AdminDiagnostico";
 
 export const dynamic = "force-dynamic";
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
-import { compraFailure, createCompra, listCompras, parsePagadoParam } from "@/lib/admin-compras";
-import { readCompraBody } from "@/lib/compra-request";
+import { compraFailure, createCompra, listCompras, parsePagadoParam } from "@/lib/contabilidad/compras";
+import { readCompraBody } from "@/lib/contabilidad/compra-request";
 import { isDayKey } from "@/lib/local-day";
 
 export const dynamic = "force-dynamic";

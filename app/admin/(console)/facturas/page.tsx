@@ -1,12 +1,5 @@
-import { AdminFacturas } from "@/components/admin/AdminFacturas";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export const metadata = {
-  title: "Facturas | Administración",
-  description: "Facturas que Phillip va capturando, con la foto original",
-};
-
-export default function AdminFacturasPage() {
-  return <AdminFacturas />;
+export default function Page() {
+  redirect("/admin/inventario/facturas");
 }

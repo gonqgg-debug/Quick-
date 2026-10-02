@@ -1,12 +1,5 @@
-import { AdminReporte } from "@/components/admin/AdminReporte";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export const metadata = {
-  title: "Reporte mensual | Administración",
-  description: "Resumen financiero mes a mes de ventas, compras, caja y delivery",
-};
-
-export default function AdminReportePage() {
-  return <AdminReporte />;
+export default function Page() {
+  redirect("/admin/contabilidad/reporte");
 }

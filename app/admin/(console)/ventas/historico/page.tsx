@@ -1,12 +1,5 @@
-import { AdminVentasHistorico } from "@/components/admin/AdminVentasHistorico";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export const metadata = {
-  title: "Histórico de ventas | Administración",
-  description: "Resumen mensual y detalle diario de ventas frente a la meta",
-};
-
-export default function AdminVentasHistoricoPage() {
-  return <AdminVentasHistorico />;
+export default function Page() {
+  redirect("/admin/operacion/ventas/historico");
 }

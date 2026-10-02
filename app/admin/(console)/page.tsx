@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { AdminHome } from "@/components/admin/AdminHome";
+import { AdminHome } from "@/components/admin/inicio/AdminHome";
 import { adminGreetingName, getAdminUser } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";

@@ -1,4 +1,4 @@
-import { AdminMensajesMasivos } from "@/components/admin/AdminMensajesMasivos";
+import { AdminMensajesMasivos } from "@/components/admin/clientes/AdminMensajesMasivos";
 
 export const dynamic = "force-dynamic";
 

@@ -1,5 +1,5 @@
-import { AdminCajaNav } from "@/components/admin/AdminCajaNav";
-import { AdminCajaPages } from "@/components/admin/AdminCajaPages";
+import { AdminCajaNav } from "@/components/admin/operacion/AdminCajaNav";
+import { AdminCajaPages } from "@/components/admin/operacion/AdminCajaPages";
 
 export default function AdminCajaLayout({ children }: { children: React.ReactNode }) {
   return (

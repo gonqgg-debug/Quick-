@@ -1,3 +1,5 @@
+import { existenciasPorProducto, schemaInventarioFalta } from "@/lib/inventario/movimientos";
+import { normalizarTienda } from "@/lib/inventario/costos";
 import { isDayKey, todayDayKey, diffDayKeys } from "@/lib/local-day";
 import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
@@ -55,7 +57,7 @@ export async function listAgentCompras(range: AgentRange) {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("compras")
-    .select("id, proveedor_id, monto, fecha, due_date, pagado, pagado_en, rnc, ncf, captura_path, proveedores ( nombre )")
+    .select("id, proveedor_id, monto, fecha, due_date, pagado, pagado_en, rnc, ncf, captura_path, factura_id, proveedores ( nombre )")
     .gte("fecha", range.from)
     .lte("fecha", range.to)
     .order("fecha", { ascending: true })
@@ -77,6 +79,7 @@ export async function listAgentCompras(range: AgentRange) {
       rnc: typeof row.rnc === "string" && row.rnc.trim() ? row.rnc.trim() : null,
       ncf: typeof row.ncf === "string" && row.ncf.trim() ? row.ncf.trim() : null,
       tieneCaptura: Boolean(row.captura_path),
+      facturaId: typeof row.factura_id === "string" ? row.factura_id : null,
     };
   });
   return {
@@ -161,19 +164,35 @@ export async function listAgentCatalogo(search: URLSearchParams) {
   const rows = data ?? [];
   const page = rows.slice(0, PAGE_SIZE);
   const next = rows.length > PAGE_SIZE ? String(page[page.length - 1]?.id ?? "") : null;
+  const tienda = normalizarTienda(search.get("tienda"));
+  let stock = new Map<string, { cantidad: number; costoPromedio: number | null; ultimoCosto: number | null; puntoReorden: number }>();
+  try {
+    stock = await existenciasPorProducto(page.map((row) => String(row.id)), tienda);
+  } catch (error) {
+    if (!schemaInventarioFalta(error)) {
+      throw error;
+    }
+  }
   return {
-    nota: "El catálogo no guarda existencias. activo indica si el producto se ofrece; precio es el de venta.",
-    productos: page.map((row) => ({
-      id: String(row.id),
-      nombre: String(row.nombre),
-      marca: row.marca ? String(row.marca) : null,
-      categoria: String(row.categoria ?? ""),
-      precio: toMoney(row.precio),
-      codigoOdoo: row.codigo_odoo ? String(row.codigo_odoo) : null,
-      codigoBarras: row.codigo_barras ? String(row.codigo_barras) : null,
-      activo: Boolean(row.activo),
-      stock: null,
-    })),
+    nota: "stock, costoPromedio y ultimoCosto son de la tienda pedida (quick si no mandas tienda). precio es el de venta. activo indica si el producto se ofrece. La caja de mostrador usa /pos y products.stock.",
+    tienda,
+    productos: page.map((row) => {
+      const existencia = stock.get(String(row.id));
+      return {
+        id: String(row.id),
+        nombre: String(row.nombre),
+        marca: row.marca ? String(row.marca) : null,
+        categoria: String(row.categoria ?? ""),
+        precio: toMoney(row.precio),
+        codigoOdoo: row.codigo_odoo ? String(row.codigo_odoo) : null,
+        codigoBarras: row.codigo_barras ? String(row.codigo_barras) : null,
+        activo: Boolean(row.activo),
+        stock: existencia ? existencia.cantidad : null,
+        costoPromedio: existencia?.costoPromedio ?? null,
+        ultimoCosto: existencia?.ultimoCosto ?? null,
+        puntoReorden: existencia?.puntoReorden ?? null,
+      };
+    }),
     nextCursor: next || null,
   };
 }

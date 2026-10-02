@@ -1,4 +1,4 @@
-import { AdminClienteDetalle } from "@/components/admin/AdminClienteDetalle";
+import { AdminClienteDetalle } from "@/components/admin/clientes/AdminClienteDetalle";
 
 export const dynamic = "force-dynamic";
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
-import { parseProveedorInput, updateProveedor } from "@/lib/admin-compras";
+import { parseProveedorInput, updateProveedor } from "@/lib/contabilidad/compras";
 
 export const dynamic = "force-dynamic";
 

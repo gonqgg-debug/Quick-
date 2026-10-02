@@ -33,10 +33,11 @@ export type CajaLedgerItem = {
 };
 
 export const CAJA_TABS = [
-  { href: "/admin/caja/balances", label: "Balances" },
-  { href: "/admin/caja/recuento", label: "Recuento" },
-  { href: "/admin/caja/turnos", label: "Turnos" },
-  { href: "/admin/caja/ledger", label: "Ledger" },
+  { href: "/admin/operacion/caja/balances", label: "Balances" },
+  { href: "/admin/operacion/caja/recuento", label: "Recuento" },
+  { href: "/admin/operacion/caja/turnos", label: "Turnos" },
+  { href: "/admin/operacion/caja/ledger", label: "Ledger" },
+  { href: "/admin/ventas/pos", label: "Advertencias" },
 ] as const;
 
 export function defaultTurnoPeriodo(now = Date.now()): CajaTurnoPeriodo {

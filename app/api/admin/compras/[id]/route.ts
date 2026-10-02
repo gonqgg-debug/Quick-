@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
-import { compraFailure, updateCompra } from "@/lib/admin-compras";
-import { readCompraBody } from "@/lib/compra-request";
+import { compraFailure, updateCompra } from "@/lib/contabilidad/compras";
+import { readCompraBody } from "@/lib/contabilidad/compra-request";
 
 export const dynamic = "force-dynamic";
 

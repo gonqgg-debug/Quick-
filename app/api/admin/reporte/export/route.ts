@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
-import { loadReporteFinanciero } from "@/lib/admin-reporte";
-import { REPORTE_EXPORT_HEADERS, reporteExportRows } from "@/lib/admin-reporte-shared";
+import { loadReporteFinanciero } from "@/lib/contabilidad/reporte";
+import { REPORTE_EXPORT_HEADERS, reporteExportRows } from "@/lib/contabilidad/reporte-shared";
 import { localDayKey } from "@/lib/local-day";
 import { buildXlsx } from "@/lib/simple-xlsx";
 
