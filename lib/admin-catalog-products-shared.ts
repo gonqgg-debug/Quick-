@@ -10,6 +10,7 @@ export type AdminCatalogProduct = {
   codigoBarras: string | null;
   fotoUrl: string | null;
   activo: boolean;
+  stock: number | null;
 };
 
 export type AdminCatalogProductFilters = {

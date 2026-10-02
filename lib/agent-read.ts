@@ -145,7 +145,7 @@ export async function listAgentCatalogo(search: URLSearchParams) {
   const supabase = getSupabaseAdminClient();
   let query = supabase
     .from("products")
-    .select("id, nombre, marca, categoria, precio, codigo_odoo, codigo_barras, activo")
+    .select("id, nombre, marca, categoria, precio, codigo_odoo, codigo_barras, activo, stock")
     .order("id", { ascending: true })
     .limit(PAGE_SIZE + 1);
   if (cursor) {
@@ -162,7 +162,7 @@ export async function listAgentCatalogo(search: URLSearchParams) {
   const page = rows.slice(0, PAGE_SIZE);
   const next = rows.length > PAGE_SIZE ? String(page[page.length - 1]?.id ?? "") : null;
   return {
-    nota: "El catálogo no guarda existencias. activo indica si el producto se ofrece; precio es el de venta.",
+    nota: "activo indica si el producto se ofrece. stock es la existencia de caja; null significa que ese producto no controla inventario.",
     productos: page.map((row) => ({
       id: String(row.id),
       nombre: String(row.nombre),
@@ -172,7 +172,7 @@ export async function listAgentCatalogo(search: URLSearchParams) {
       codigoOdoo: row.codigo_odoo ? String(row.codigo_odoo) : null,
       codigoBarras: row.codigo_barras ? String(row.codigo_barras) : null,
       activo: Boolean(row.activo),
-      stock: null,
+      stock: row.stock == null || row.stock === "" ? null : Math.trunc(Number(row.stock)),
     })),
     nextCursor: next || null,
   };
