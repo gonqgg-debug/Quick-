@@ -9,6 +9,7 @@ import {
   ADMIN_HOME,
   ADMIN_NAV_SECTIONS,
   type AdminNavChild,
+  type AdminNavGroup,
   type AdminNavIcon,
   type AdminNavItem,
   type AdminNavSectionId,
@@ -21,9 +22,9 @@ type AdminShellProps = {
   children: React.ReactNode;
 };
 
-type OpenState = Record<AdminNavSectionId | "caja", boolean>;
+type OpenState = Record<AdminNavSectionId | AdminNavGroup, boolean>;
 
-const NAV_STORAGE_KEY = "quick-admin-nav-open";
+const NAV_STORAGE_KEY = "quick-admin-nav-open-v2";
 
 function isActivePath(pathname: string, href: string): boolean {
   if (href === "/admin" || href === "/admin/ventas" || href === "/admin/reporte") {
@@ -36,6 +37,24 @@ function isActivePath(pathname: string, href: string): boolean {
     return pathname === href || pathname.startsWith(`${href}/`);
   }
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function childIsActive(pathname: string, href: string, siblings: AdminNavChild[]): boolean {
+  if (pathname === href) {
+    return true;
+  }
+  const hasDeeperSibling = siblings.some((other) => other.href !== href && other.href.startsWith(`${href}/`));
+  if (hasDeeperSibling) {
+    return false;
+  }
+  return pathname.startsWith(`${href}/`);
+}
+
+function itemIsActive(pathname: string, item: AdminNavItem): boolean {
+  if (item.children?.some((child) => childIsActive(pathname, child.href, item.children ?? []))) {
+    return true;
+  }
+  return isActivePath(pathname, item.href);
 }
 
 function sectionForPath(pathname: string): AdminNavSectionId | null {
@@ -52,27 +71,46 @@ function sectionForPath(pathname: string): AdminNavSectionId | null {
     return "catalogo";
   }
   if (
-    pathname.startsWith("/admin/reporte") ||
     pathname.startsWith("/admin/ventas") ||
     pathname.startsWith("/admin/compras") ||
-    pathname.startsWith("/admin/facturas") ||
     pathname.startsWith("/admin/proveedores") ||
     pathname.startsWith("/admin/parametros") ||
     pathname.startsWith("/admin/caja")
   ) {
     return "finanzas";
   }
+  if (
+    pathname.startsWith("/admin/reporte") ||
+    pathname.startsWith("/admin/facturas") ||
+    pathname.startsWith("/admin/decisiones") ||
+    pathname.startsWith("/admin/excepciones") ||
+    pathname.startsWith("/admin/cierre")
+  ) {
+    return "contabilidad";
+  }
+  return null;
+}
+
+function groupForPath(pathname: string): AdminNavGroup | null {
+  if (pathname.startsWith("/admin/caja")) {
+    return "caja";
+  }
+  if (pathname.startsWith("/admin/ventas")) {
+    return "ventas";
+  }
   return null;
 }
 
 function defaultOpen(): OpenState {
   return {
-    pedidos: true,
-    clientes: true,
-    expansion: true,
-    catalogo: true,
-    finanzas: true,
-    caja: true,
+    pedidos: false,
+    clientes: false,
+    expansion: false,
+    catalogo: false,
+    finanzas: false,
+    contabilidad: false,
+    caja: false,
+    ventas: false,
   };
 }
 
@@ -143,11 +181,12 @@ export function AdminShell({ email, children }: AdminShellProps) {
     setOpen((prev) => {
       const next = { ...prev, ...saved };
       const section = sectionForPath(pathname);
+      const group = groupForPath(pathname);
       if (section) {
         next[section] = true;
       }
-      if (pathname.startsWith("/admin/caja")) {
-        next.caja = true;
+      if (group) {
+        next[group] = true;
       }
       return next;
     });
@@ -158,16 +197,18 @@ export function AdminShell({ email, children }: AdminShellProps) {
   useEffect(() => {
     setOpen((prev) => {
       const section = sectionForPath(pathname);
-      const needsCaja = pathname.startsWith("/admin/caja") && !prev.caja;
-      if ((!section || prev[section]) && !needsCaja) {
+      const group = groupForPath(pathname);
+      const needsSection = Boolean(section && !prev[section]);
+      const needsGroup = Boolean(group && !prev[group]);
+      if (!needsSection && !needsGroup) {
         return prev;
       }
       const next = { ...prev };
       if (section) {
         next[section] = true;
       }
-      if (pathname.startsWith("/admin/caja")) {
-        next.caja = true;
+      if (group) {
+        next[group] = true;
       }
       persistOpen(next);
       return next;
@@ -418,7 +459,7 @@ function AdminNav({
       <LiveItem item={ADMIN_HOME} pathname={pathname} pendingRequests={pendingRequests} onNavigate={onNavigate} />
       {ADMIN_NAV_SECTIONS.map((section) => {
         const expanded = open[section.id];
-        const hasActive = section.items.some((item) => isActivePath(pathname, item.href));
+        const hasActive = section.items.some((item) => itemIsActive(pathname, item));
         const sectionDomId = idPrefix ? `${idPrefix}-section-${section.id}` : `nav-section-${section.id}`;
         return (
           <div key={section.id}>
@@ -448,8 +489,8 @@ function AdminNav({
                       item={item}
                       pathname={pathname}
                       pendingRequests={pendingRequests}
-                      nestedOpen={item.href === "/admin/caja" ? open.caja : false}
-                      onToggleNested={item.href === "/admin/caja" ? () => onToggle("caja") : undefined}
+                      nestedOpen={item.group ? open[item.group] : false}
+                      onToggleNested={item.group ? () => onToggle(item.group as AdminNavGroup) : undefined}
                       onNavigate={onNavigate}
                     />
                   ),
@@ -478,7 +519,7 @@ function LiveItem({
   onToggleNested?: () => void;
   onNavigate?: () => void;
 }) {
-  const active = isActivePath(pathname, item.href);
+  const active = itemIsActive(pathname, item);
   const hasChildren = Boolean(item.children?.length);
   const childrenOpen = hasChildren ? nestedOpen : false;
 
@@ -519,6 +560,7 @@ function LiveItem({
               <ChildLink
                 key={child.href}
                 child={child}
+                siblings={item.children ?? []}
                 pathname={pathname}
                 pendingRequests={pendingRequests}
                 onNavigate={onNavigate}
@@ -533,16 +575,18 @@ function LiveItem({
 
 function ChildLink({
   child,
+  siblings,
   pathname,
   pendingRequests,
   onNavigate,
 }: {
   child: AdminNavChild;
+  siblings: AdminNavChild[];
   pathname: string;
   pendingRequests: number;
   onNavigate?: () => void;
 }) {
-  const childActive = pathname === child.href || pathname.startsWith(`${child.href}/`);
+  const childActive = childIsActive(pathname, child.href, siblings);
   return (
     <Link
       href={child.href}
@@ -762,6 +806,31 @@ function NavGlyph({
           <path d="M8.5 12.5h7" />
           <path d="M8.5 16h4.5" />
           <circle cx="16.5" cy="16.2" r="1.1" />
+        </svg>
+      );
+    case "decisions":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="8" />
+          <path d="M8.5 12.2 11 14.5 15.5 9.5" />
+        </svg>
+      );
+    case "exceptions":
+      return (
+        <svg {...common}>
+          <path d="M12 4.5 20 19H4L12 4.5z" />
+          <path d="M12 10v4" />
+          <path d="M12 16.5h.01" />
+        </svg>
+      );
+    case "close":
+      return (
+        <svg {...common}>
+          <rect x="4" y="5" width="16" height="15" rx="2" />
+          <path d="M8 3.5v3" />
+          <path d="M16 3.5v3" />
+          <path d="M4 9h16" />
+          <path d="M8.5 14.2 11 16.5 15.5 12" />
         </svg>
       );
     case "sales":

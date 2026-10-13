@@ -1,5 +1,5 @@
-import { NextRequest } from "next/server";
-import { requireAgentApi } from "@/lib/agent-auth";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAgentApi, requireAgentRol } from "@/lib/agent-auth";
 import { facturasError, handleGetFactura, handlePatchFactura } from "@/lib/facturas-http";
 
 export const dynamic = "force-dynamic";
@@ -17,12 +17,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
-  const denied = requireAgentApi(request);
-  if (denied) {
-    return denied;
+  const rol = requireAgentRol(request, ["phillip", "rodrigo", "lectura"]);
+  if (rol instanceof NextResponse) {
+    return rol;
   }
   try {
-    return await handlePatchFactura(params.id, request);
+    return await handlePatchFactura(params.id, request, rol);
   } catch (error) {
     return facturasError(error, "No pudimos guardar la factura", "[agent] factura update");
   }

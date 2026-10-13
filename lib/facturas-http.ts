@@ -10,6 +10,7 @@ import {
   resumenFacturas,
   updateFactura,
 } from "@/lib/facturas";
+import type { Actor } from "@/lib/operacion-shared";
 import {
   FACTURA_CONDICIONES,
   FACTURA_ESTADOS,
@@ -34,9 +35,16 @@ function statusFor(message: string): number {
     message.startsWith("La ") ||
     message.startsWith("Las ") ||
     message.startsWith("Manda ") ||
-    message.startsWith("Esa clave") ||
+    message.startsWith("Esa ") ||
     message.startsWith("Cada foto") ||
-    message.startsWith("Hay ")
+    message.startsWith("Hay ") ||
+    message.startsWith("Solo ") ||
+    message.startsWith("Phillip ") ||
+    message.startsWith("Este ") ||
+    message.startsWith("Troy ") ||
+    message.startsWith("Todavía ") ||
+    message.startsWith("Cada ") ||
+    message.startsWith("El cuerpo")
   ) {
     return 400;
   }
@@ -125,9 +133,9 @@ export async function handleAdminFacturas(request: NextRequest) {
   return NextResponse.json({ resumen, facturas });
 }
 
-export async function handleCreateFactura(request: NextRequest) {
+export async function handleCreateFactura(request: NextRequest, actor: Actor = "lectura") {
   const { body, documentos } = await leerPeticionFactura(request);
-  const result = await createFactura(body, documentos);
+  const result = await createFactura(body, documentos, actor);
   return NextResponse.json(result, { status: result.creado ? 201 : 200 });
 }
 
@@ -139,27 +147,27 @@ export async function handleGetFactura(idOrClave: string) {
   return NextResponse.json({ factura });
 }
 
-export async function handlePatchFactura(idOrClave: string, request: NextRequest) {
+export async function handlePatchFactura(idOrClave: string, request: NextRequest, actor: Actor = "lectura") {
   const { body, documentos } = await leerPeticionFactura(request);
-  const factura = await updateFactura(idOrClave, body, documentos);
+  const factura = await updateFactura(idOrClave, body, documentos, actor);
   return NextResponse.json({ factura });
 }
 
-export async function handlePostLineas(idOrClave: string, request: NextRequest) {
+export async function handlePostLineas(idOrClave: string, request: NextRequest, actor: Actor = "lectura") {
   const { body, documentos } = await leerPeticionFactura(request);
-  const factura = await updateFactura(idOrClave, envolverLineas(body), documentos);
+  const factura = await updateFactura(idOrClave, envolverLineas(body), documentos, actor);
   return NextResponse.json({ factura });
 }
 
-export async function handlePostValidaciones(idOrClave: string, request: NextRequest) {
+export async function handlePostValidaciones(idOrClave: string, request: NextRequest, actor: Actor = "lectura") {
   const { body, documentos } = await leerPeticionFactura(request);
-  const factura = await updateFactura(idOrClave, envolverValidaciones(body), documentos);
+  const factura = await updateFactura(idOrClave, envolverValidaciones(body), documentos, actor);
   return NextResponse.json({ factura });
 }
 
-export async function handlePostPreguntas(idOrClave: string, request: NextRequest) {
+export async function handlePostPreguntas(idOrClave: string, request: NextRequest, actor: Actor = "lectura") {
   const { body, documentos } = await leerPeticionFactura(request);
-  const factura = await updateFactura(idOrClave, envolverPreguntas(body), documentos);
+  const factura = await updateFactura(idOrClave, envolverPreguntas(body), documentos, actor);
   return NextResponse.json({ factura });
 }
 
@@ -169,12 +177,12 @@ export async function handlePatchPregunta(idOrClave: string, preguntaId: string,
   return NextResponse.json({ factura });
 }
 
-export async function handlePostDocumentos(idOrClave: string, request: NextRequest) {
+export async function handlePostDocumentos(idOrClave: string, request: NextRequest, actor: Actor = "lectura") {
   const { body, documentos } = await leerPeticionFactura(request);
   if (!documentos.length) {
     throw new Error("Manda la foto en el campo foto, o en fotoBase64");
   }
-  const factura = await updateFactura(idOrClave, body, documentos);
+  const factura = await updateFactura(idOrClave, body, documentos, actor);
   return NextResponse.json({ factura, fotos: factura.numeroDocumentos });
 }
 
@@ -208,6 +216,6 @@ export async function handleAdminPatch(id: string, request: NextRequest) {
   if ("observaciones" in body) {
     allowed.observaciones = body.observaciones;
   }
-  const factura = await updateFactura(id, allowed, []);
+  const factura = await updateFactura(id, allowed, [], "admin");
   return NextResponse.json({ factura });
 }

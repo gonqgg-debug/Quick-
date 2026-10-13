@@ -16,7 +16,10 @@ export type AdminNavIcon =
   | "customers"
   | "broadcast"
   | "report"
-  | "invoices";
+  | "invoices"
+  | "decisions"
+  | "exceptions"
+  | "close";
 
 export type AdminNavChild = {
   href: string;
@@ -24,16 +27,26 @@ export type AdminNavChild = {
   icon: AdminNavIcon;
 };
 
+export type AdminNavGroup = "caja" | "ventas";
+
 export type AdminNavItem = {
   href: string;
   label: string;
   icon: AdminNavIcon;
   /** `live` is routed today. `slot` is reserved in the menu for the next build. */
   status: "live" | "slot";
+  /** Collapsible submenu. Only items with children set this. */
+  group?: AdminNavGroup;
   children?: AdminNavChild[];
 };
 
-export type AdminNavSectionId = "pedidos" | "clientes" | "expansion" | "catalogo" | "finanzas";
+export type AdminNavSectionId =
+  | "pedidos"
+  | "clientes"
+  | "expansion"
+  | "catalogo"
+  | "finanzas"
+  | "contabilidad";
 
 export type AdminNavSection = {
   id: AdminNavSectionId;
@@ -67,6 +80,7 @@ export const ADMIN_CAJA: AdminNavItem = {
   label: "Caja",
   icon: "cash",
   status: "live",
+  group: "caja",
   children: [
     { href: "/admin/caja/balances", label: "Balances", icon: "cash" },
     { href: "/admin/caja/recuento", label: "Recuento", icon: "cash" },
@@ -110,16 +124,39 @@ export const ADMIN_REPORTE_CONTABLE: AdminNavItem = {
   status: "live",
 };
 
+export const ADMIN_VENTAS: AdminNavItem = {
+  href: "/admin/ventas",
+  label: "Ventas",
+  icon: "sales",
+  status: "live",
+  group: "ventas",
+  children: [
+    { href: "/admin/ventas", label: "Del día", icon: "sales" },
+    {
+      href: ADMIN_VENTAS_HISTORICO.href,
+      label: ADMIN_VENTAS_HISTORICO.label,
+      icon: ADMIN_VENTAS_HISTORICO.icon,
+    },
+  ],
+};
+
+/** Day-to-day money: cash, sales, payables, suppliers. */
 export const ADMIN_FINANZAS_NAV: AdminNavItem[] = [
-  ADMIN_REPORTE,
-  ADMIN_REPORTE_CONTABLE,
   ADMIN_CAJA,
-  { href: "/admin/ventas", label: "Ventas", icon: "sales", status: "live" },
-  ADMIN_VENTAS_HISTORICO,
+  ADMIN_VENTAS,
   { href: "/admin/compras", label: "Compras", icon: "purchases", status: "live" },
-  { href: "/admin/facturas", label: "Facturas", icon: "invoices", status: "live" },
   { href: "/admin/proveedores", label: "Proveedores", icon: "suppliers", status: "live" },
   ADMIN_PARAMETROS,
+];
+
+/** Agent accounting: fichas, decisions, exceptions, close, and Robert's reports. */
+export const ADMIN_CONTABILIDAD_NAV: AdminNavItem[] = [
+  { href: "/admin/decisiones", label: "Decisiones", icon: "decisions", status: "live" },
+  { href: "/admin/facturas", label: "Facturas", icon: "invoices", status: "live" },
+  { href: "/admin/excepciones", label: "Excepciones", icon: "exceptions", status: "live" },
+  { href: "/admin/cierre", label: "Cierre", icon: "close", status: "live" },
+  ADMIN_REPORTE,
+  ADMIN_REPORTE_CONTABLE,
 ];
 
 /** Live admin links, home first. Flat list of every routed item. */
@@ -130,6 +167,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   ...ADMIN_EXPANSION_NAV,
   ...ADMIN_CATALOGO_NAV,
   ...ADMIN_FINANZAS_NAV,
+  ...ADMIN_CONTABILIDAD_NAV,
 ];
 
 export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
@@ -138,4 +176,5 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   { id: "expansion", label: "Expansión", items: ADMIN_EXPANSION_NAV },
   { id: "catalogo", label: "Catálogo", items: ADMIN_CATALOGO_NAV },
   { id: "finanzas", label: "Finanzas", items: ADMIN_FINANZAS_NAV },
+  { id: "contabilidad", label: "Contabilidad", items: ADMIN_CONTABILIDAD_NAV },
 ];
