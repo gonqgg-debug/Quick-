@@ -1,15 +1,11 @@
 import { calendarDayKey } from "@/lib/local-day";
 
 export const FACTURA_ESTADOS = [
-  { id: "recibida", label: "Recibida", corto: "Recibida", ayuda: "Llegó y todavía no se revisa." },
-  { id: "en_analisis", label: "En análisis", corto: "Análisis", ayuda: "Phillip está leyendo el documento." },
-  { id: "pendiente_informacion", label: "Pendiente de información", corto: "Pendiente", ayuda: "Hay una duda abierta." },
-  { id: "respuesta_recibida", label: "Respuesta recibida", corto: "Respondida", ayuda: "Llegó la respuesta y falta incorporarla." },
-  { id: "completa", label: "Completa", corto: "Completa", ayuda: "Phillip terminó de capturar y validar. No significa que la factura ya esté en Odoo." },
-  { id: "incompleta", label: "Incompleta", corto: "Incompleta", ayuda: "Faltan páginas o datos y no se van a conseguir." },
-  { id: "posible_duplicado", label: "Posible duplicado", corto: "Duplicado", ayuda: "Coincide con otra factura ya guardada." },
-  { id: "documento_no_valido", label: "Documento no válido", corto: "No válida", ayuda: "No es una factura utilizable." },
-  { id: "escalada", label: "Escalada", corto: "Escalada", ayuda: "Phillip la pasó a una persona." },
+  { id: "falta_factura", label: "Falta factura", corto: "Falta factura", ayuda: "Hay una salida de caja y todavía no llegó el comprobante." },
+  { id: "recibida", label: "Recibida", corto: "Recibida", ayuda: "Llegó la foto y Phillip todavía no cierra los renglones." },
+  { id: "registrada", label: "Registrada", corto: "Registrada", ayuda: "Phillip terminó los renglones y la respuesta de Ramón está en la ficha." },
+  { id: "verificada", label: "Verificada", corto: "Verificada", ayuda: "Boris cuadró RNC, NCF y montos contra el sistema, la caja y la DGII." },
+  { id: "conciliada", label: "Conciliada", corto: "Conciliada", ayuda: "Fred encontró el pago en banco, caja o CardNET." },
 ] as const;
 
 export const FACTURA_TIPOS = [
@@ -199,7 +195,45 @@ export type FacturaResumen = {
   posibleDuplicado: boolean;
   duplicadoReferencia: string | null;
   preguntasAbiertas: number;
+  esCompraPersonal: boolean;
+  socio: string | null;
+  confirmacionTexto: string | null;
+  confirmacionPor: string | null;
+  confirmacionEn: string | null;
+  problema: boolean;
+  problemaDueno: string | null;
+  problemaDesde: string | null;
+  problemaFalta: string | null;
+  ledgerId: string | null;
+  compraId: string | null;
   actualizadoEn: string;
+};
+
+export type FacturaVerificacion = {
+  id: string;
+  resultado: "cuadra" | "falta" | "diferencia";
+  resultadoLabel: string;
+  rnc: string | null;
+  ncf: string | null;
+  montoFactura: number | null;
+  montoSistema: number | null;
+  montoCaja: number | null;
+  montoDgii: number | null;
+  nota: string | null;
+  creadoEn: string;
+};
+
+export type FacturaConciliacion = {
+  id: string;
+  resultado: "pagada" | "vencida_sin_pagar" | "pagada_sin_movimiento" | "falta_factura";
+  resultadoLabel: string;
+  medio: "banco" | "caja" | "cardnet" | null;
+  medioLabel: string | null;
+  fecha: string | null;
+  referencia: string | null;
+  monto: number | null;
+  nota: string | null;
+  creadoEn: string;
 };
 
 export type FacturaDetalle = FacturaResumen & {
@@ -207,6 +241,8 @@ export type FacturaDetalle = FacturaResumen & {
   validaciones: FacturaValidacion[];
   preguntas: FacturaPregunta[];
   documentos: FacturaDocumento[];
+  verificacion: FacturaVerificacion | null;
+  conciliacion: FacturaConciliacion | null;
 };
 
 export type FacturasResumen = {
@@ -215,6 +251,7 @@ export type FacturasResumen = {
   preguntasAbiertas: number;
   posiblesDuplicados: number;
   sinFoto: number;
+  conProblema: number;
 };
 
 export type FacturaCampos = {
@@ -298,7 +335,7 @@ export type DuplicadoCandidato = {
 };
 
 export const FACTURAS_AGENT_USO =
-  "Guarda cada factura en cuanto llegue, con la foto original. POST /api/agent/facturas manda proveedor, tienda, fechas, montos, lineas (o productos), validaciones, preguntas y la foto: en JSON usa fotoBase64 o documentos[{ pagina, base64 }]; en multipart adjunta el archivo en el campo foto (también vale captura o documento). JPG, PNG, WebP o PDF, hasta 4 MB por archivo. Si hay varias páginas, mándalas todas. Identifica la factura con referencia (proveedor, fecha, monto y tienda): el id es interno y no se menciona en la conversación. Si no sabes cuántas unidades trae la caja, el paquete o el fardo, no mandes unidadesPorPresentacion ni calcules unidadesTotales o costoUnitario. Para cruzar una línea con el catálogo manda productoId o codigoOdoo; si no lo mandas, el producto ya elegido se conserva. Repetir el POST con la misma clave no pisa la factura y responde creado: false; una foto nueva de esa clave sí se guarda. Para corregir usa PATCH. Completa significa que terminaste de capturar y validar, no que la factura esté en Odoo.";
+  "Guarda cada factura en la misma ficha, con la foto original. POST /api/agent/facturas manda proveedor, tienda, fechas, montos, lineas (o productos), validaciones, preguntas y la foto: en JSON usa fotoBase64 o documentos[{ pagina, base64 }]; en multipart adjunta el archivo en el campo foto (también vale captura o documento). JPG, PNG, WebP o PDF, hasta 4 MB por archivo. Si hay varias páginas, mándalas todas. Identifica la factura con referencia (proveedor, fecha, monto y tienda): el id es interno y no se menciona en la conversación. Si no sabes cuántas unidades trae la caja, el paquete o el fardo, no mandes unidadesPorPresentacion ni calcules unidadesTotales o costoUnitario. Para cruzar una línea con el catálogo manda productoId o codigoOdoo; si no lo mandas, el producto ya elegido se conserva. Repetir el POST con la misma clave no pisa la factura y responde creado: false; una foto nueva de esa clave sí se guarda. Para corregir usa PATCH. Las etapas son falta_factura, recibida, registrada, verificada y conciliada. Completa cuenta como registrada. Phillip solo puede pasar a registrada si la respuesta de Ramón ya está guardada, salvo que sea compra personal. Cada bot escribe con su propio token.";
 
 export const FACTURAS_AGENT_ENDPOINTS = [
   {
@@ -354,14 +391,28 @@ export const FACTURAS_AGENT_ENDPOINTS = [
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const ESTADO_ALIAS: Record<string, FacturaEstado> = {
-  analizando: "en_analisis",
-  pendiente: "pendiente_informacion",
-  pendiente_de_informacion: "pendiente_informacion",
-  duplicada: "posible_duplicado",
-  duplicado: "posible_duplicado",
-  no_valido: "documento_no_valido",
-  invalido: "documento_no_valido",
-  documento_invalido: "documento_no_valido",
+  completa: "registrada",
+  en_analisis: "recibida",
+  analizando: "recibida",
+  pendiente: "recibida",
+  pendiente_de_informacion: "recibida",
+  pendiente_informacion: "recibida",
+  respuesta_recibida: "recibida",
+  incompleta: "recibida",
+  duplicada: "recibida",
+  duplicado: "recibida",
+  posible_duplicado: "recibida",
+  no_valido: "recibida",
+  invalido: "recibida",
+  documento_invalido: "recibida",
+  documento_no_valido: "recibida",
+  escalada: "recibida",
+  falta_de_factura: "falta_factura",
+  sin_factura: "falta_factura",
+  registrado: "registrada",
+  registrada: "registrada",
+  verificado: "verificada",
+  conciliado: "conciliada",
 };
 
 const TIPO_ALIAS: Record<string, FacturaTipoDocumento> = {

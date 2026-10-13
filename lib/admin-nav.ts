@@ -16,7 +16,10 @@ export type AdminNavIcon =
   | "customers"
   | "broadcast"
   | "report"
-  | "invoices";
+  | "invoices"
+  | "decisions"
+  | "exceptions"
+  | "close";
 
 export type AdminNavChild = {
   href: string;
@@ -118,6 +121,9 @@ export const ADMIN_FINANZAS_NAV: AdminNavItem[] = [
   ADMIN_VENTAS_HISTORICO,
   { href: "/admin/compras", label: "Compras", icon: "purchases", status: "live" },
   { href: "/admin/facturas", label: "Facturas", icon: "invoices", status: "live" },
+  { href: "/admin/decisiones", label: "Decisiones", icon: "decisions", status: "live" },
+  { href: "/admin/excepciones", label: "Excepciones", icon: "exceptions", status: "live" },
+  { href: "/admin/cierre", label: "Cierre", icon: "close", status: "live" },
   { href: "/admin/proveedores", label: "Proveedores", icon: "suppliers", status: "live" },
   ADMIN_PARAMETROS,
 ];

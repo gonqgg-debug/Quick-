@@ -132,7 +132,11 @@ export function AdminReporte() {
           <h1 className="font-display mt-1 text-2xl font-bold">Reporte mensual</h1>
           <p className="mt-1 max-w-2xl text-sm text-brand-muted">
             Ventas de tienda, compras a proveedores, movimientos de caja y pedidos de delivery, mes a mes. El
-            delivery no se suma a la venta diaria.
+            delivery no se suma a la venta diaria. El margen, la ganancia y el cierre quedan preliminares hasta que Troy apruebe la versión en{" "}
+            <Link href="/admin/cierre" className="font-semibold underline">
+              Cierre
+            </Link>
+            .
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

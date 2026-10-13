@@ -79,11 +79,11 @@ const quitado = leerLinea({ descripcion: "Agua", productoId: "" }, 0);
 assert(quitado.catalogo.accion === "quitar", "productoId vacío quita el vínculo");
 
 const leida = leerCamposFactura({ estado: "Completa", moneda: "RD$", tipo: "Nota de crédito", total: "1.234,50" }, "create");
-assert(leida.campos.estado === "completa", "acepta la etiqueta del estado");
+assert(leida.campos.estado === "registrada", "completa cuenta como registrada");
 assert(leida.campos.moneda === "DOP", "RD$ es DOP");
 assert(leida.campos.tipoDocumento === "nota_credito", "acepta nota de crédito");
 assert(leida.campos.total === 1234.5, "lee el monto con separador local");
-assert(FACTURA_ESTADOS.find((item) => item.id === "completa")?.ayuda.includes("Odoo"), "completa no significa Odoo");
+assert(FACTURA_ESTADOS.find((item) => item.id === "registrada")?.ayuda.includes("Ramón"), "registrada pide la respuesta de Ramón");
 
 const duplicado = buscarDuplicado(
   { proveedor: "Sol", ncf: "b0100000001", numeroFactura: "100", fechaEmision: "2026-09-20" },

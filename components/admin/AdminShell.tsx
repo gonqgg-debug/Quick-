@@ -56,6 +56,9 @@ function sectionForPath(pathname: string): AdminNavSectionId | null {
     pathname.startsWith("/admin/ventas") ||
     pathname.startsWith("/admin/compras") ||
     pathname.startsWith("/admin/facturas") ||
+    pathname.startsWith("/admin/decisiones") ||
+    pathname.startsWith("/admin/excepciones") ||
+    pathname.startsWith("/admin/cierre") ||
     pathname.startsWith("/admin/proveedores") ||
     pathname.startsWith("/admin/parametros") ||
     pathname.startsWith("/admin/caja")
@@ -762,6 +765,31 @@ function NavGlyph({
           <path d="M8.5 12.5h7" />
           <path d="M8.5 16h4.5" />
           <circle cx="16.5" cy="16.2" r="1.1" />
+        </svg>
+      );
+    case "decisions":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="8" />
+          <path d="M8.5 12.2 11 14.5 15.5 9.5" />
+        </svg>
+      );
+    case "exceptions":
+      return (
+        <svg {...common}>
+          <path d="M12 4.5 20 19H4L12 4.5z" />
+          <path d="M12 10v4" />
+          <path d="M12 16.5h.01" />
+        </svg>
+      );
+    case "close":
+      return (
+        <svg {...common}>
+          <rect x="4" y="5" width="16" height="15" rx="2" />
+          <path d="M8 3.5v3" />
+          <path d="M16 3.5v3" />
+          <path d="M4 9h16" />
+          <path d="M8.5 14.2 11 16.5 15.5 12" />
         </svg>
       );
     case "sales":

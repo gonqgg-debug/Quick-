@@ -14,10 +14,11 @@ import {
 } from "@/lib/facturas-shared";
 import { brand } from "@/lib/theme";
 
-type TabId = "resumen" | "productos" | "validaciones" | "preguntas" | "documento";
+type TabId = "resumen" | "equipo" | "productos" | "validaciones" | "preguntas" | "documento";
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "resumen", label: "Resumen" },
+  { id: "equipo", label: "Equipo" },
   { id: "productos", label: "Productos" },
   { id: "validaciones", label: "Validaciones" },
   { id: "preguntas", label: "Preguntas y respuestas" },
@@ -53,16 +54,13 @@ function fechaHora(value: string | null): string {
 }
 
 function estadoStyle(estado: FacturaEstado): { backgroundColor: string; color: string } {
-  if (estado === "completa") {
+  if (estado === "conciliada" || estado === "verificada") {
     return { backgroundColor: brand.paleGreen, color: "#3F6212" };
   }
-  if (estado === "pendiente_informacion" || estado === "posible_duplicado") {
+  if (estado === "falta_factura") {
     return { backgroundColor: brand.paleOrange, color: "#9A3412" };
   }
-  if (estado === "documento_no_valido" || estado === "incompleta") {
-    return { backgroundColor: "#FEE2E2", color: "#991B1B" };
-  }
-  if (estado === "escalada") {
+  if (estado === "registrada") {
     return { backgroundColor: "#E8EEF8", color: brand.navy };
   }
   return { backgroundColor: brand.paleBlue, color: brand.blue };
@@ -106,6 +104,7 @@ export function AdminFacturas() {
   const [pendientes, setPendientes] = useState(false);
   const [duplicados, setDuplicados] = useState(false);
   const [sinFoto, setSinFoto] = useState(false);
+  const [conProblema, setConProblema] = useState(false);
   const [facturas, setFacturas] = useState<FacturaResumen[]>([]);
   const [resumen, setResumen] = useState<FacturasResumen | null>(null);
   const [loading, setLoading] = useState(true);
@@ -131,6 +130,9 @@ export function AdminFacturas() {
       }
       if (sinFoto) {
         params.set("sinFoto", "true");
+      }
+      if (conProblema) {
+        params.set("problema", "true");
       }
       const query = params.toString();
       setLoading(true);
@@ -161,11 +163,18 @@ export function AdminFacturas() {
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [q, estado, pendientes, duplicados, sinFoto, reloadKey]);
+  }, [q, estado, pendientes, duplicados, sinFoto, conProblema, reloadKey]);
 
-  const enAnalisis = (resumen?.porEstado ?? []).filter((item) => item.id === "recibida" || item.id === "en_analisis").reduce((sum, item) => sum + item.facturas, 0);
-  const pendientesInfo = resumen?.porEstado.find((item) => item.id === "pendiente_informacion")?.facturas ?? 0;
-  const completas = resumen?.porEstado.find((item) => item.id === "completa")?.facturas ?? 0;
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("factura");
+    if (id) {
+      setOpenId(id);
+    }
+  }, []);
+
+  const faltaFactura = resumen?.porEstado.find((item) => item.id === "falta_factura")?.facturas ?? 0;
+  const recibidas = resumen?.porEstado.find((item) => item.id === "recibida")?.facturas ?? 0;
+  const registradas = resumen?.porEstado.find((item) => item.id === "registrada")?.facturas ?? 0;
 
   return (
     <div>
@@ -173,15 +182,15 @@ export function AdminFacturas() {
         <div>
           <h1 className="font-display text-2xl font-bold">Facturas</h1>
           <p className="mt-1 max-w-2xl text-sm text-brand-muted">
-            Lo que Phillip va leyendo, con la foto original. Completa significa que ya capturó y validó el documento, no que esté en Odoo.
+            Una ficha por compra. Phillip registra, Boris verifica y Fred concilia. Si hay problema, la etapa de abajo se mantiene.
           </p>
         </div>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Metric label="En análisis" value={enAnalisis} />
-        <Metric label="Pendientes" value={pendientesInfo} />
-        <Metric label="Completas" value={completas} />
+        <Metric label="Falta factura" value={faltaFactura} />
+        <Metric label="Recibidas" value={recibidas} />
+        <Metric label="Registradas" value={registradas} />
         <button type="button" onClick={() => setSinFoto((current) => !current)} className="rounded-2xl px-4 py-3 text-left" style={{ backgroundColor: sinFoto ? brand.paleOrange : "#fff", border: "1px solid #E7EBE4" }}>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted">Sin foto</p>
           <p className="font-display mt-1 text-2xl font-bold tabular-nums">{resumen?.sinFoto ?? "—"}</p>
@@ -204,6 +213,7 @@ export function AdminFacturas() {
         </div>
         <FilterToggle pressed={pendientes} onClick={() => setPendientes((current) => !current)} label="Preguntas abiertas" />
         <FilterToggle pressed={duplicados} onClick={() => setDuplicados((current) => !current)} label="Posible duplicado" />
+        <FilterToggle pressed={conProblema} onClick={() => setConProblema((current) => !current)} label={`Con problema${resumen ? ` (${resumen.conProblema})` : ""}`} />
       </div>
 
       {error ? (
@@ -256,7 +266,11 @@ export function AdminFacturas() {
                     </span>
                   </DataTableCell>
                   <DataTableCell>
-                    <Pill label={estadoCorto(factura.estado)} style={estadoStyle(factura.estado)} />
+                    <span className="flex flex-col items-start gap-1">
+                      <Pill label={estadoCorto(factura.estado)} style={estadoStyle(factura.estado)} />
+                      {factura.problema ? <Pill label="Con problema" style={{ backgroundColor: "#FEE2E2", color: "#991B1B" }} /> : null}
+                      {factura.esCompraPersonal ? <Pill label="Personal" style={{ backgroundColor: "#E8EEF8", color: brand.navy }} /> : null}
+                    </span>
                   </DataTableCell>
                   <DataTableCell numeric>
                     <span style={{ color: factura.preguntasAbiertas > 0 ? "#9A3412" : undefined, fontWeight: factura.preguntasAbiertas > 0 ? 700 : 500 }}>
@@ -374,6 +388,8 @@ function FacturaDrawer({ facturaId, onClose, onChanged }: { facturaId: string; o
           {factura ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Pill label={estadoCorto(factura.estado)} style={estadoStyle(factura.estado)} />
+              {factura.problema ? <Pill label="Con problema" style={{ backgroundColor: "#FEE2E2", color: "#991B1B" }} /> : null}
+              {factura.esCompraPersonal ? <Pill label={factura.socio ? `Personal · ${factura.socio}` : "Compra personal"} style={{ backgroundColor: "#E8EEF8", color: brand.navy }} /> : null}
               <Pill label={factura.tieneFoto ? fotoLabel(factura) : "Sin foto"} style={factura.tieneFoto ? { backgroundColor: brand.paleGreen, color: "#3F6212" } : { backgroundColor: brand.paleOrange, color: "#9A3412" }} />
               {factura.posibleDuplicado ? <Pill label="Posible duplicado" style={resultadoStyle("diferencia")} /> : null}
             </div>
@@ -401,12 +417,122 @@ function FacturaDrawer({ facturaId, onClose, onChanged }: { facturaId: string; o
           ) : null}
           {!factura ? <div className="h-40 animate-pulse rounded-2xl bg-[#F3F4F6]" /> : null}
           {factura && tab === "resumen" ? <Resumen factura={factura} saving={saving} onSave={guardarRevision} /> : null}
+          {factura && tab === "equipo" ? <Equipo factura={factura} onChanged={async () => { await load(); onChanged(); }} /> : null}
           {factura && tab === "productos" ? <Productos factura={factura} onChanged={load} /> : null}
           {factura && tab === "validaciones" ? <Validaciones factura={factura} /> : null}
           {factura && tab === "preguntas" ? <Preguntas factura={factura} onAnswered={async () => { await load(); onChanged(); }} /> : null}
           {factura && tab === "documento" ? <Documento factura={factura} /> : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+function Equipo({ factura, onChanged }: { factura: FacturaDetalle; onChanged: () => Promise<void> }) {
+  const [texto, setTexto] = useState(factura.confirmacionTexto ?? "");
+  const [por, setPor] = useState(factura.confirmacionPor ?? "Ramón");
+  const [socio, setSocio] = useState(factura.socio ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function guardarConfirmacion() {
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/admin/facturas/${factura.id}/confirmacion`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texto, confirmadoPor: por }),
+      });
+      const body = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(body.error || "No pudimos guardar la respuesta");
+      }
+      setError(null);
+      await onChanged();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No pudimos guardar la respuesta");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function guardarMarca(esCompraPersonal: boolean) {
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/admin/facturas/${factura.id}/marca`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ esCompraPersonal, socio }),
+      });
+      const body = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(body.error || "No pudimos guardar la marca");
+      }
+      setError(null);
+      await onChanged();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No pudimos guardar la marca");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-5 text-sm">
+      {error ? (
+        <p className="rounded-2xl px-4 py-3" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
+          {error}
+        </p>
+      ) : null}
+      {factura.problema ? (
+        <p className="rounded-2xl px-4 py-3" style={{ backgroundColor: "#FEE2E2", color: "#991B1B" }}>
+          Con problema{factura.problemaDueno ? `, lo tiene ${factura.problemaDueno}` : ""} desde {fechaHora(factura.problemaDesde)}. {factura.problemaFalta}
+        </p>
+      ) : null}
+      <section className="rounded-2xl border border-[#E7EBE4] p-4">
+        <h3 className="font-semibold">Respuesta de la tienda</h3>
+        <p className="mt-1 text-brand-muted">Phillip no puede dejarla registrada sin esta respuesta, salvo que sea compra personal.</p>
+        {factura.confirmacionEn ? <p className="mt-2">Guardada el {fechaHora(factura.confirmacionEn)} por {factura.confirmacionPor}.</p> : null}
+        <AdminTextarea value={texto} onChange={(event) => setTexto(event.target.value)} rows={3} className="mt-3" />
+        <AdminInput value={por} onChange={(event) => setPor(event.target.value)} className="mt-2" />
+        <button type="button" disabled={saving} onClick={() => void guardarConfirmacion()} className="mt-3 rounded-full px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" style={{ backgroundColor: brand.green }}>
+          Guardar respuesta
+        </button>
+      </section>
+      <section className="rounded-2xl border border-[#E7EBE4] p-4">
+        <h3 className="font-semibold">Compra personal</h3>
+        <p className="mt-1 text-brand-muted">Cuenta para el ITBIS de Boris. No entra como mercancía ni en cuentas por pagar.</p>
+        <AdminInput value={socio} onChange={(event) => setSocio(event.target.value)} placeholder="Socio" className="mt-3" />
+        <button type="button" disabled={saving} onClick={() => void guardarMarca(!factura.esCompraPersonal)} className="mt-3 rounded-full border px-4 py-2 text-sm font-semibold" style={{ borderColor: "#E5E7EB" }}>
+          {factura.esCompraPersonal ? "Quitar marca" : "Marcar como personal"}
+        </button>
+      </section>
+      <section className="rounded-2xl border border-[#E7EBE4] p-4">
+        <h3 className="font-semibold">Boris</h3>
+        {factura.verificacion ? (
+          <p className="mt-2">
+            {factura.verificacion.resultadoLabel}. Factura {formatMonto(factura.verificacion.montoFactura, factura.moneda)}, sistema {formatMonto(factura.verificacion.montoSistema, factura.moneda)}, caja {formatMonto(factura.verificacion.montoCaja, factura.moneda)}, DGII {formatMonto(factura.verificacion.montoDgii, factura.moneda)}.
+            {factura.verificacion.nota ? ` ${factura.verificacion.nota}` : ""}
+          </p>
+        ) : (
+          <p className="mt-2 text-brand-muted">Todavía no publica la revisión.</p>
+        )}
+      </section>
+      <section className="rounded-2xl border border-[#E7EBE4] p-4">
+        <h3 className="font-semibold">Fred</h3>
+        {factura.conciliacion ? (
+          <p className="mt-2">
+            {factura.conciliacion.resultadoLabel}
+            {factura.conciliacion.medioLabel ? ` por ${factura.conciliacion.medioLabel}` : ""}
+            {factura.conciliacion.fecha ? ` el ${fechaCorta(factura.conciliacion.fecha)}` : ""}.
+            {factura.conciliacion.nota ? ` ${factura.conciliacion.nota}` : ""}
+          </p>
+        ) : (
+          <p className="mt-2 text-brand-muted">Todavía no publica la conciliación.</p>
+        )}
+      </section>
     </div>
   );
 }

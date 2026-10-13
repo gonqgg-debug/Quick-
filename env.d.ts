@@ -17,6 +17,14 @@ declare namespace NodeJS {
     ANTHROPIC_API_KEY?: string;
     ANTHROPIC_MODEL?: string;
     AGENT_API_TOKEN?: string;
+    AGENT_TOKEN_RODRIGO?: string;
+    AGENT_TOKEN_PHILLIP?: string;
+    AGENT_TOKEN_BORIS?: string;
+    AGENT_TOKEN_FRED?: string;
+    AGENT_TOKEN_HANS?: string;
+    AGENT_TOKEN_MATT?: string;
+    AGENT_TOKEN_TROY?: string;
+    AGENT_TOKEN_ROBERT?: string;
     AGENT_WEBHOOK_URL?: string;
     AGENT_WEBHOOK_SECRET?: string;
     AGENT_WEBHOOK_KEY?: string;

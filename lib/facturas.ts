@@ -28,6 +28,7 @@ import {
   type DuplicadoCandidato,
   type FacturaCampos,
   type FacturaCatalogoRef,
+  type FacturaConciliacion,
   type FacturaDetalle,
   type FacturaDocumento,
   type FacturaEstadoLinea,
@@ -42,15 +43,17 @@ import {
   type FacturaResumen,
   type FacturaValidacion,
   type FacturaValidacionInput,
+  type FacturaVerificacion,
   type FacturasResumen,
 } from "@/lib/facturas-shared";
+import { validarCambioEstado, type Actor } from "@/lib/operacion-shared";
 import { isDayKey } from "@/lib/local-day";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
 const LIST_MAX = 500;
 
 const FACTURA_SELECT =
-  "id, clave, recibido_en, enviado_por, tienda, tipo_documento, proveedor, rnc, ncf, numero_factura, fecha_emision, fecha_vencimiento, condicion, metodo_pago, moneda, subtotal, descuento_total, itbis_total, otros_cargos, total, numero_productos, numero_documentos, estado, observaciones, posible_duplicado, duplicado_de, preguntas_abiertas, updated_at";
+  "id, clave, recibido_en, enviado_por, tienda, tipo_documento, proveedor, rnc, ncf, numero_factura, fecha_emision, fecha_vencimiento, condicion, metodo_pago, moneda, subtotal, descuento_total, itbis_total, otros_cargos, total, numero_productos, numero_documentos, estado, observaciones, posible_duplicado, duplicado_de, preguntas_abiertas, es_compra_personal, socio, confirmacion_texto, confirmacion_por, confirmacion_en, problema, problema_dueno, problema_desde, problema_falta, ledger_id, compra_id, updated_at";
 
 export type FacturaFiltro = {
   q?: string | null;
@@ -59,6 +62,7 @@ export type FacturaFiltro = {
   pendientes?: boolean;
   duplicados?: boolean;
   sinFoto?: boolean;
+  problema?: boolean;
 };
 
 function textOrNull(value: unknown, max = 4000): string | null {
@@ -155,6 +159,17 @@ function mapResumen(row: Record<string, unknown>, duplicadoReferencia: string | 
     posibleDuplicado: row.posible_duplicado === true,
     duplicadoReferencia,
     preguntasAbiertas: int(row.preguntas_abiertas),
+    esCompraPersonal: row.es_compra_personal === true,
+    socio: textOrNull(row.socio, 160),
+    confirmacionTexto: textOrNull(row.confirmacion_texto, 4000),
+    confirmacionPor: textOrNull(row.confirmacion_por, 160),
+    confirmacionEn: iso(row.confirmacion_en),
+    problema: row.problema === true,
+    problemaDueno: textOrNull(row.problema_dueno, 40),
+    problemaDesde: iso(row.problema_desde),
+    problemaFalta: textOrNull(row.problema_falta, 2000),
+    ledgerId: typeof row.ledger_id === "string" && isUuid(row.ledger_id) ? row.ledger_id : null,
+    compraId: typeof row.compra_id === "string" && isUuid(row.compra_id) ? row.compra_id : null,
     actualizadoEn: iso(row.updated_at) ?? recibidoEn,
   };
   resumen.referencia = referenciaFactura(resumen);
@@ -453,7 +468,7 @@ async function revisarDuplicado(id: string, estadoExplicito: boolean): Promise<v
   const match = buscarDuplicado(actual, await candidatosDuplicado(actual));
   const supabase = getSupabaseAdminClient();
   if (!match) {
-    const { error } = await supabase.from("facturas").update({ posible_duplicado: actual.estado === "posible_duplicado", duplicado_de: null }).eq("id", id);
+    const { error } = await supabase.from("facturas").update({ posible_duplicado: false, duplicado_de: null }).eq("id", id);
     if (error) {
       throw error;
     }
@@ -466,11 +481,14 @@ async function revisarDuplicado(id: string, estadoExplicito: boolean): Promise<v
     moneda: match.candidato.moneda,
     tienda: match.candidato.tienda,
   });
-  const nextEstado = !estadoExplicito && (actual.estado === "recibida" || actual.estado === "en_analisis") ? "posible_duplicado" : actual.estado;
-  const { error } = await supabase
-    .from("facturas")
-    .update({ posible_duplicado: true, duplicado_de: match.candidato.id, estado: nextEstado })
-    .eq("id", id);
+  const update: Record<string, unknown> = { posible_duplicado: true, duplicado_de: match.candidato.id };
+  if (!estadoExplicito && (actual.estado === "recibida" || actual.estado === "falta_factura")) {
+    update.problema = true;
+    update.problema_dueno = "phillip";
+    update.problema_desde = new Date().toISOString();
+    update.problema_falta = explicacionDuplicado(match.motivo, referencia);
+  }
+  const { error } = await supabase.from("facturas").update(update).eq("id", id);
   if (error) {
     throw error;
   }
@@ -662,6 +680,9 @@ export async function listFacturas(filtro: FacturaFiltro = {}): Promise<FacturaR
   if (filtro.sinFoto) {
     query = query.eq("numero_documentos", 0);
   }
+  if (filtro.problema) {
+    query = query.eq("problema", true);
+  }
   const { data, error } = await query;
   if (error) {
     throw error;
@@ -680,7 +701,7 @@ export async function listFacturas(filtro: FacturaFiltro = {}): Promise<FacturaR
 
 export async function resumenFacturas(): Promise<FacturasResumen> {
   const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase.from("facturas").select("estado, preguntas_abiertas, posible_duplicado, numero_documentos").limit(5000);
+  const { data, error } = await supabase.from("facturas").select("estado, preguntas_abiertas, posible_duplicado, numero_documentos, problema").limit(5000);
   if (error) {
     throw error;
   }
@@ -695,6 +716,7 @@ export async function resumenFacturas(): Promise<FacturasResumen> {
     preguntasAbiertas: rows.reduce((sum, row) => sum + int(row.preguntas_abiertas), 0),
     posiblesDuplicados: rows.filter((row) => row.posible_duplicado === true).length,
     sinFoto: rows.filter((row) => int(row.numero_documentos) === 0).length,
+    conProblema: rows.filter((row) => row.problema === true).length,
   };
 }
 
@@ -779,6 +801,88 @@ export async function getFactura(idOrClave: string): Promise<FacturaDetalle | nu
       .map((row) => mapDocumento(row as Record<string, unknown>))
       .filter((row): row is FacturaDocumento => Boolean(row))
       .sort((a, b) => (a.pagina ?? 999) - (b.pagina ?? 999)),
+    verificacion: await ultimaVerificacion(id),
+    conciliacion: await ultimaConciliacion(id),
+  };
+}
+
+async function ultimaVerificacion(facturaId: string): Promise<FacturaVerificacion | null> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("factura_verificaciones")
+    .select("*")
+    .eq("factura_id", facturaId)
+    .order("creado_en", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    throw error;
+  }
+  if (!data) {
+    return null;
+  }
+  const resultado = data.resultado === "cuadra" || data.resultado === "falta" || data.resultado === "diferencia" ? data.resultado : null;
+  const creadoEn = iso(data.creado_en);
+  if (!resultado || !creadoEn) {
+    return null;
+  }
+  const label = resultado === "cuadra" ? "Cuadra" : resultado === "falta" ? "Falta" : "Diferencia";
+  return {
+    id: String(data.id),
+    resultado,
+    resultadoLabel: label,
+    rnc: textOrNull(data.rnc, 20),
+    ncf: textOrNull(data.ncf, 20),
+    montoFactura: num(data.monto_factura),
+    montoSistema: num(data.monto_sistema),
+    montoCaja: num(data.monto_caja),
+    montoDgii: num(data.monto_dgii),
+    nota: textOrNull(data.nota, 2000),
+    creadoEn,
+  };
+}
+
+async function ultimaConciliacion(facturaId: string): Promise<FacturaConciliacion | null> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("factura_conciliaciones")
+    .select("*")
+    .eq("factura_id", facturaId)
+    .order("creado_en", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    throw error;
+  }
+  if (!data) {
+    return null;
+  }
+  const resultado =
+    data.resultado === "pagada" || data.resultado === "vencida_sin_pagar" || data.resultado === "pagada_sin_movimiento" || data.resultado === "falta_factura"
+      ? data.resultado
+      : null;
+  const creadoEn = iso(data.creado_en);
+  if (!resultado || !creadoEn) {
+    return null;
+  }
+  const medio = data.medio === "banco" || data.medio === "caja" || data.medio === "cardnet" ? data.medio : null;
+  const labels: Record<typeof resultado, string> = {
+    pagada: "Pagada",
+    vencida_sin_pagar: "Vencida sin pagar",
+    pagada_sin_movimiento: "Pagada sin movimiento",
+    falta_factura: "Falta factura",
+  };
+  return {
+    id: String(data.id),
+    resultado,
+    resultadoLabel: labels[resultado],
+    medio,
+    medioLabel: medio === "banco" ? "Banco" : medio === "caja" ? "Caja" : medio === "cardnet" ? "CardNET" : null,
+    fecha: day(data.fecha),
+    referencia: textOrNull(data.referencia, 160),
+    monto: num(data.monto),
+    nota: textOrNull(data.nota, 2000),
+    creadoEn,
   };
 }
 
@@ -800,11 +904,31 @@ async function applyChildren(id: string, body: Record<string, unknown>, document
   }
 }
 
+async function exigirEtapa(id: string | null, estado: FacturaCampos["estado"], actor: Actor, personalNuevo: boolean | undefined): Promise<void> {
+  if (!estado) {
+    return;
+  }
+  let esCompraPersonal = personalNuevo === true;
+  let confirmacionEn: string | null = null;
+  if (id) {
+    const supabase = getSupabaseAdminClient();
+    const { data, error } = await supabase.from("facturas").select("es_compra_personal, confirmacion_en").eq("id", id).maybeSingle();
+    if (error) {
+      throw error;
+    }
+    esCompraPersonal = personalNuevo ?? data?.es_compra_personal === true;
+    confirmacionEn = iso(data?.confirmacion_en);
+  }
+  validarCambioEstado({ actor, estado, esCompraPersonal, confirmacionEn });
+}
+
 export async function createFactura(
   body: Record<string, unknown>,
-  documentos: DocumentoEntrada[]
+  documentos: DocumentoEntrada[],
+  actor: Actor = "lectura"
 ): Promise<{ creado: boolean; factura: FacturaDetalle }> {
   const { campos, estadoExplicito } = leerCamposFactura(body, "create");
+  await exigirEtapa(null, campos.estado, actor, false);
   const lineas = hasKey(body, ["lineas", "productos"]) ? leerLineas(body.lineas ?? body.productos) : [];
   if (!facturaTieneIdentidad(campos, lineas.length, documentos.length)) {
     throw new Error("Manda el proveedor, el número, la tienda o la foto de la factura");
@@ -861,9 +985,15 @@ async function borrarArchivosDeFactura(id: string): Promise<void> {
   await borrarArchivos(paths);
 }
 
-export async function updateFactura(idOrClave: string, body: Record<string, unknown>, documentos: DocumentoEntrada[]): Promise<FacturaDetalle> {
+export async function updateFactura(
+  idOrClave: string,
+  body: Record<string, unknown>,
+  documentos: DocumentoEntrada[],
+  actor: Actor = "lectura"
+): Promise<FacturaDetalle> {
   const id = await requireFacturaId(idOrClave);
   const { campos, estadoExplicito } = leerCamposFactura(body, "patch");
+  await exigirEtapa(id, campos.estado, actor, undefined);
   const row = headerRow(campos);
   if (Object.keys(row).length) {
     const supabase = getSupabaseAdminClient();
@@ -959,5 +1089,6 @@ export function filtroDesdeParams(params: URLSearchParams): FacturaFiltro {
     pendientes: flag("pendientes"),
     duplicados: flag("duplicados"),
     sinFoto: flag("sinFoto") || flag("sin_foto"),
+    problema: flag("problema"),
   };
 }

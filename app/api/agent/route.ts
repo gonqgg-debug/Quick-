@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAgentApi } from "@/lib/agent-auth";
 import { EXPANSION_AGENT_ENDPOINTS } from "@/lib/expansion-shared";
 import { FACTURAS_AGENT_ENDPOINTS } from "@/lib/facturas-shared";
+import { OPERACION_AGENT_ENDPOINTS } from "@/lib/operacion-shared";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
         "parametros.actualizados",
       ],
     },
-    nota: "Ventas, compras, caja, catálogo y contable no incluyen teléfonos, direcciones ni chats de clientes. Expansión sí incluye teléfono y correo de brokers y desarrolladores: ese directorio es el CRM. El catálogo no tiene existencias. POST de compras registra una factura con RNC, NCF y captura. POST de facturas guarda lo que Phillip lee, incluida la foto original. POST y PATCH de expansión crean y mueven el pipeline.",
+    nota: "Ventas, compras, caja, catálogo y contable no incluyen teléfonos, direcciones ni chats de clientes. Expansión sí incluye teléfono y correo de brokers y desarrolladores: ese directorio es el CRM. El catálogo no tiene existencias. POST de compras registra una factura con RNC, NCF y captura. POST de facturas guarda lo que Phillip lee, incluida la foto original. Cada bot escribe con su token: Boris solo verifica, Fred solo concilia, Hans publica asientos, Robert los estados y Troy aprueba el cierre. AGENT_API_TOKEN sigue pudiendo leer. POST y PATCH de expansión crean y mueven el pipeline.",
     endpoints: [
       { method: "GET", path: "/api/agent/metas?fecha=YYYY-MM-DD", describe: "Meta del día (la misma que Hoy) y la venta de esa fecha. Con mes=YYYY-MM devuelve cada día del mes." },
       { method: "GET", path: "/api/agent/ventas?fecha=YYYY-MM-DD", describe: "Ventas diarias de un día, o from y to (máximo 93 días)" },
@@ -46,6 +47,7 @@ export async function GET(request: NextRequest) {
       { method: "GET", path: "/api/agent/catalogo?cursor=&q=", describe: "Productos de a 100. stock siempre es null" },
       { method: "GET", path: "/api/agent/contable?mes=YYYY-MM", describe: "Paquete contable del mes, con líneas y comprobaciones" },
       ...FACTURAS_AGENT_ENDPOINTS,
+      ...OPERACION_AGENT_ENDPOINTS,
       ...EXPANSION_AGENT_ENDPOINTS,
     ],
   });
