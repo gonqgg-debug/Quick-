@@ -63,7 +63,11 @@ export type FacturaFiltro = {
   duplicados?: boolean;
   sinFoto?: boolean;
   problema?: boolean;
+  /** Problema, preguntas abiertas, posible duplicado o sin foto. */
+  atencion?: boolean;
 };
+
+const ATENCION_OR = "problema.eq.true,preguntas_abiertas.gt.0,posible_duplicado.eq.true,numero_documentos.eq.0";
 
 function textOrNull(value: unknown, max = 4000): string | null {
   if (typeof value !== "string") {
@@ -683,6 +687,9 @@ export async function listFacturas(filtro: FacturaFiltro = {}): Promise<FacturaR
   if (filtro.problema) {
     query = query.eq("problema", true);
   }
+  if (filtro.atencion) {
+    query = query.or(ATENCION_OR);
+  }
   const { data, error } = await query;
   if (error) {
     throw error;
@@ -717,6 +724,13 @@ export async function resumenFacturas(): Promise<FacturasResumen> {
     posiblesDuplicados: rows.filter((row) => row.posible_duplicado === true).length,
     sinFoto: rows.filter((row) => int(row.numero_documentos) === 0).length,
     conProblema: rows.filter((row) => row.problema === true).length,
+    atencion: rows.filter(
+      (row) =>
+        row.problema === true ||
+        int(row.preguntas_abiertas) > 0 ||
+        row.posible_duplicado === true ||
+        int(row.numero_documentos) === 0
+    ).length,
   };
 }
 
@@ -1090,5 +1104,6 @@ export function filtroDesdeParams(params: URLSearchParams): FacturaFiltro {
     duplicados: flag("duplicados"),
     sinFoto: flag("sinFoto") || flag("sin_foto"),
     problema: flag("problema"),
+    atencion: flag("atencion"),
   };
 }
