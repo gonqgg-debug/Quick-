@@ -1,3 +1,4 @@
+import { parseVentaInput } from "../lib/admin-ventas";
 import { leerCamposFactura } from "../lib/facturas-shared";
 import {
   assertVersionEditable,
@@ -55,5 +56,15 @@ assert(orden[1]?.nombre === "Abreu", "el mismo monto se ordena por vencimiento")
 assert(orden[2]?.nombre === "Cristóbal", "Cristóbal queda debajo de Abreu");
 assert(orden[3]?.nombre === "Sin monto", "sin plata va al final");
 assert(mesAnterior("2026-01") === "2025-12", "enero mira diciembre");
+
+const venta = parseVentaInput({ fecha: "2026-01-05", ventaReal: "1.250,00" });
+assert(venta.fecha === "2026-01-05" && venta.monto === 1250, "Rodrigo puede mandar la venta con ventaReal");
+let ventaFutura = false;
+try {
+  parseVentaInput({ fecha: "2099-01-01", monto: 10 });
+} catch (error) {
+  ventaFutura = error instanceof Error && error.message === "La fecha no es válida";
+}
+assert(ventaFutura, "una venta futura no se guarda");
 
 console.log("operacion ok");
