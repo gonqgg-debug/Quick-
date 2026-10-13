@@ -14,6 +14,9 @@ alter table public.facturas
   add column if not exists ledger_id uuid,
   add column if not exists compra_id uuid;
 
+alter table public.facturas
+  drop constraint if exists facturas_estado_check;
+
 update public.facturas
 set
   problema = true,
@@ -49,9 +52,6 @@ where estado in (
   'documento_no_valido',
   'escalada'
 );
-
-alter table public.facturas
-  drop constraint if exists facturas_estado_check;
 
 alter table public.facturas
   add constraint facturas_estado_check
