@@ -143,6 +143,7 @@ export const ADMIN_VENTAS: AdminNavItem = {
 /** Day-to-day money: cash, sales, payables, suppliers. */
 export const ADMIN_FINANZAS_NAV: AdminNavItem[] = [
   ADMIN_CAJA,
+  { href: "/admin/banco", label: "Banco", icon: "cash", status: "live" },
   ADMIN_VENTAS,
   { href: "/admin/compras", label: "Compras", icon: "purchases", status: "live" },
   { href: "/admin/proveedores", label: "Proveedores", icon: "suppliers", status: "live" },

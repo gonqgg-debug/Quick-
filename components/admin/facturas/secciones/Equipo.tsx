@@ -260,7 +260,7 @@ function Fred({ factura, enviar }: { factura: FacturaDetalle; enviar: EnviarFact
       {factura.pagos.length ? (
         <div className="rounded-xl border border-[#E7EBE4] p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-semibold">Pagado en caja</p>
+            <p className="font-semibold">Pagos ligados</p>
             {factura.pagosDiferencia != null ? (
               factura.pagosDiferencia === 0 ? (
                 <Pill label="Cuadra con el total" tone={TONO.verde} />
@@ -278,7 +278,7 @@ function Fred({ factura, enviar }: { factura: FacturaDetalle; enviar: EnviarFact
                 <div>
                   <p className="font-semibold tabular-nums">{formatMonto(pago.monto, "DOP")}</p>
                   <p className="text-xs text-brand-muted">
-                    {[fechaCorta(pago.fecha), pago.caja, pago.concepto].filter(Boolean).join(" · ")} · ligado por {pago.confirmadoPor}
+                    {[pago.origen === "banco" ? "Banco" : "Caja", fechaCorta(pago.fecha), pago.caja, pago.concepto].filter(Boolean).join(" · ")} · ligado por {pago.confirmadoPor}
                   </p>
                 </div>
                 {abierta ? (
@@ -299,25 +299,38 @@ function Fred({ factura, enviar }: { factura: FacturaDetalle; enviar: EnviarFact
       ) : null}
       {abierta && factura.pagosCandidatos.length ? (
         <div className="rounded-xl border border-[#E7EBE4] p-3">
-          <p className="font-semibold">Posibles pagos en caja</p>
-          <p className="mt-1 text-brand-muted">Salidas de caja de ese día o del día antes o después, por el mismo monto. Nada se liga solo: confírmalo tú o Fred.</p>
+          <p className="font-semibold">Posibles pagos</p>
+          <p className="mt-1 text-brand-muted">
+            Salidas de caja del día de la factura (un día antes o después) y débitos del banco hasta una semana después del vencimiento, por el mismo monto. Nada se liga solo: confírmalo tú o Fred.
+          </p>
           <ul className="mt-2 divide-y divide-[#F0F2EE]">
-            {factura.pagosCandidatos.map((candidato) => (
-              <li key={candidato.ledgerId} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <div>
-                  <p className="font-semibold tabular-nums">
-                    {formatMonto(candidato.monto, "DOP")} <span className="text-xs font-medium text-brand-muted">· {candidato.confianza}% seguro</span>
-                  </p>
-                  <p className="text-xs text-brand-muted">{[fechaCorta(candidato.fecha), candidato.caja, candidato.concepto, candidato.referencia].filter(Boolean).join(" · ")}</p>
-                </div>
-                <BotonSecundario
-                  disabled={saving !== null}
-                  onClick={() => void correr(candidato.ledgerId, () => enviar("/pagos", "POST", { ledgerId: candidato.ledgerId }), "No pudimos ligar el pago")}
-                >
-                  {saving === candidato.ledgerId ? "..." : "Ligar"}
-                </BotonSecundario>
-              </li>
-            ))}
+            {factura.pagosCandidatos.map((candidato) => {
+              const clave = candidato.ledgerId ?? candidato.movimientoId ?? "";
+              return (
+                <li key={clave} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <div>
+                    <p className="font-semibold tabular-nums">
+                      {formatMonto(candidato.monto, "DOP")} <span className="text-xs font-medium text-brand-muted">· {candidato.confianza}% seguro</span>
+                    </p>
+                    <p className="text-xs text-brand-muted">
+                      {[candidato.origen === "banco" ? "Banco" : "Caja", fechaCorta(candidato.fecha), candidato.caja, candidato.concepto, candidato.referencia].filter(Boolean).join(" · ")}
+                    </p>
+                  </div>
+                  <BotonSecundario
+                    disabled={saving !== null}
+                    onClick={() =>
+                      void correr(
+                        clave,
+                        () => enviar("/pagos", "POST", candidato.origen === "banco" ? { movimientoId: candidato.movimientoId } : { ledgerId: candidato.ledgerId }),
+                        "No pudimos ligar el pago"
+                      )
+                    }
+                  >
+                    {saving === clave ? "..." : "Ligar"}
+                  </BotonSecundario>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}

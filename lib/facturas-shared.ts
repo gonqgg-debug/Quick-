@@ -272,10 +272,15 @@ export type FacturaResumen = {
   actualizadoEn: string;
 };
 
+export type FacturaPagoOrigen = "caja" | "banco";
+
 export type FacturaPago = {
   id: string;
-  ledgerId: string;
+  origen: FacturaPagoOrigen;
+  ledgerId: string | null;
+  movimientoId: string | null;
   fecha: string | null;
+  /** Caja del movimiento, o el banco si vino del estado de cuenta. */
   caja: string | null;
   concepto: string | null;
   referencia: string | null;
@@ -285,7 +290,9 @@ export type FacturaPago = {
 };
 
 export type FacturaPagoCandidato = {
-  ledgerId: string;
+  origen: FacturaPagoOrigen;
+  ledgerId: string | null;
+  movimientoId: string | null;
   fecha: string;
   caja: string | null;
   concepto: string | null;
@@ -915,9 +922,11 @@ export function confianzaPago(input: {
   proveedor: string | null;
   concepto: string | null;
   referencia: string | null;
+  /** Por defecto PAGO_DIAS (caja). El banco pasa la distancia a su ventana y BANCO_DIAS_DESPUES. */
+  maxDias?: number;
 }): number | null {
   const diferencia = Math.abs(input.monto - input.total);
-  if (diferencia > PAGO_TOLERANCIA || Math.abs(input.diasDeDiferencia) > PAGO_DIAS) {
+  if (diferencia > PAGO_TOLERANCIA || Math.abs(input.diasDeDiferencia) > (input.maxDias ?? PAGO_DIAS)) {
     return null;
   }
   let confianza = diferencia <= 1 ? 80 : 70;

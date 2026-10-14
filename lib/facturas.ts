@@ -1051,10 +1051,7 @@ export async function getFactura(idOrClave: string): Promise<FacturaDetalle | nu
     ...resumen,
     proveedorFicha,
     pagos,
-    pagosCandidatos: await candidatosPago(
-      resumen,
-      pagos.map((pago) => pago.ledgerId)
-    ),
+    pagosCandidatos: await candidatosPago(resumen),
     pagosDiferencia: diferenciaPagos(resumen.total, pagos),
     facturaOrigen: origen ? { id: origen.id, referencia: origen.referencia } : null,
     notasCredito: resumen.tipoDocumento === "nota_credito" ? [] : await notasDe(id),
