@@ -302,13 +302,24 @@ export const OPERACION_AGENT_ENDPOINTS = [
     method: "POST",
     path: "/api/agent/facturas/{id}/conciliacion",
     describe:
-      "Fred publica pagada, vencida_sin_pagar, pagada_sin_movimiento o falta_factura, con medio banco, caja o cardnet. Solo él deja la etapa en conciliada. Con ledgerId (solo para pagada) liga esa salida de caja y toma de ella medio caja, fecha y monto si no los mandas.",
+      "Fred publica pagada, vencida_sin_pagar, pagada_sin_movimiento o falta_factura, con medio banco, caja o cardnet. Solo él deja la etapa en conciliada. Con ledgerId (salida de caja) o movimientoId (débito del banco), solo para pagada, liga ese movimiento y toma de él medio, fecha, monto y referencia si no los mandas.",
   },
   {
     method: "POST",
     path: "/api/agent/facturas/{id}/pagos",
     describe:
-      "Fred liga una salida de caja a la factura sin cerrarla todavía. JSON: ledgerId. La factura trae pagosCandidatos (salidas en DOP a ±1 día y ±RD$ 5 del total, con confianza) y pagosDiferencia (total menos lo ligado). Un movimiento paga una sola factura.",
+      "Fred liga un pago a la factura sin cerrarla todavía. JSON: ledgerId (caja) o movimientoId (banco). La factura trae pagosCandidatos con origen caja o banco: caja a ±1 día de la factura; banco desde un día antes de la emisión hasta 7 días después del vencimiento; los dos a ±RD$ 5 del total y con confianza. pagosDiferencia es el total menos lo ligado. Un movimiento paga una sola factura.",
+  },
+  {
+    method: "POST",
+    path: "/api/agent/banco",
+    describe:
+      "Fred importa el estado de cuenta. Multipart: archivo (CSV o Excel) y banco, cuenta y moneda como texto. JSON: banco, cuenta, moneda y csv (texto) o base64 con nombre. Lee sola la fila de encabezado (Fecha y Monto con signo, o Débito y Crédito; Descripción y Referencia si están). Reimportar el mismo archivo no duplica. Responde nuevos, repetidos y descartadas.",
+  },
+  {
+    method: "GET",
+    path: "/api/agent/banco?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&tipo=debito&sinLigar=true",
+    describe: "Movimientos importados del banco, con la factura que pagan si ya están ligados.",
   },
   {
     method: "DELETE",

@@ -1,5 +1,6 @@
 import { dueDateFromCredit, type Proveedor } from "@/lib/admin-compras-shared";
 import { findProveedorParaFactura, getProveedorById } from "@/lib/admin-compras";
+import { getParametrosConfig } from "@/lib/admin-parametros";
 import { aprenderAlias, aprenderVinculos, completarUnidades, lineasParaAceptar, proponerCatalogo, type Vinculo } from "@/lib/factura-catalogo";
 import { borrarArchivos, guardarDocumentos, type DocumentoEntrada } from "@/lib/factura-documentos";
 import { candidatosPago, pagosDe } from "@/lib/factura-pagos";
@@ -15,6 +16,11 @@ import {
   FACTURA_RESULTADOS,
   FACTURA_TIPOS,
   FACTURA_VALIDACIONES,
+  ALERTA_CANTIDAD_DEFECTO,
+  ALERTA_PRECIO_DEFECTO,
+  alertasLinea,
+  medidaLinea,
+  type MedidaLinea,
   buscarDuplicado,
   completarValidaciones,
   diferenciaPagos,
@@ -242,6 +248,7 @@ function mapLinea(row: Record<string, unknown>): FacturaLinea | null {
     cantidadRecibida,
     recepcionPor: textOrNull(row.recepcion_por, 160),
     recepcionEn: iso(row.recepcion_en),
+    alertas: [],
     diferenciaRecepcion: diferenciaRecepcion({
       recepcion,
       cantidadComprada: num(row.cantidad_comprada),
@@ -937,6 +944,7 @@ export async function listarPendientes(opciones: { hoy: string; dueno?: Operacio
         lineasSinCatalogo: lineasSinCatalogo(susLineas),
         validacionesConDiferencia: diferencias.get(factura.id)?.length ?? 0,
         pagosCandidatos: null,
+        lineasConAlerta: null,
         pagosDiferencia: diferenciaPagos(factura.total, susPagos),
       },
       { hoy: opciones.hoy, formatDesde: (value) => value ?? "sin fecha" }
@@ -956,6 +964,76 @@ export async function listarPendientes(opciones: { hoy: string; dueno?: Operacio
     }
   }
   return resultado;
+}
+
+async function umbralesAlerta(): Promise<{ precio: number; cantidad: number }> {
+  try {
+    const config = await getParametrosConfig();
+    return { precio: config.alertaPrecio, cantidad: config.alertaCantidad };
+  } catch {
+    return { precio: ALERTA_PRECIO_DEFECTO, cantidad: ALERTA_CANTIDAD_DEFECTO };
+  }
+}
+
+type HistorialRow = Record<string, unknown> & { facturas?: Record<string, unknown> | Array<Record<string, unknown>> | null };
+
+/** Compara cada línea ligada con las compras anteriores del mismo producto al mismo proveedor. Una consulta para toda la factura. */
+async function adjuntarAlertas(factura: FacturaResumen, lineas: FacturaLinea[]): Promise<FacturaLinea[]> {
+  const productos = Array.from(new Set(lineas.map((linea) => linea.productoId).filter((id): id is string => Boolean(id))));
+  if (!factura.proveedorId || !productos.length || factura.tipoDocumento === "nota_credito") {
+    return lineas;
+  }
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("factura_lineas")
+    .select(
+      "producto_id, costo_unitario, unidades_totales, costo_por_presentacion, cantidad_comprada, presentacion, unidades_por_presentacion, facturas!inner ( id, proveedor_id, recibido_en, fecha_emision, tipo_documento, moneda )"
+    )
+    .in("producto_id", productos)
+    .eq("facturas.proveedor_id", factura.proveedorId)
+    .eq("facturas.moneda", factura.moneda)
+    .neq("facturas.tipo_documento", "nota_credito")
+    .neq("factura_id", factura.id)
+    .limit(2000);
+  if (error) {
+    throw error;
+  }
+  const fechaDe = (row: Record<string, unknown> | null | undefined) => String(row?.fecha_emision ?? row?.recibido_en ?? "").slice(0, 10);
+  const actual = factura.fechaEmision ?? factura.recibidoEn.slice(0, 10);
+  const porProducto = new Map<string, Array<{ fecha: string; medida: MedidaLinea | null }>>();
+  for (const row of (data ?? []) as HistorialRow[]) {
+    const cabecera = Array.isArray(row.facturas) ? row.facturas[0] : row.facturas;
+    const fecha = fechaDe(cabecera);
+    if (!fecha || fecha > actual) {
+      continue;
+    }
+    const productoId = String(row.producto_id);
+    const lista = porProducto.get(productoId) ?? [];
+    lista.push({
+      fecha,
+      medida: medidaLinea({
+        costoUnitario: num(row.costo_unitario),
+        unidadesTotales: num(row.unidades_totales),
+        costoPorPresentacion: num(row.costo_por_presentacion),
+        cantidadComprada: num(row.cantidad_comprada),
+        presentacion: textOrNull(row.presentacion, 40),
+        unidadesPorPresentacion: num(row.unidades_por_presentacion),
+      }),
+    });
+    porProducto.set(productoId, lista);
+  }
+  if (!porProducto.size) {
+    return lineas;
+  }
+  const umbral = await umbralesAlerta();
+  return lineas.map((linea) => {
+    const historial = linea.productoId ? porProducto.get(linea.productoId) : undefined;
+    if (!historial) {
+      return linea;
+    }
+    const ordenado = historial.sort((a, b) => b.fecha.localeCompare(a.fecha)).map((item) => item.medida);
+    return { ...linea, alertas: alertasLinea(medidaLinea(linea), ordenado, umbral, factura.moneda) };
+  });
 }
 
 async function adjuntarCatalogo(lineas: FacturaLinea[]): Promise<FacturaLinea[]> {
@@ -1051,15 +1129,15 @@ export async function getFactura(idOrClave: string): Promise<FacturaDetalle | nu
     ...resumen,
     proveedorFicha,
     pagos,
-    pagosCandidatos: await candidatosPago(
-      resumen,
-      pagos.map((pago) => pago.ledgerId)
-    ),
+    pagosCandidatos: await candidatosPago(resumen),
     pagosDiferencia: diferenciaPagos(resumen.total, pagos),
     facturaOrigen: origen ? { id: origen.id, referencia: origen.referencia } : null,
     notasCredito: resumen.tipoDocumento === "nota_credito" ? [] : await notasDe(id),
-    lineas: await adjuntarCatalogo(
-      (lineas.data ?? []).map((row) => mapLinea(row as Record<string, unknown>)).filter((row): row is FacturaLinea => Boolean(row))
+    lineas: await adjuntarAlertas(
+      resumen,
+      await adjuntarCatalogo(
+        (lineas.data ?? []).map((row) => mapLinea(row as Record<string, unknown>)).filter((row): row is FacturaLinea => Boolean(row))
+      )
     ),
     validaciones: completarValidaciones(stored),
     preguntas: (preguntas.data ?? []).map((row) => mapPregunta(row as Record<string, unknown>)).filter((row): row is FacturaPregunta => Boolean(row)),

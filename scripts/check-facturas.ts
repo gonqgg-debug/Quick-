@@ -1,6 +1,7 @@
 import { dueDateFromCredit, parseFormaPago, saldoCompra, summarizePendientes } from "../lib/admin-compras-shared";
 import { casosRecordatorio, diferenciaMontos, pendientesDe, type PendientesInput } from "../lib/facturas-pendientes";
 import { documentosDesdeValor } from "../lib/factura-documentos";
+import { distanciaVentana, leerEstadoCuenta, leerFechaBanco, leerMontoBanco, llavesMovimientos, ventanaBanco } from "../lib/banco-shared";
 import { revisarNcf } from "../lib/ncf";
 import {
   FACTURA_ESTADOS,
@@ -17,8 +18,12 @@ import {
   PROPUESTA_CONFIANZA,
   PROPUESTA_UMBRAL,
   cantidadRecibidaDe,
+  ALERTA_MIN_COMPRAS,
+  alertasLinea,
   confianzaPago,
   confianzaTexto,
+  mediana,
+  medidaLinea,
   diferenciaPagos,
   diferenciaRecepcion,
   leerRecepcion,
@@ -279,6 +284,7 @@ const pendienteBase: PendientesInput = {
   lineasSinCatalogo: 0,
   validacionesConDiferencia: 0,
   pagosCandidatos: 0,
+  lineasConAlerta: 0,
   pagosDiferencia: null,
 };
 const opciones = { hoy: "2026-10-14", formatDesde: (value: string | null) => value ?? "" };
@@ -312,6 +318,69 @@ const venceCaso = casosRecordatorio({ ...recordatorioBase, lineasSinRecepcion: 0
 assert(venceCaso.length === 1 && venceCaso[0].caso === "vence:2026-10-17" && venceCaso[0].dueno === "fred", "vence en 3 días abre caso de Fred");
 assert(casosRecordatorio({ ...recordatorioBase, lineasSinRecepcion: 0, venceSinPagar: "2026-10-18" }, ahora).length === 0, "a 4 días todavía no");
 
+assert(leerFechaBanco("05/10/2026") === "2026-10-05", "el banco pone el día primero");
+assert(leerFechaBanco("2026-10-05") === "2026-10-05", "también lee ISO");
+assert(leerFechaBanco("05-Oct-26") === "2026-10-05", "lee el mes en letras");
+assert(leerFechaBanco("5 ago. 2026") === "2026-08-05", "lee el mes en español");
+assert(leerFechaBanco("31/02/2026") === null, "una fecha imposible no pasa");
+assert(leerFechaBanco("46300") === "2026-10-05", "lee el número de serie de Excel");
+assert(leerMontoBanco("-1.234,56") === -1234.56, "negativo con coma decimal");
+assert(leerMontoBanco("(1,234.56)") === -1234.56, "paréntesis es negativo");
+assert(leerMontoBanco("1,234.56-") === -1234.56, "signo al final es negativo");
+assert(leerMontoBanco("RD$ 2,500.00") === 2500, "quita RD$");
+assert(leerMontoBanco("") === null, "vacío no es monto");
+
+const popular = leerEstadoCuenta([
+  ["Banco Popular Dominicano"],
+  ["Cuenta", "****1234"],
+  ["Fecha Posteo", "Descripción", "No. Referencia", "Débito", "Crédito", "Balance"],
+  ["05/10/2026", "TRANSF A DISTRIBUIDORA RICA", "778812", "1,500.00", "", "98,500.00"],
+  ["06/10/2026", "DEPOSITO", "", "", "20,000.00", "118,500.00"],
+  ["", "Saldo final", "", "", "", "118,500.00"],
+]);
+assert(popular.movimientos.length === 2 && popular.descartadas === 1, "salta el saldo final");
+assert(popular.movimientos[0].tipo === "debito" && popular.movimientos[0].monto === 1500 && popular.movimientos[0].referencia === "778812", "débito con referencia");
+assert(popular.movimientos[1].tipo === "credito" && popular.movimientos[1].monto === 20000, "crédito");
+const firmado = leerEstadoCuenta([
+  ["Fecha", "Concepto", "Monto"],
+  ["2026-10-05", "PAGO KOLA REAL", "-3,200.50"],
+  ["2026-10-05", "PAGO KOLA REAL", "-3,200.50"],
+  ["2026-10-06", "INTERESES", "12.00"],
+]);
+assert(firmado.movimientos[0].tipo === "debito" && firmado.movimientos[2].tipo === "credito", "el signo decide débito o crédito");
+const llaves = llavesMovimientos("Popular", null, firmado.movimientos);
+assert(llaves[0] !== llaves[1] && new Set(llaves).size === 3, "dos filas iguales en el mismo archivo no se juntan");
+assert(llavesMovimientos("Popular", null, firmado.movimientos).join() === llaves.join(), "reimportar da las mismas llaves");
+let sinEncabezado = false;
+try {
+  leerEstadoCuenta([["a", "b"], ["1", "2"]]);
+} catch (error) {
+  sinEncabezado = error instanceof Error && error.message.startsWith("El archivo");
+}
+assert(sinEncabezado, "sin encabezado explica qué falta");
+const ventana = ventanaBanco({ fechaEmision: "2026-10-01", fechaVencimiento: "2026-10-31", recibidaDia: "2026-10-02" });
+assert(ventana.desde === "2026-09-30" && ventana.hasta === "2026-10-31", "la ventana del banco va de la emisión al vencimiento");
+assert(distanciaVentana("2026-10-15", ventana.desde, ventana.hasta) === 0, "dentro de la ventana es cero");
+assert(distanciaVentana("2026-11-03", ventana.desde, ventana.hasta) === 3, "tres días después del vencimiento");
+assert(confianzaPago({ ...pagoBase, diasDeDiferencia: 5, maxDias: 7 }) === 95, "el banco acepta hasta 7 días después");
+assert(confianzaPago({ ...pagoBase, diasDeDiferencia: 8, maxDias: 7 }) === null, "a 8 días ya no");
+
+assert(mediana([3, 1, 2]) === 2 && mediana([1, 2, 3, 4]) === 2.5 && mediana([]) === null, "mediana");
+const enUnidades = (costo: number, cantidad = 24) =>
+  medidaLinea({ costoUnitario: costo, unidadesTotales: cantidad, costoPorPresentacion: costo * 24, cantidadComprada: 1, presentacion: "caja", unidadesPorPresentacion: 24 });
+const historial = [enUnidades(50), enUnidades(52), enUnidades(48), enUnidades(51)];
+const umbral = { precio: 0.15, cantidad: 0.5 };
+assert(alertasLinea(enUnidades(55), historial, umbral).length === 0, "10% más no avisa");
+const caro = alertasLinea(enUnidades(62), historial, umbral);
+assert(caro.length === 1 && caro[0].tipo === "precio" && caro[0].mediana === 50.5 && caro[0].variacion > 0.2, "23% más caro avisa");
+assert(alertasLinea(enUnidades(40), historial, umbral)[0]?.variacion < 0, "mucho más barato también avisa");
+assert(alertasLinea(enUnidades(50, 72), historial, umbral)[0]?.tipo === "cantidad", "el triple de unidades avisa");
+assert(alertasLinea(enUnidades(62), historial.slice(0, ALERTA_MIN_COMPRAS - 1), umbral).length === 0, "sin historial suficiente no avisa");
+const porCaja = medidaLinea({ costoUnitario: null, unidadesTotales: null, costoPorPresentacion: 1500, cantidadComprada: 2, presentacion: "fardo", unidadesPorPresentacion: null });
+assert(alertasLinea(porCaja, historial, umbral).length === 0, "no compara un fardo contra precios por unidad");
+assert(pendientesDe({ ...pendienteBase, lineasConAlerta: 2 }, opciones)[0]?.dueno === "boris", "las alertas de precio le tocan a Boris");
+
+assert(FACTURAS_AGENT_USO.includes("movimientoId") && FACTURAS_AGENT_USO.includes("alertas"), "el texto de uso explica banco y alertas");
 assert(FACTURAS_AGENT_USO.includes("facturaOrigen") && FACTURAS_AGENT_USO.includes("/api/agent/pendientes"), "el texto de uso explica notas y pendientes");
 assert(FACTURAS_AGENT_ENDPOINTS.length === 13, "el directorio del agente lista las rutas de facturas");
 assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path === "/api/agent/presentaciones"), "hay una ruta para guardar presentaciones");

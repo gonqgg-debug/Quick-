@@ -44,6 +44,8 @@ export type PendientesInput = Pick<
   validacionesConDiferencia: number;
   /** Null cuando no se buscaron (la lista agregada no los busca). */
   pagosCandidatos: number | null;
+  /** Líneas con precio o cantidad fuera de lo normal. Null cuando no se calcularon. */
+  lineasConAlerta: number | null;
   pagosDiferencia: number | null;
 };
 
@@ -70,6 +72,7 @@ export function pendientesInputDe(factura: FacturaDetalle): PendientesInput {
     lineasSinCatalogo: lineasSinCatalogo(factura.lineas),
     validacionesConDiferencia: factura.validaciones.filter((validacion) => validacion.resultado === "diferencia").length,
     pagosCandidatos: factura.pagosCandidatos.length,
+    lineasConAlerta: factura.lineas.filter((linea) => linea.alertas.length > 0).length,
     pagosDiferencia: factura.pagos.length ? factura.pagosDiferencia : null,
   };
 }
@@ -153,6 +156,18 @@ export function pendientesDe(factura: PendientesInput, opciones: { hoy: string; 
       seccion: "productos",
       grave: false,
       dueno: "phillip",
+    });
+  }
+  if (factura.lineasConAlerta) {
+    items.push({
+      id: "alertas",
+      texto:
+        factura.lineasConAlerta === 1
+          ? "Una línea tiene precio o cantidad fuera de lo normal para este proveedor."
+          : `${factura.lineasConAlerta} líneas tienen precio o cantidad fuera de lo normal para este proveedor.`,
+      seccion: "productos",
+      grave: false,
+      dueno: "boris",
     });
   }
   if (!factura.tieneFoto) {

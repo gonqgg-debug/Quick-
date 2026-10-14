@@ -362,21 +362,24 @@ export async function publicarConciliacion(
   }
   const nota = textOrNull(body.nota, 2000);
   const ledgerId = body.ledgerId ?? body.ledger_id;
-  if (ledgerId != null && resultado !== "pagada") {
-    throw new Error("Solo se liga un movimiento de caja cuando el resultado es pagada");
+  const movimientoId = body.movimientoId ?? body.movimiento_id;
+  const liga = ledgerId != null || movimientoId != null;
+  if (liga && resultado !== "pagada") {
+    throw new Error("Solo se liga un movimiento cuando el resultado es pagada");
   }
-  if (ledgerId != null && medio && medio !== "caja") {
-    throw new Error("El ledgerId es de caja. Manda medio caja o no mandes medio");
+  const medioLigado: ConciliacionMedio = movimientoId != null ? "banco" : "caja";
+  if (liga && medio && medio !== medioLigado) {
+    throw new Error(`El movimiento es de ${medioLigado}. Manda medio ${medioLigado} o no mandes medio`);
   }
-  const pago = ledgerId != null ? await ligarPago(factura.id, ledgerId, actor) : null;
+  const pago = liga ? await ligarPago(factura.id, { ledgerId, movimientoId }, actor) : null;
   const fecha = dayOrNull(body.fecha, "La fecha") ?? pago?.fecha ?? null;
   const supabase = getSupabaseAdminClient();
   const { error } = await supabase.from("factura_conciliaciones").insert({
     factura_id: factura.id,
     resultado,
-    medio: medio ?? (pago ? "caja" : null),
+    medio: medio ?? (pago ? pago.origen : null),
     fecha,
-    referencia: textOrNull(body.referencia, 160),
+    referencia: textOrNull(body.referencia, 160) ?? pago?.referencia ?? null,
     monto: moneyOrNull(body.monto) ?? pago?.monto ?? null,
     nota,
   });
@@ -408,13 +411,13 @@ export async function publicarConciliacion(
   return requireFactura(factura.id);
 }
 
-/** Fred liga una salida de caja sin cerrar todavía la conciliación. */
+/** Fred liga una salida de caja o un débito del banco sin cerrar todavía la conciliación. */
 export async function ligarPagoCaja(idOrClave: string, body: Record<string, unknown>, actor: Actor): Promise<FacturaDetalle> {
   const factura = await requireFactura(idOrClave);
   if (factura.estado === "conciliada") {
     throw new Error("La factura ya está conciliada");
   }
-  await ligarPago(factura.id, body.ledgerId ?? body.ledger_id, actor);
+  await ligarPago(factura.id, { ledgerId: body.ledgerId ?? body.ledger_id, movimientoId: body.movimientoId ?? body.movimiento_id }, actor);
   return requireFactura(factura.id);
 }
 
