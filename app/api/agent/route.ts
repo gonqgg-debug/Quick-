@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { AGENT_EVENT_TYPES } from "@/lib/agent-events";
 import { requireAgentApi } from "@/lib/agent-auth";
 import { EXPANSION_AGENT_ENDPOINTS } from "@/lib/expansion-shared";
 import { FACTURAS_AGENT_ENDPOINTS } from "@/lib/facturas-shared";
@@ -18,24 +19,7 @@ export async function GET(request: NextRequest) {
     webhook: {
       configurado: Boolean(process.env.AGENT_WEBHOOK_URL?.trim()),
       firma: "Header X-Quick-Signature: t=<unix>,v1=<hex>. HMAC-SHA256 de `${timestamp}.${body}` con AGENT_WEBHOOK_SECRET. El POST también manda Authorization: Bearer <AGENT_WEBHOOK_KEY>, distinta del secreto de la firma.",
-      eventos: [
-        "venta.guardada",
-        "compra.creada",
-        "compra.actualizada",
-        "proveedor.creado",
-        "proveedor.actualizado",
-        "turno.creado",
-        "turno.actualizado",
-        "ledger.creado",
-        "ledger.actualizado",
-        "ledger.eliminado",
-        "producto.actualizado",
-        "productos.actualizados",
-        "catalogo.importado",
-        "meta.guardada",
-        "parametros.actualizados",
-        "factura.recordatorio",
-      ],
+      eventos: [...AGENT_EVENT_TYPES],
     },
     nota: "Ventas, compras, caja, catálogo y contable no incluyen teléfonos, direcciones ni chats de clientes. Expansión sí incluye teléfono y correo de brokers y desarrolladores: ese directorio es el CRM. El catálogo no tiene existencias. POST de compras registra una factura con RNC, NCF y captura. POST de facturas guarda lo que Phillip lee, incluida la foto original. Cada bot escribe con su token: Boris solo verifica, Fred solo concilia, Hans publica asientos, Robert los estados y Troy aprueba el cierre. AGENT_API_TOKEN sigue pudiendo leer. POST y PATCH de expansión crean y mueven el pipeline.",
     endpoints: [

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdminApi } from "@/lib/admin-auth";
+import { adminGreetingName, requireAdminApi } from "@/lib/admin-auth";
 import { facturasError, handleAsignarProducto } from "@/lib/facturas-http";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return auth;
   }
   try {
-    return await handleAsignarProducto(params.id, params.lineaId, request);
+    return await handleAsignarProducto(params.id, params.lineaId, request, "admin", adminGreetingName(auth));
   } catch (error) {
     return facturasError(error, "No pudimos enlazar el producto", "[admin] factura linea");
   }

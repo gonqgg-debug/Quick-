@@ -99,6 +99,8 @@ export const FACTURA_PROPUESTA_ORIGENES = [
 export const PROPUESTA_UMBRAL = 70;
 /** «Aceptar todas» solo toma propuestas desde este porcentaje. */
 export const PROPUESTA_ACEPTAR_TODAS = 90;
+/** Una persona puede confirmar en lote las propuestas de esta banda. Phillip no. */
+export const PROPUESTA_BANDA_PERSONA = { minimo: PROPUESTA_UMBRAL, maximo: PROPUESTA_ACEPTAR_TODAS - 1 } as const;
 export const PROPUESTA_CONFIANZA = { alias: 100, barras: 95, odoo: 90 } as const;
 /** Cuántos productos por nombre parecido se le dan a Phillip por línea. */
 export const CANDIDATOS_POR_LINEA = 5;
@@ -121,6 +123,14 @@ export type FacturaPreguntaEstado = (typeof FACTURA_PREGUNTA_ESTADOS)[number]["i
 export type FacturaDocumentoTipo = (typeof FACTURA_DOCUMENTO_TIPOS)[number]["id"];
 export type FacturaRecepcion = (typeof FACTURA_RECEPCIONES)[number]["id"];
 export type FacturaPropuestaOrigen = (typeof FACTURA_PROPUESTA_ORIGENES)[number]["id"];
+
+export const ORIGENES_LIGUE = [
+  { id: "humano", label: "Confirmado por una persona" },
+  { id: "propuesta_auto", label: "Propuesta aceptada sola" },
+  { id: "alias", label: "Alias del proveedor" },
+] as const;
+
+export type OrigenLigue = (typeof ORIGENES_LIGUE)[number]["id"];
 
 export type FacturaPropuesta = {
   productoId: string;
@@ -196,6 +206,14 @@ export type FacturaLinea = {
   observacion: string | null;
   productoId: string | null;
   productoCatalogo: FacturaProductoCatalogo | null;
+  /** Quién eligió el producto en la plataforma. Null si lo ligó un alias o una propuesta automática. */
+  productoConfirmadoPor: string | null;
+  productoConfirmadoEn: string | null;
+  /** humano cuando lo confirma una persona; propuesta_auto desde 90; alias si ya estaba aprendido. */
+  origenLigue: OrigenLigue | null;
+  /** Quién escribió las unidades por presentación en la plataforma. */
+  unidadesConfirmadoPor: string | null;
+  unidadesConfirmadoEn: string | null;
   propuesta: FacturaPropuesta | null;
   recepcion: FacturaRecepcion;
   recepcionLabel: string;
@@ -499,7 +517,7 @@ export type DuplicadoCandidato = {
 };
 
 export const FACTURAS_AGENT_USO =
-  "Guarda cada factura en la misma ficha, con la foto original. POST /api/agent/facturas manda proveedor, tienda, fechas, montos, lineas (o productos), validaciones, preguntas y la foto: en JSON usa fotoBase64 o documentos[{ pagina, base64 }]; en multipart adjunta el archivo en el campo foto (también vale captura o documento). JPG, PNG, WebP o PDF, hasta 4 MB por archivo. Si hay varias páginas, mándalas todas. Identifica la factura con referencia (proveedor, fecha, monto y tienda): el id es interno y no se menciona en la conversación. Si no sabes cuántas unidades trae la caja, el paquete o el fardo, no mandes unidadesPorPresentacion ni calcules unidadesTotales o costoUnitario. Para cruzar una línea con el catálogo manda productoId o codigoOdoo; si no lo mandas, el producto ya elegido se conserva. Repetir el POST con la misma clave no pisa la factura y responde creado: false; una foto nueva de esa clave sí se guarda. Para corregir usa PATCH. Las etapas son falta_factura, recibida, registrada, verificada y conciliada. Completa cuenta como registrada. Phillip solo puede pasar a registrada cuando Rodrigo confirmó la recepción de todas las líneas (POST /recepcion: completa, faltante o regalo), salvo que sea compra personal. La respuesta de Ramón en texto se guarda igual, como evidencia. Phillip decide el producto de cada línea: pide GET /lineas/candidatos (señales exactas por alias, código de barras u Odoo, nombres parecidos, presentaciones y última compra a ese proveedor) y manda POST /lineas/propuestas con productoId, confianza de 0 a 100 y razon. Un alias ya confirmado para ese proveedor se liga solo; barras (95) y odoo (90) quedan como propuesta de la plataforma. Con aceptar: true, las de 90 o más se ligan y quedan aprendidas; las demás las confirma una persona, y bajo 70 hay que revisarlas. También puede elegir directo con PATCH /lineas/{lineaId} y productoId. Cuando un producto tiene las unidades por presentación guardadas (POST /api/agent/presentaciones), la plataforma completa unidades y costo unitario. La plataforma liga la factura a la ficha del proveedor (primero por RNC, después por nombre), calcula fecha_vencimiento con sus días de crédito si no la mandas, y revisa sola ncf_formato, ncf_unico y rnc_proveedor: no mandes esas tres validaciones, se reemplazan. El ticket de pago se adjunta a la misma ficha con tipo ticket. Una nota de crédito (tipoDocumento nota_credito) manda facturaOrigen con el id o la clave de la factura que corrige; Boris la verifica después de la original y la plataforma la descuenta de la cuenta por pagar. Fred liga los pagos con POST /pagos: ledgerId para caja o movimientoId para un débito del banco ya importado (POST /api/agent/banco), con su confianza de 0 a 100 y razon. pagosCandidatos son solo la lista de movimientos que cuadran en monto y fecha: Fred decide cuál es. Cada línea ligada al catálogo trae alertas cuando su precio o su cantidad se sale de la mediana de las últimas 6 compras del mismo producto al mismo proveedor (15% en precio y 50% en cantidad, se cambian en Parámetros; necesita al menos 3 compras). GET /api/agent/pendientes dice qué le falta a cada factura y a quién le toca. Cada bot escribe con su propio token.";
+  "Guarda cada factura en la misma ficha, con la foto original. POST /api/agent/facturas manda proveedor, tienda, fechas, montos, lineas (o productos), validaciones, preguntas y la foto: en JSON usa fotoBase64 o documentos[{ pagina, base64 }]; en multipart adjunta el archivo en el campo foto (también vale captura o documento). JPG, PNG, WebP o PDF, hasta 4 MB por archivo. Si hay varias páginas, mándalas todas. Identifica la factura con referencia (proveedor, fecha, monto y tienda): el id es interno y no se menciona en la conversación. Si no sabes cuántas unidades trae la caja, el paquete o el fardo, no mandes unidadesPorPresentacion ni calcules unidadesTotales o costoUnitario. Para cruzar una línea con el catálogo manda productoId o codigoOdoo; si no lo mandas, el producto ya elegido se conserva. Repetir el POST con la misma clave no pisa la factura y responde creado: false; una foto nueva de esa clave sí se guarda. Para corregir usa PATCH. Las etapas son falta_factura, recibida, registrada, verificada y conciliada. Completa cuenta como registrada. Phillip solo puede pasar a registrada cuando Rodrigo confirmó la recepción de todas las líneas (POST /recepcion: completa, faltante o regalo), salvo que sea compra personal. La respuesta de Ramón en texto se guarda igual, como evidencia. Phillip decide el producto de cada línea: pide GET /lineas/candidatos (señales exactas por alias, código de barras u Odoo, nombres parecidos, presentaciones y última compra a ese proveedor) y manda POST /lineas/propuestas con productoId, confianza de 0 a 100 y razon. Un alias ya confirmado para ese proveedor se liga solo; barras (95) y odoo (90) quedan como propuesta de la plataforma. Con aceptar: true, las de 90 o más se ligan y quedan aprendidas; las demás las confirma una persona, y bajo 70 hay que revisarlas. También puede elegir directo con PATCH /lineas/{lineaId} y productoId. Cuando un producto tiene las unidades por presentación guardadas (POST /api/agent/presentaciones), la plataforma completa unidades y costo unitario. La plataforma liga la factura a la ficha del proveedor (primero por RNC, después por nombre), calcula fecha_vencimiento con sus días de crédito si no la mandas, y revisa sola ncf_formato, ncf_unico y rnc_proveedor: no mandes esas tres validaciones, se reemplazan. El ticket de pago se adjunta a la misma ficha con tipo ticket. Una nota de crédito (tipoDocumento nota_credito) manda facturaOrigen con el id o la clave de la factura que corrige; Boris la verifica después de la original y la plataforma la descuenta de la cuenta por pagar. Fred liga los pagos con POST /pagos: ledgerId para caja o movimientoId para un débito del banco ya importado (POST /api/agent/banco), con su confianza de 0 a 100 y razon. pagosCandidatos son solo la lista de movimientos que cuadran en monto y fecha: Fred decide cuál es. Cada línea ligada al catálogo trae alertas cuando su precio o su cantidad se sale de la mediana de las últimas 6 compras del mismo producto al mismo proveedor (15% en precio y 50% en cantidad, se cambian en Parámetros; necesita al menos 3 compras). GET /api/agent/pendientes dice qué le falta a cada factura y a quién le toca. Si una persona confirma el producto en la plataforma, la línea queda ligada: trae productoConfirmadoPor, productoConfirmadoEn y origenLigue (humano, propuesta_auto o alias). Una línea ambigua pasa a completa y se cierran las preguntas abiertas con campo productoId, con respuesta y evidencia «Confirmado por <usuario> en UI». Phillip no vuelve a preguntar ese producto. Ese ligue publica el evento linea.confirmada con facturaId, numeroLinea, productoId y por. Si la persona edita las unidades por presentación, queda quién las confirmó y se cierra la pregunta de unidades de esa línea. En la ficha se pueden confirmar de una vez las propuestas de 70 a 89. Cada bot escribe con su propio token.";
 
 export const FACTURAS_AGENT_ENDPOINTS = [
   {
@@ -517,7 +535,7 @@ export const FACTURAS_AGENT_ENDPOINTS = [
     method: "GET",
     path: "/api/agent/facturas/{id-o-clave}",
     describe:
-      "La factura completa: cabecera, productos (con alertas de precio y cantidad), validaciones, preguntas, documentos, pagos ligados de caja y banco, pagosCandidatos, pagosDiferencia, facturaOrigen (si es nota de crédito) y notasCredito (si es la original).",
+      "La factura completa: cabecera, productos (con alertas de precio y cantidad, productoConfirmadoPor, productoConfirmadoEn y origenLigue), validaciones, preguntas, documentos, pagos ligados de caja y banco, pagosCandidatos, pagosDiferencia, facturaOrigen (si es nota de crédito) y notasCredito (si es la original).",
   },
   {
     method: "PATCH",
@@ -533,7 +551,7 @@ export const FACTURAS_AGENT_ENDPOINTS = [
   {
     method: "PATCH",
     path: "/api/agent/facturas/{id-o-clave}/lineas/{lineaId}",
-    describe: "Phillip elige el producto de una línea: productoId (null para quitarlo) o aceptarPropuesta: true. Queda aprendido para ese proveedor y la próxima factura se liga sola.",
+    describe: "Phillip elige el producto de una línea: productoId (null para quitarlo) o aceptarPropuesta: true. Queda aprendido para ese proveedor y la próxima factura se liga sola. Si lo confirma una persona en la plataforma, origenLigue es humano, con productoConfirmadoPor y productoConfirmadoEn, y se publica linea.confirmada.",
   },
   {
     method: "GET",
@@ -550,7 +568,7 @@ export const FACTURAS_AGENT_ENDPOINTS = [
   {
     method: "POST",
     path: "/api/agent/facturas/{id-o-clave}/lineas/aceptar",
-    describe: "Phillip acepta de una vez las propuestas de 90 o más (suyas o por alias, código de barras o código de Odoo). Responde aceptadas y la factura.",
+    describe: "Phillip acepta de una vez las propuestas de 90 o más (suyas o por alias, código de barras o código de Odoo): quedan como origenLigue propuesta_auto. Una persona puede confirmar las de 70 a 89 con minimo y maximo; esas quedan como humano. Responde aceptadas y la factura.",
   },
   {
     method: "POST",
@@ -1038,6 +1056,89 @@ export function normalizarDescripcion(value: string | null): string | null {
     .trim()
     .replace(/\s+/g, " ");
   return text.length >= 2 ? text.slice(0, 300) : null;
+}
+
+function compactarCampo(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+const CAMPOS_PRODUCTO = new Set(["productoid", "producto"]);
+const CAMPOS_UNIDADES = new Set(["unidadesporpresentacion", "unidadesporcaja", "unidades"]);
+
+/** La pregunta pide el producto de la línea (productoId, producto_id o producto). */
+export function esCampoProducto(campo: string | null): boolean {
+  return campo != null && CAMPOS_PRODUCTO.has(compactarCampo(campo));
+}
+
+/** La pregunta pide las unidades por presentación de la línea. */
+export function esCampoUnidades(campo: string | null): boolean {
+  return campo != null && CAMPOS_UNIDADES.has(compactarCampo(campo));
+}
+
+/** Respuesta y evidencia con las que se cierra una pregunta confirmada en la plataforma. */
+export function textoConfirmacionUi(usuario: string): string {
+  const nombre = usuario.trim() || "una persona";
+  return `Confirmado por ${nombre} en UI`;
+}
+
+/** Una línea ambigua deja de serlo cuando el producto queda ligado. El resto de estados se conserva. */
+export function estadoTrasLigue(estado: FacturaEstadoLinea): FacturaEstadoLinea {
+  return estado === "ambigua" ? "completa" : estado;
+}
+
+/**
+ * Claves del alias, de la más específica a la descripción sola.
+ * La descripción del proveedor más el código SKU identifica el producto; si no hay SKU, basta la descripción.
+ */
+export function clavesAlias(descripcion: string | null, codigoSku: string | null = null): string[] {
+  const desc = normalizarDescripcion(descripcion);
+  if (!desc) {
+    return [];
+  }
+  const claves: string[] = [];
+  const sku = normalizarDescripcion(codigoSku);
+  if (sku) {
+    const junta = normalizarDescripcion(`${descripcion ?? ""} ${codigoSku ?? ""}`);
+    if (junta && junta !== desc) {
+      claves.push(junta);
+    }
+  }
+  claves.push(desc);
+  return claves;
+}
+
+export function propuestasEnBanda<T extends { productoId: string | null; propuesta: { confianza: number } | null }>(
+  lineas: T[],
+  minimo: number,
+  maximo: number
+): T[] {
+  return lineas.filter((linea) => !linea.productoId && linea.propuesta != null && linea.propuesta.confianza >= minimo && linea.propuesta.confianza <= maximo);
+}
+
+/** Rango de confianza para aceptar propuestas. Phillip solo desde 90; una persona puede bajar hasta 70. */
+export function leerRangoPropuestas(body: { minimo?: unknown; maximo?: unknown }, actor: "admin" | "phillip"): { minimo: number; maximo: number } {
+  const minimo = leerEnteroRango(body.minimo, PROPUESTA_ACEPTAR_TODAS);
+  const maximo = leerEnteroRango(body.maximo, 100);
+  if (!Number.isInteger(minimo) || !Number.isInteger(maximo) || minimo < PROPUESTA_UMBRAL || maximo > 100 || minimo > maximo) {
+    throw new Error("El rango de confianza tiene que ir de 70 a 100");
+  }
+  if (actor !== "admin" && minimo < PROPUESTA_ACEPTAR_TODAS) {
+    throw new Error("Solo una persona confirma propuestas bajo 90");
+  }
+  return { minimo, maximo };
+}
+
+function leerEnteroRango(value: unknown, fallback: number): number {
+  if (value == null || value === "") {
+    return fallback;
+  }
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? Math.round(number) : Number.NaN;
 }
 
 export function diferenciaRecepcion(linea: {

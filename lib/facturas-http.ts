@@ -5,6 +5,7 @@ import {
   aceptarPropuestas,
   asignarProductoLinea,
   candidatosLineas,
+  confirmarUnidadesEnLinea,
   createFactura,
   filtroDesdeParams,
   getFactura,
@@ -29,6 +30,7 @@ import {
   FACTURA_TIPOS,
   FACTURA_DOCUMENTO_TIPOS,
   FACTURA_VALIDACIONES,
+  ORIGENES_LIGUE,
   FACTURA_VALIDACIONES_AUTOMATICAS,
   FACTURAS_AGENT_ENDPOINTS,
   FACTURAS_AGENT_USO,
@@ -93,6 +95,7 @@ export function facturasVocabulario() {
     validacionesAutomaticas: FACTURA_VALIDACIONES_AUTOMATICAS,
     recepciones: FACTURA_RECEPCIONES,
     propuestaOrigenes: FACTURA_PROPUESTA_ORIGENES,
+    origenesLigue: ORIGENES_LIGUE,
     propuestaUmbral: PROPUESTA_UMBRAL,
     tiposArchivo: FACTURA_DOCUMENTO_TIPOS,
     foto: "JPG, PNG, WebP o PDF. Hasta 4 MB por archivo. JSON: fotoBase64 o documentos[{ pagina, base64 }]. El ticket de pago va en documentos[{ tipo: \"ticket\", base64 }] o ticketBase64. Multipart: archivo en el campo foto, y el ticket en el campo ticket.",
@@ -215,7 +218,13 @@ export async function handleGetDocumento(idOrClave: string, documentoId: string)
   return documentoResponse(file);
 }
 
-export async function handleAsignarProducto(idOrClave: string, lineaId: string, request: NextRequest, actor: Actor = "admin") {
+export async function handleAsignarProducto(
+  idOrClave: string,
+  lineaId: string,
+  request: NextRequest,
+  actor: Actor = "admin",
+  confirmadoPor: string | null = null
+) {
   if (actor !== "phillip" && actor !== "admin") {
     throw new Error("Solo Phillip elige el producto del catálogo");
   }
@@ -223,13 +232,13 @@ export async function handleAsignarProducto(idOrClave: string, lineaId: string, 
   if (!("productoId" in body) && body.aceptarPropuesta !== true && body.aceptar !== true) {
     throw new Error("Manda productoId del catálogo (null para quitarlo) o aceptarPropuesta: true");
   }
-  const factura = await asignarProductoLinea(idOrClave, lineaId, body, actor);
+  const factura = await asignarProductoLinea(idOrClave, lineaId, body, actor, confirmadoPor);
   return NextResponse.json({ factura });
 }
 
-export async function handleAceptarPropuestas(idOrClave: string, request: NextRequest, actor: Actor) {
+export async function handleAceptarPropuestas(idOrClave: string, request: NextRequest, actor: Actor, confirmadoPor: string | null = null) {
   const { body } = await leerPeticionFactura(request).catch(() => ({ body: {} as Record<string, unknown> }));
-  return NextResponse.json(await aceptarPropuestas(idOrClave, body, actor));
+  return NextResponse.json(await aceptarPropuestas(idOrClave, body, actor, confirmadoPor));
 }
 
 export async function handleCandidatos(idOrClave: string, request: NextRequest) {
@@ -248,9 +257,13 @@ export async function handleProponerLineas(idOrClave: string, request: NextReque
   return NextResponse.json(await proponerLineas(idOrClave, payload, actor));
 }
 
-export async function handleGuardarPresentacion(request: NextRequest, actor: Actor) {
+export async function handleGuardarPresentacion(request: NextRequest, actor: Actor, confirmadoPor: string | null = null) {
   const { body } = await leerPeticionFactura(request);
-  return NextResponse.json({ presentacion: await guardarPresentacion(body, actor) });
+  const presentacion = await guardarPresentacion(confirmadoPor ? { ...body, confirmadoPor } : body, actor);
+  if (confirmadoPor && typeof body.facturaId === "string" && body.numeroLinea != null) {
+    await confirmarUnidadesEnLinea(body.facturaId, body.numeroLinea, presentacion.unidades, confirmadoPor);
+  }
+  return NextResponse.json({ presentacion });
 }
 
 export async function handleAdminPatch(id: string, request: NextRequest) {

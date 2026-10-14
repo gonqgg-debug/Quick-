@@ -77,6 +77,7 @@ assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.method === "DELETE" && item
 assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.path.startsWith("/api/agent/pendientes")), "el directorio lista los pendientes");
 assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.path.endsWith("/conciliacion") && item.describe.includes("ledgerId")), "la conciliación explica ledgerId");
 assert((AGENT_EVENT_TYPES as readonly string[]).includes("factura.recordatorio"), "el recordatorio se publica como evento");
+assert((AGENT_EVENT_TYPES as readonly string[]).includes("linea.confirmada"), "confirmar un producto en la UI publica linea.confirmada");
 
 assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.method === "POST" && item.path === "/api/agent/banco"), "el directorio lista la importación del banco");
 assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.method === "GET" && item.path.startsWith("/api/agent/banco")), "el directorio lista los movimientos del banco");
