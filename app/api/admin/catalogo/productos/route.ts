@@ -39,6 +39,7 @@ export async function PATCH(request: NextRequest) {
     const body = (await request.json()) as {
       id?: unknown;
       nombre?: unknown;
+      descripcion?: unknown;
       marca?: unknown;
       categoria?: unknown;
       precio?: unknown;
@@ -50,6 +51,7 @@ export async function PATCH(request: NextRequest) {
     const product = await updateAdminCatalogProduct({
       id: body.id,
       nombre: body.nombre,
+      descripcion: body.descripcion,
       marca: body.marca,
       categoria: body.categoria,
       precio: body.precio,

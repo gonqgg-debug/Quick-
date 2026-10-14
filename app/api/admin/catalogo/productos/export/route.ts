@@ -11,7 +11,7 @@ import {
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const HEADERS = ["Foto", "Nombre", "Marca", "Categoría", "Precio", "Cód. Odoo", "Barras", "Estado"];
+const HEADERS = ["Foto", "Nombre", "Marca", "Categoría", "Precio", "Costo", "Margen %", "Proveedores", "Cód. Odoo", "Barras", "Estado"];
 
 async function idsFromRequest(request: NextRequest): Promise<string[] | undefined> {
   if (request.method !== "POST") {
