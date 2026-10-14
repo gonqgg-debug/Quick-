@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
         method: "POST",
         path: "/api/agent/catalogo",
         describe:
-          "Rodrigo importa productos al catálogo. Multipart: archivo (.xlsx o .csv, el export de Odoo sirve). JSON: productos: [{ codigo, nombre, precio, categoria, marca, codigoBarras }], o csv, o base64 con nombre. codigo (Odoo), nombre, precio y categoria son obligatorios; si el código ya existe, se actualiza. Sin confirmar: true solo responde qué cambiaría (nuevos, actualizados con sus cambios, invalidos con la razón); con confirmar: true lo guarda. Nunca borra productos.",
+          "Rodrigo importa productos al catálogo. Multipart: archivo (.xlsx o .csv, el export de Odoo sirve). JSON: productos: [{ codigo, nombre, precio, categoria, marca, codigoBarras, costo }], o csv, o base64 con nombre. codigo (Odoo), nombre, precio y categoria son obligatorios; costo es opcional. Si el código ya existe, se actualiza. Un costo se guarda como costo manual del producto, con fuente odoo y la fecha; si no viene, ese costo no se toca. Sin confirmar: true solo responde qué cambiaría (nuevos, actualizados con sus cambios, invalidos con la razón); con confirmar: true lo guarda. Nunca borra productos.",
       },
       { method: "GET", path: "/api/agent/contable?mes=YYYY-MM", describe: "Paquete contable del mes, con líneas y comprobaciones" },
       ...FACTURAS_AGENT_ENDPOINTS,

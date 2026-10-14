@@ -17,6 +17,7 @@ const FIELD_LABEL = {
   categoria: "categoría",
   precio: "precio",
   codigoBarras: "código de barras",
+  costo: "costo",
 } as const;
 
 const EXPECTED_COLUMNS: Array<{ key: keyof ImportPreview["columns"] | "codigo"; label: string; hint: string }> = [
@@ -26,6 +27,7 @@ const EXPECTED_COLUMNS: Array<{ key: keyof ImportPreview["columns"] | "codigo"; 
   { key: "categoria", label: "Categoría", hint: "Si no viene, se conserva" },
   { key: "precio", label: "Precio", hint: "Precio de venta" },
   { key: "codigoBarras", label: "Código de barras", hint: "EAN / barcode, opcional" },
+  { key: "costo", label: "Costo", hint: "Opcional. Se guarda como costo de Odoo" },
 ];
 
 type Result = {

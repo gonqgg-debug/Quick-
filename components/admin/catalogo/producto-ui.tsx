@@ -4,12 +4,14 @@ import { useEffect, useRef } from "react";
 import { formatPrice } from "@/lib/money";
 import { brand } from "@/lib/theme";
 import {
+  etiquetaCostoFuente,
   isUncategorized,
   margenBajo,
   formatoMargen,
   shortOdooCode,
   type AdminCatalogProduct,
   type AdminCatalogProveedor,
+  type CostoFuente,
 } from "@/lib/admin-catalog-products-shared";
 import { Pill, TONO } from "@/components/admin/facturas/ui";
 
@@ -26,6 +28,16 @@ export function lineaSecundaria(product: Pick<AdminCatalogProduct, "marca" | "ca
 
 export function textoCosto(costo: number | null): string {
   return costo == null ? "Sin costo" : formatPrice(costo);
+}
+
+export function CostoProducto({ costo, fuente }: { costo: number | null; fuente: CostoFuente | null }) {
+  const origen = fuente && fuente !== "factura" ? etiquetaCostoFuente(fuente) : "";
+  return (
+    <span title={origen || undefined}>
+      <span className={costo == null ? "text-brand-muted" : "font-semibold"}>{textoCosto(costo)}</span>
+      {origen ? <span className="ml-1 text-[11px] font-semibold text-brand-muted">{origen}</span> : null}
+    </span>
+  );
 }
 
 export function FotoProducto({ src, size }: { src: string | null; size: "lista" | "bloque" | "ficha" }) {
