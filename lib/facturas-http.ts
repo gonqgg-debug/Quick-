@@ -21,7 +21,9 @@ import {
   FACTURA_PREGUNTA_ESTADOS,
   FACTURA_RESULTADOS,
   FACTURA_TIPOS,
+  FACTURA_DOCUMENTO_TIPOS,
   FACTURA_VALIDACIONES,
+  FACTURA_VALIDACIONES_AUTOMATICAS,
   FACTURAS_AGENT_ENDPOINTS,
   FACTURAS_AGENT_USO,
 } from "@/lib/facturas-shared";
@@ -78,7 +80,9 @@ export function facturasVocabulario() {
     validaciones: FACTURA_VALIDACIONES,
     resultados: FACTURA_RESULTADOS,
     estadosPregunta: FACTURA_PREGUNTA_ESTADOS,
-    foto: "JPG, PNG, WebP o PDF. Hasta 4 MB por archivo. JSON: fotoBase64 o documentos[{ pagina, base64 }]. Multipart: archivo en el campo foto.",
+    validacionesAutomaticas: FACTURA_VALIDACIONES_AUTOMATICAS,
+    tiposArchivo: FACTURA_DOCUMENTO_TIPOS,
+    foto: "JPG, PNG, WebP o PDF. Hasta 4 MB por archivo. JSON: fotoBase64 o documentos[{ pagina, base64 }]. El ticket de pago va en documentos[{ tipo: \"ticket\", base64 }] o ticketBase64. Multipart: archivo en el campo foto, y el ticket en el campo ticket.",
     endpoints: FACTURAS_AGENT_ENDPOINTS,
   };
 }

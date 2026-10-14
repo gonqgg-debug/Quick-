@@ -1,12 +1,27 @@
 import { addDaysToDayKey, diffDayKeys, isDayKey, todayDayKey } from "@/lib/local-day";
 
+export const PROVEEDOR_FORMAS_PAGO = [
+  { id: "efectivo", label: "Efectivo" },
+  { id: "transferencia", label: "Transferencia" },
+  { id: "mixto", label: "Mixto" },
+] as const;
+
+export type ProveedorFormaPago = (typeof PROVEEDOR_FORMAS_PAGO)[number]["id"];
+
 export type Proveedor = {
   id: string;
   nombre: string;
+  rnc: string | null;
   tieneCredito: boolean;
   diasCredito: number;
+  formaPago: ProveedorFormaPago | null;
   notas: string | null;
 };
+
+export function parseFormaPago(value: unknown): ProveedorFormaPago | null {
+  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return PROVEEDOR_FORMAS_PAGO.find((item) => item.id === text)?.id ?? null;
+}
 
 export type Compra = {
   id: string;

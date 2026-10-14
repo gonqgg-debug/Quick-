@@ -640,8 +640,10 @@ function CompraModal({
           : {
               id: body.compra.proveedorId,
               nombre: body.compra.proveedorNombre,
+              rnc: null,
               tieneCredito: false,
               diasCredito: 0,
+              formaPago: null,
               notas: null,
             };
       await onSaved(body.compra, createdProveedor);

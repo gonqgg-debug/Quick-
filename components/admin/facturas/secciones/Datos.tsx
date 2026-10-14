@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { PROVEEDOR_FORMAS_PAGO } from "@/lib/admin-compras-shared";
 import { formatMonto, type FacturaDetalle } from "@/lib/facturas-shared";
 import { diferenciaMontos } from "@/components/admin/facturas/falta";
 import { Aviso, Dato, Seccion, TONO, fechaCorta, fechaHora } from "@/components/admin/facturas/ui";
@@ -19,6 +21,7 @@ export function Datos({ factura }: { factura: FacturaDetalle }) {
           <Dato label="Tipo" value={factura.tipoDocumentoLabel} />
           <Dato label="Tienda" value={factura.tienda} />
         </Grupo>
+        <FichaProveedor factura={factura} />
         <Grupo titulo="Fechas y pago">
           <Dato label="Emisión" value={fechaCorta(factura.fechaEmision)} />
           <Dato label="Vencimiento" value={fechaCorta(factura.fechaVencimiento)} />
@@ -44,6 +47,38 @@ export function Datos({ factura }: { factura: FacturaDetalle }) {
         </div>
       </div>
     </Seccion>
+  );
+}
+
+function FichaProveedor({ factura }: { factura: FacturaDetalle }) {
+  const ficha = factura.proveedorFicha;
+  if (!ficha) {
+    return (
+      <p className="rounded-xl border border-dashed border-[#E7EBE4] px-3 py-2 text-sm text-brand-muted">
+        No está ligada a un proveedor de la lista. Se liga sola cuando el RNC o el nombre coinciden con una ficha de{" "}
+        <Link href="/admin/proveedores" className="font-semibold underline">
+          Proveedores
+        </Link>
+        .
+      </p>
+    );
+  }
+  const credito = ficha.tieneCredito ? (ficha.diasCredito === 1 ? "1 día" : `${ficha.diasCredito} días`) : "Sin crédito";
+  const formaPago = PROVEEDOR_FORMAS_PAGO.find((item) => item.id === ficha.formaPago)?.label ?? null;
+  return (
+    <div className="rounded-xl border border-[#E7EBE4] px-3 py-2 text-sm">
+      <p>
+        <span className="text-brand-muted">Ficha: </span>
+        <Link href="/admin/proveedores" className="font-semibold underline">
+          {ficha.nombre}
+        </Link>
+        <span className="text-brand-muted">
+          {" "}
+          · RNC {ficha.rnc ?? "sin registrar"} · {credito}
+          {formaPago ? ` · ${formaPago}` : ""}
+        </span>
+      </p>
+    </div>
   );
 }
 

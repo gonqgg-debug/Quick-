@@ -6,9 +6,12 @@ import { getSupabaseAdminClient } from "@/lib/supabase";
 
 export const FACTURAS_BUCKET = "facturas-phillip";
 
+export type DocumentoTipo = "pagina" | "ticket";
+
 export type DocumentoEntrada = {
   nombre: string | null;
   pagina: number | null;
+  tipo: DocumentoTipo;
   bytes: Uint8Array;
   mime: CapturaMime;
   sha256: string;
@@ -37,6 +40,20 @@ function paginaDe(value: unknown): number | null {
   return numero;
 }
 
+function tipoDe(value: unknown): DocumentoTipo {
+  if (value == null || value === "") {
+    return "pagina";
+  }
+  const text = String(value).trim().toLowerCase();
+  if (text === "ticket" || text === "recibo") {
+    return "ticket";
+  }
+  if (text === "pagina" || text === "página" || text === "factura") {
+    return "pagina";
+  }
+  throw new Error("El tipo de documento tiene que ser pagina o ticket");
+}
+
 function nombreDe(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
@@ -45,20 +62,20 @@ function nombreDe(value: unknown): string | null {
   return text || null;
 }
 
-function desdeBytes(bytes: Uint8Array, nombre: string | null, pagina: number | null): DocumentoEntrada {
+function desdeBytes(bytes: Uint8Array, nombre: string | null, pagina: number | null, tipo: DocumentoTipo = "pagina"): DocumentoEntrada {
   const parsed = parseCapturaBytes(bytes);
   if (!parsed.ok) {
     throw new Error(mensajeFoto(parsed.message));
   }
-  return { nombre, pagina, bytes, mime: parsed.mime, sha256: sha256(bytes) };
+  return { nombre, pagina, tipo, bytes, mime: parsed.mime, sha256: sha256(bytes) };
 }
 
-function desdeTexto(value: string, nombre: string | null, pagina: number | null): DocumentoEntrada {
+function desdeTexto(value: string, nombre: string | null, pagina: number | null, tipo: DocumentoTipo = "pagina"): DocumentoEntrada {
   const bytes = decodeCapturaBase64(value);
   if (!bytes) {
     throw new Error("La foto no se pudo leer");
   }
-  return desdeBytes(bytes, nombre, pagina);
+  return desdeBytes(bytes, nombre, pagina, tipo);
 }
 
 function textoCampo(raw: Record<string, unknown>, keys: string[]): string {
@@ -71,7 +88,7 @@ function textoCampo(raw: Record<string, unknown>, keys: string[]): string {
   return "";
 }
 
-export function documentosDesdeValor(value: unknown): DocumentoEntrada[] {
+export function documentosDesdeValor(value: unknown, tipoBase: DocumentoTipo = "pagina"): DocumentoEntrada[] {
   if (value == null || value === "") {
     return [];
   }
@@ -80,7 +97,7 @@ export function documentosDesdeValor(value: unknown): DocumentoEntrada[] {
   for (const item of list) {
     if (typeof item === "string") {
       if (item.trim()) {
-        docs.push(desdeTexto(item, null, null));
+        docs.push(desdeTexto(item, null, null, tipoBase));
       }
       continue;
     }
@@ -92,7 +109,8 @@ export function documentosDesdeValor(value: unknown): DocumentoEntrada[] {
     if (!encoded) {
       continue;
     }
-    docs.push(desdeTexto(encoded, nombreDe(raw.nombre ?? raw.filename), paginaDe(raw.pagina ?? raw.page)));
+    const tipo = raw.tipo == null || raw.tipo === "" ? tipoBase : tipoDe(raw.tipo);
+    docs.push(desdeTexto(encoded, nombreDe(raw.nombre ?? raw.filename), tipo === "ticket" ? null : paginaDe(raw.pagina ?? raw.page), tipo));
   }
   return docs;
 }
@@ -104,6 +122,8 @@ export function documentosDesdeCuerpo(body: Record<string, unknown>): DocumentoE
     ...documentosDesdeValor(body.fotoBase64),
     ...documentosDesdeValor(body.capturaBase64),
     ...documentosDesdeValor(body.foto),
+    ...documentosDesdeValor(body.ticket, "ticket"),
+    ...documentosDesdeValor(body.ticketBase64, "ticket"),
   ];
   const seen = new Set<string>();
   return docs.filter((doc) => {
@@ -125,6 +145,11 @@ async function archivosDeFormulario(form: FormData): Promise<DocumentoEntrada[]>
       }
       docs.push(desdeBytes(new Uint8Array(await entry.arrayBuffer()), entry.name || null, pagina));
       pagina += 1;
+    }
+  }
+  for (const entry of form.getAll("ticket")) {
+    if (entry instanceof File && entry.size > 0) {
+      docs.push(desdeBytes(new Uint8Array(await entry.arrayBuffer()), entry.name || null, null, "ticket"));
     }
   }
   return docs;
@@ -161,7 +186,7 @@ export async function leerPeticionFactura(request: NextRequest): Promise<{ body:
     }
     const body = cuerpoDesdeFormulario(form);
     const archivos = await archivosDeFormulario(form);
-    if (archivos.length === 1 && form.get("pagina") != null && String(form.get("pagina") ?? "").trim()) {
+    if (archivos.length === 1 && archivos[0].tipo === "pagina" && form.get("pagina") != null && String(form.get("pagina") ?? "").trim()) {
       archivos[0] = { ...archivos[0], pagina: paginaDe(form.get("pagina")) };
     }
     return { body, documentos: unicos([...archivos, ...documentosDesdeCuerpo(body)]) };
@@ -251,6 +276,7 @@ export async function guardarDocumentos(facturaId: string, docs: DocumentoEntrad
       mime: doc.mime,
       nombre: doc.nombre,
       pagina: doc.pagina,
+      tipo: doc.tipo,
       sha256: doc.sha256,
     });
     if (error) {
@@ -265,9 +291,9 @@ export async function guardarDocumentos(facturaId: string, docs: DocumentoEntrad
   return agregados;
 }
 
-export function nombreDescarga(nombre: string | null, mime: CapturaMime, pagina: number | null): string {
+export function nombreDescarga(nombre: string | null, mime: CapturaMime, pagina: number | null, tipo: DocumentoTipo = "pagina"): string {
   const ext = extensionForCaptura(mime);
-  const base = (nombre ?? (pagina ? `pagina-${pagina}` : "factura")).replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  const base = (nombre ?? (tipo === "ticket" ? "ticket" : pagina ? `pagina-${pagina}` : "factura")).replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
   if (!base) {
     return `factura.${ext}`;
   }
@@ -284,7 +310,7 @@ export async function abrirDocumento(
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("factura_documentos")
-    .select("storage_path, mime, nombre, pagina")
+    .select("storage_path, mime, nombre, pagina, tipo")
     .eq("id", documentoId)
     .eq("factura_id", facturaId)
     .maybeSingle();
@@ -305,6 +331,6 @@ export async function abrirDocumento(
   return {
     bytes: new Uint8Array(await file.arrayBuffer()),
     mime,
-    filename: nombreDescarga(typeof data?.nombre === "string" ? data.nombre : null, mime, pagina),
+    filename: nombreDescarga(typeof data?.nombre === "string" ? data.nombre : null, mime, pagina, data?.tipo === "ticket" ? "ticket" : "pagina"),
   };
 }
