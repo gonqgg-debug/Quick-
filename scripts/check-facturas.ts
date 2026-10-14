@@ -1,5 +1,13 @@
 import { dueDateFromCredit, parseFormaPago, saldoCompra, summarizePendientes } from "../lib/admin-compras-shared";
-import { casosRecordatorio, diferenciaMontos, pendientesDe, type PendientesInput } from "../lib/facturas-pendientes";
+import {
+  casosRecordatorio,
+  diferenciaMontos,
+  lineasSinCatalogo,
+  pendientesDe,
+  propuestasPorConfirmar,
+  type PendientesInput,
+} from "../lib/facturas-pendientes";
+import type { FacturaLinea } from "../lib/facturas-shared";
 import { documentosDesdeValor } from "../lib/factura-documentos";
 import { distanciaVentana, leerEstadoCuenta, leerFechaBanco, leerMontoBanco, llavesMovimientos, ventanaBanco } from "../lib/banco-shared";
 import { revisarNcf } from "../lib/ncf";
@@ -282,6 +290,7 @@ const pendienteBase: PendientesInput = {
   total: 1180,
   recepcion: { lineas: 2, sinConfirmar: 0, faltantes: 0, diferencia: 0 },
   lineasSinCatalogo: 0,
+  propuestasPorConfirmar: { total: 0, aRevisar: 0 },
   validacionesConDiferencia: 0,
   pagosCandidatos: 0,
   lineasConAlerta: 0,
@@ -300,6 +309,64 @@ assert(pendientesDe({ ...pendienteBase, pagosCandidatos: 2 }, opciones)[0]?.id =
 assert(pendientesDe({ ...pendienteBase, pagosDiferencia: 80 }, opciones)[0]?.id === "pago_diferencia", "avisa si lo ligado no cuadra");
 assert(pendientesDe({ ...pendienteBase, tipoDocumento: "nota_credito" }, opciones)[0]?.id === "nota_origen", "la nota sin original es pendiente");
 assert(pendientesDe({ ...pendienteBase, lineasSinCatalogo: 1 }, opciones)[0]?.dueno === "phillip", "el catálogo le toca a Phillip");
+const porConfirmar = pendientesDe({ ...pendienteBase, propuestasPorConfirmar: { total: 2, aRevisar: 1 } }, opciones)[0];
+assert(porConfirmar?.id === "propuestas" && porConfirmar.dueno === null && porConfirmar.texto.includes("1 bajo 70%"), "las propuestas de Phillip bajo 90 las confirma una persona");
+
+const lineaBase = pendienteLinea();
+function pendienteLinea(): FacturaLinea {
+  return {
+    id: "l1",
+    numeroLinea: 1,
+    codigoSku: null,
+    codigoBarras: null,
+    descripcionOriginal: "Agua 16oz",
+    productoNormalizado: null,
+    marca: null,
+    variante: null,
+    tamano: null,
+    presentacion: null,
+    presentacionLabel: null,
+    cantidadComprada: 1,
+    unidadesPorPresentacion: null,
+    unidadesTotales: null,
+    costoPorPresentacion: null,
+    costoUnitario: null,
+    descuentoLinea: null,
+    itbisLinea: null,
+    precioIncluyeItbis: "no_determinado",
+    precioIncluyeItbisLabel: "",
+    subtotalLinea: null,
+    totalLinea: null,
+    estado: "completa",
+    estadoLabel: "",
+    observacion: null,
+    productoId: null,
+    productoCatalogo: null,
+    propuesta: null,
+    recepcion: "completa",
+    recepcionLabel: "",
+    cantidadRecibida: null,
+    recepcionPor: null,
+    recepcionEn: null,
+    diferenciaRecepcion: null,
+    alertas: [],
+  };
+}
+const propuestaAgente = (confianza: number): NonNullable<FacturaLinea["propuesta"]> => ({
+  productoId: "p1",
+  confianza,
+  origen: "agente",
+  origenLabel: "",
+  producto: null,
+  razon: "mismo código de proveedor",
+  por: "Phillip",
+  en: null,
+});
+assert(lineasSinCatalogo([lineaBase]) === 1, "sin propuesta le toca a Phillip");
+assert(lineasSinCatalogo([{ ...lineaBase, propuesta: propuestaAgente(80) }]) === 0, "con propuesta de Phillip bajo 90 ya no es de Phillip");
+assert(propuestasPorConfirmar([{ ...lineaBase, propuesta: propuestaAgente(60) }]).aRevisar === 1, "bajo 70 queda a revisar");
+assert(lineasSinCatalogo([{ ...lineaBase, propuesta: propuestaAgente(95) }]) === 1, "con 90 o más Phillip la liga él mismo");
+assert(lineasSinCatalogo([{ ...lineaBase, propuesta: { ...propuestaAgente(95), origen: "barras" } }]) === 1, "una señal exacta de la plataforma la acepta Phillip");
 assert(pendientesDe({ ...pendienteBase, estado: "recibida", recepcion: { lineas: 2, sinConfirmar: 2, faltantes: 0, diferencia: 0 } }, opciones)[0]?.dueno === "rodrigo", "la recepción le toca a Rodrigo");
 
 const ahora = { hoy: "2026-10-14", ms: Date.parse("2026-10-14T12:00:00.000Z") };
@@ -382,7 +449,10 @@ assert(pendientesDe({ ...pendienteBase, lineasConAlerta: 2 }, opciones)[0]?.duen
 
 assert(FACTURAS_AGENT_USO.includes("movimientoId") && FACTURAS_AGENT_USO.includes("alertas"), "el texto de uso explica banco y alertas");
 assert(FACTURAS_AGENT_USO.includes("facturaOrigen") && FACTURAS_AGENT_USO.includes("/api/agent/pendientes"), "el texto de uso explica notas y pendientes");
-assert(FACTURAS_AGENT_ENDPOINTS.length === 13, "el directorio del agente lista las rutas de facturas");
+assert(FACTURAS_AGENT_ENDPOINTS.length === 15, "el directorio del agente lista las rutas de facturas");
+assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path.endsWith("/lineas/propuestas")), "Phillip tiene ruta para proponer");
+assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path.endsWith("/lineas/candidatos")), "Phillip tiene ruta de candidatos");
+assert(FACTURAS_AGENT_USO.includes("razon") && !FACTURAS_AGENT_USO.includes("texto hasta 85"), "el texto de uso dice que Phillip propone");
 assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path === "/api/agent/presentaciones"), "hay una ruta para guardar presentaciones");
 assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path.includes("documentos")), "hay una ruta para subir la foto");
 

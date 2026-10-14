@@ -1,7 +1,16 @@
 import { dueDateFromCredit, type Proveedor } from "@/lib/admin-compras-shared";
 import { findProveedorParaFactura, getProveedorById } from "@/lib/admin-compras";
 import { getParametrosConfig } from "@/lib/admin-parametros";
-import { aprenderAlias, aprenderVinculos, completarUnidades, lineasParaAceptar, proponerCatalogo, type Vinculo } from "@/lib/factura-catalogo";
+import {
+  SIN_PROPUESTA,
+  aprenderAlias,
+  aprenderVinculos,
+  candidatosCatalogo,
+  completarUnidades,
+  lineasParaAceptar,
+  proponerCatalogo,
+  type Vinculo,
+} from "@/lib/factura-catalogo";
 import { borrarArchivos, guardarDocumentos, type DocumentoEntrada } from "@/lib/factura-documentos";
 import { candidatosPago, pagosDe } from "@/lib/factura-pagos";
 import {
@@ -38,6 +47,7 @@ import {
   mensajeEstadoInvalido,
   normalizeToken,
   parseClave,
+  PROPUESTA_ACEPTAR_TODAS,
   parseEstado,
   referenciaFactura,
   validacionesFiscales,
@@ -50,6 +60,7 @@ import {
   type FacturaEstadoLinea,
   type FacturaItbisLinea,
   type FacturaLinea,
+  type FacturaLineaCandidatos,
   type FacturaLineaInput,
   type FacturaMoneda,
   type FacturaNotaRef,
@@ -67,7 +78,7 @@ import {
   type FacturasResumen,
 } from "@/lib/facturas-shared";
 import { validarCambioEstado, type Actor, type OperacionBot } from "@/lib/operacion-shared";
-import { lineasSinCatalogo, pendientesDe, type Pendiente } from "@/lib/facturas-pendientes";
+import { lineasSinCatalogo, pendientesDe, propuestasPorConfirmar, type Pendiente } from "@/lib/facturas-pendientes";
 import { isDayKey } from "@/lib/local-day";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
@@ -266,7 +277,16 @@ function propuestaDe(row: Record<string, unknown>): FacturaLinea["propuesta"] {
   if (!productoId || !origen || confianza == null || row.producto_id) {
     return null;
   }
-  return { productoId, confianza, origen: origen as FacturaPropuestaOrigen, origenLabel: labelOf(FACTURA_PROPUESTA_ORIGENES, origen), producto: null };
+  return {
+    productoId,
+    confianza,
+    origen: origen as FacturaPropuestaOrigen,
+    origenLabel: labelOf(FACTURA_PROPUESTA_ORIGENES, origen),
+    producto: null,
+    razon: textOrNull(row.propuesta_razon, 500),
+    por: textOrNull(row.propuesta_por, 40),
+    en: iso(row.propuesta_en),
+  };
 }
 
 function mapValidacion(row: Record<string, unknown>): FacturaValidacion | null {
@@ -750,8 +770,6 @@ async function upsertLineas(id: string, lineas: FacturaLineaInput[], reemplazar:
   return vinculos;
 }
 
-const SIN_PROPUESTA = { propuesta_producto_id: null, propuesta_confianza: null, propuesta_origen: null };
-
 async function revisarCatalogo(id: string, vinculos: Vinculo[], actor: Actor): Promise<void> {
   await aprenderVinculos(id, vinculos, actor);
   await proponerCatalogo(id);
@@ -942,6 +960,7 @@ export async function listarPendientes(opciones: { hoy: string; dueno?: Operacio
         ...factura,
         recepcion: resumenRecepcion(susLineas),
         lineasSinCatalogo: lineasSinCatalogo(susLineas),
+        propuestasPorConfirmar: propuestasPorConfirmar(susLineas),
         validacionesConDiferencia: diferencias.get(factura.id)?.length ?? 0,
         pagosCandidatos: null,
         lineasConAlerta: null,
@@ -1499,6 +1518,151 @@ export async function aceptarPropuestas(idOrClave: string, body: Record<string, 
     throw new Error("No encontramos esa factura");
   }
   return { aceptadas: lineas.length, factura };
+}
+
+export async function candidatosLineas(idOrClave: string, todas: boolean): Promise<{ factura: string; referencia: string; lineas: FacturaLineaCandidatos[] }> {
+  const factura = await getFactura(idOrClave);
+  if (!factura) {
+    throw new Error("No encontramos esa factura");
+  }
+  const lineas = factura.lineas.filter((linea) => todas || !linea.productoId);
+  const candidatos = await candidatosCatalogo(
+    factura.id,
+    lineas.map((linea) => ({
+      id: linea.id,
+      descripcion: linea.descripcionOriginal ?? linea.productoNormalizado,
+      codigoSku: linea.codigoSku,
+      codigoBarras: linea.codigoBarras,
+    }))
+  );
+  return {
+    factura: factura.id,
+    referencia: factura.referencia,
+    lineas: lineas.map((linea) => ({
+      lineaId: linea.id,
+      numeroLinea: linea.numeroLinea,
+      descripcion: linea.descripcionOriginal ?? linea.productoNormalizado,
+      codigoSku: linea.codigoSku,
+      codigoBarras: linea.codigoBarras,
+      presentacion: linea.presentacion,
+      cantidadComprada: linea.cantidadComprada,
+      costoPorPresentacion: linea.costoPorPresentacion,
+      productoId: linea.productoId,
+      propuesta: linea.propuesta,
+      candidatos: candidatos.get(linea.id) ?? [],
+    })),
+  };
+}
+
+type PropuestaAgente = { lineaId: string; productoId: string; confianza: number; razon: string };
+
+async function leerPropuestas(facturaId: string, body: Record<string, unknown>): Promise<PropuestaAgente[]> {
+  const items = Array.isArray(body.propuestas) ? body.propuestas : Array.isArray(body.lineas) ? body.lineas : null;
+  if (!items?.length) {
+    throw new Error("Manda propuestas: [{ numeroLinea, productoId o codigoOdoo, confianza, razon }]");
+  }
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.from("factura_lineas").select("id, numero_linea, producto_id").eq("factura_id", facturaId);
+  if (error) {
+    throw error;
+  }
+  const porNumero = new Map((data ?? []).map((row) => [int(row.numero_linea), String(row.id)]));
+  const ligadas = new Set((data ?? []).filter((row) => row.producto_id).map((row) => String(row.id)));
+  const ids = new Set(porNumero.values());
+  const propuestas: PropuestaAgente[] = [];
+  for (const raw of items) {
+    const item = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    const lineaId = typeof item.lineaId === "string" && ids.has(item.lineaId) ? item.lineaId : porNumero.get(int(item.numeroLinea));
+    if (!lineaId) {
+      throw new Error(`No encontramos la línea ${String(item.numeroLinea ?? item.lineaId ?? "")}`.trim());
+    }
+    const numero = int(item.numeroLinea) || Array.from(porNumero.entries()).find(([, id]) => id === lineaId)?.[0];
+    if (ligadas.has(lineaId)) {
+      throw new Error(`La línea ${numero} ya tiene producto. Para cambiarlo usa PATCH /lineas/{lineaId} con productoId`);
+    }
+    const confianza = num(item.confianza);
+    if (confianza == null || confianza < 0 || confianza > 100) {
+      throw new Error(`En la línea ${numero}, la confianza tiene que ser un número de 0 a 100`);
+    }
+    const razon = textOrNull(item.razon, 500);
+    if (!razon || razon.length < 3) {
+      throw new Error(`En la línea ${numero}, manda la razon de la propuesta`);
+    }
+    const productoRaw = typeof item.productoId === "string" ? item.productoId.trim() : "";
+    const codigo = typeof item.codigoOdoo === "string" ? item.codigoOdoo.trim() : "";
+    if (!productoRaw && !codigo) {
+      throw new Error(`En la línea ${numero}, manda productoId o codigoOdoo`);
+    }
+    if (productoRaw && !isUuid(productoRaw)) {
+      throw new Error(`En la línea ${numero}, el producto del catálogo no es válido`);
+    }
+    const productoId = await buscarProductoCatalogo(productoRaw ? { accion: "id", id: productoRaw } : { accion: "codigo", codigo });
+    propuestas.push({ lineaId, productoId, confianza: Math.round(confianza), razon });
+  }
+  return propuestas;
+}
+
+/**
+ * Phillip deja su propuesta por línea con su confianza y su razón. Con aceptar, las de 90 o más se ligan
+ * y quedan aprendidas para ese proveedor; las demás esperan a una persona.
+ */
+export async function proponerLineas(
+  idOrClave: string,
+  body: Record<string, unknown>,
+  actor: Actor
+): Promise<{ propuestas: number; ligadas: number; porConfirmar: number; factura: FacturaDetalle }> {
+  if (actor !== "phillip" && actor !== "admin") {
+    throw new Error("Solo Phillip propone los productos del catálogo");
+  }
+  const facturaId = await requireFacturaId(idOrClave);
+  const propuestas = await leerPropuestas(facturaId, body);
+  const aceptar = body.aceptar === true;
+  const supabase = getSupabaseAdminClient();
+  const ahora = new Date().toISOString();
+  const por = actor === "admin" ? "Admin" : "Phillip";
+  for (const propuesta of propuestas) {
+    const { error } = await supabase
+      .from("factura_lineas")
+      .update({
+        producto_id: null,
+        propuesta_producto_id: propuesta.productoId,
+        propuesta_confianza: propuesta.confianza,
+        propuesta_origen: "agente",
+        propuesta_razon: propuesta.razon,
+        propuesta_por: por,
+        propuesta_en: ahora,
+      })
+      .eq("id", propuesta.lineaId)
+      .eq("factura_id", facturaId);
+    if (error) {
+      throw error;
+    }
+  }
+  let ligadas = 0;
+  if (aceptar) {
+    const proveedorId = (await loadResumen(facturaId))?.proveedorId ?? null;
+    const enviadas = new Set(propuestas.map((propuesta) => propuesta.lineaId));
+    for (const linea of await lineasParaAceptar(facturaId, PROPUESTA_ACEPTAR_TODAS)) {
+      if (!enviadas.has(linea.id)) {
+        continue;
+      }
+      const { error } = await supabase.from("factura_lineas").update({ producto_id: linea.productoId, ...SIN_PROPUESTA }).eq("id", linea.id);
+      if (error) {
+        throw error;
+      }
+      await aprenderAlias(proveedorId, linea.descripcion, linea.productoId, actor);
+      ligadas += 1;
+    }
+    if (ligadas) {
+      await completarUnidades(facturaId);
+    }
+  }
+  await supabase.from("facturas").update({ updated_at: ahora }).eq("id", facturaId);
+  const factura = await getFactura(facturaId);
+  if (!factura) {
+    throw new Error("No encontramos esa factura");
+  }
+  return { propuestas: propuestas.length, ligadas, porConfirmar: propuestas.length - ligadas, factura };
 }
 
 export async function responderPregunta(idOrClave: string, preguntaId: string, body: Record<string, unknown>): Promise<FacturaDetalle> {

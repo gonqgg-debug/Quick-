@@ -302,13 +302,13 @@ export const OPERACION_AGENT_ENDPOINTS = [
     method: "POST",
     path: "/api/agent/facturas/{id}/conciliacion",
     describe:
-      "Fred publica pagada, vencida_sin_pagar, pagada_sin_movimiento o falta_factura, con medio banco, caja o cardnet. Solo él deja la etapa en conciliada. Con ledgerId (salida de caja) o movimientoId (débito del banco), solo para pagada, liga ese movimiento y toma de él medio, fecha, monto y referencia si no los mandas.",
+      "Fred publica pagada, vencida_sin_pagar, pagada_sin_movimiento o falta_factura, con medio banco, caja o cardnet. Solo él deja la etapa en conciliada. Con ledgerId (salida de caja) o movimientoId (débito del banco), solo para pagada, liga ese movimiento y toma de él medio, fecha, monto y referencia si no los mandas. Si el movimiento no estaba ligado todavía, manda también confianza (0 a 100) y razon.",
   },
   {
     method: "POST",
     path: "/api/agent/facturas/{id}/pagos",
     describe:
-      "Fred liga un pago a la factura sin cerrarla todavía. JSON: ledgerId (caja) o movimientoId (banco). La factura trae pagosCandidatos con origen caja o banco: caja a ±1 día de la factura; banco desde un día antes de la emisión hasta 7 días después del vencimiento; los dos a ±RD$ 5 del total y con confianza. pagosDiferencia es el total menos lo ligado. Un movimiento paga una sola factura.",
+      "Fred liga un pago a la factura sin cerrarla todavía. JSON: ledgerId (caja) o movimientoId (banco), con su confianza (0 a 100) y razon, obligatorias. La factura trae pagosCandidatos con origen caja o banco: caja a ±1 día de la factura; banco desde un día antes de la emisión hasta 7 días después del vencimiento; los dos a ±RD$ 5 del total. Su confianza es solo una referencia por monto, fecha y concepto: Fred decide cuál es el pago y por qué. pagosDiferencia es el total menos lo ligado. Un movimiento paga una sola factura.",
   },
   {
     method: "POST",

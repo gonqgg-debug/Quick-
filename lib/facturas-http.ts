@@ -4,10 +4,12 @@ import { guardarPresentacion } from "@/lib/factura-catalogo";
 import {
   aceptarPropuestas,
   asignarProductoLinea,
+  candidatosLineas,
   createFactura,
   filtroDesdeParams,
   getFactura,
   listFacturas,
+  proponerLineas,
   responderPregunta,
   resumenFacturas,
   updateFactura,
@@ -228,6 +230,22 @@ export async function handleAsignarProducto(idOrClave: string, lineaId: string, 
 export async function handleAceptarPropuestas(idOrClave: string, request: NextRequest, actor: Actor) {
   const { body } = await leerPeticionFactura(request).catch(() => ({ body: {} as Record<string, unknown> }));
   return NextResponse.json(await aceptarPropuestas(idOrClave, body, actor));
+}
+
+export async function handleCandidatos(idOrClave: string, request: NextRequest) {
+  const todas = request.nextUrl.searchParams.get("todas") === "true";
+  return NextResponse.json(await candidatosLineas(idOrClave, todas));
+}
+
+export async function handleProponerLineas(idOrClave: string, request: NextRequest, actor: Actor) {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    throw new Error("El cuerpo no es un JSON válido");
+  }
+  const payload = Array.isArray(body) ? { propuestas: body } : body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  return NextResponse.json(await proponerLineas(idOrClave, payload, actor));
 }
 
 export async function handleGuardarPresentacion(request: NextRequest, actor: Actor) {

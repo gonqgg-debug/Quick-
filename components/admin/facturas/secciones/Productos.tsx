@@ -29,6 +29,7 @@ export function Productos({ factura, enviar }: { factura: FacturaDetalle; enviar
   const [error, setError] = useState<string | null>(null);
   const sinCatalogo = factura.lineas.filter((linea) => !linea.productoCatalogo).length;
   const aceptables = factura.lineas.filter((linea) => !linea.productoId && (linea.propuesta?.confianza ?? 0) >= PROPUESTA_ACEPTAR_TODAS).length;
+  const deAgente = factura.lineas.filter((linea) => !linea.productoId && linea.propuesta?.origen === "agente").length;
   const recepcion = resumenRecepcion(factura.lineas);
 
   async function aceptarTodas() {
@@ -50,6 +51,7 @@ export function Productos({ factura, enviar }: { factura: FacturaDetalle; enviar
       extra={
         <div className="flex flex-wrap items-center gap-1">
           {sinCatalogo > 0 ? <Pill label={`${sinCatalogo} sin catálogo`} tone={TONO.naranja} /> : null}
+          {deAgente > 0 ? <Pill label={`${deAgente} propuestas de Phillip`} tone={TONO.azul} /> : null}
           {recepcion.sinConfirmar > 0 && !factura.esCompraPersonal ? <Pill label={`${recepcion.sinConfirmar} sin recepción`} tone={TONO.gris} /> : null}
         </div>
       }
@@ -57,7 +59,7 @@ export function Productos({ factura, enviar }: { factura: FacturaDetalle; enviar
       {aceptables > 0 ? (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm" style={{ backgroundColor: brand.paleBlue }}>
           <span>
-            {aceptables === 1 ? "Una línea tiene" : `${aceptables} líneas tienen`} propuesta de {PROPUESTA_ACEPTAR_TODAS}% o más por alias, código de barras o Odoo.
+            {aceptables === 1 ? "Una línea tiene" : `${aceptables} líneas tienen`} propuesta de {PROPUESTA_ACEPTAR_TODAS}% o más.
           </span>
           <button
             type="button"
@@ -263,9 +265,11 @@ function CatalogoLinea({ linea, enviar }: { linea: FacturaLinea; enviar: EnviarF
           <p className="min-w-0 text-sm leading-snug">
             <span className="font-semibold">{propuesta.producto?.nombre ?? "Producto propuesto"}</span>
             <span className="mt-0.5 block text-xs" style={{ color: propuesta.confianza >= PROPUESTA_UMBRAL ? brand.navy : "#9A3412" }}>
-              Propuesta {propuesta.confianza}% · {propuesta.origenLabel}
+              {propuesta.origen === "agente" ? `${propuesta.por ?? "Phillip"} propone` : "Propuesta"} {propuesta.confianza}%
+              {propuesta.origen === "agente" ? "" : ` · ${propuesta.origenLabel}`}
               {propuesta.confianza < PROPUESTA_UMBRAL ? " · revisar" : ""}
             </span>
+            {propuesta.razon ? <span className="mt-0.5 block text-xs leading-relaxed text-brand-muted">{propuesta.razon}</span> : null}
           </p>
         ) : (
           <p className="text-sm text-brand-muted">Sin producto del catálogo</p>

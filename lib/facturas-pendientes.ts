@@ -1,4 +1,4 @@
-import { PROPUESTA_UMBRAL, formatMonto, resumenRecepcion, type FacturaDetalle, type FacturaResumen } from "@/lib/facturas-shared";
+import { PROPUESTA_ACEPTAR_TODAS, PROPUESTA_UMBRAL, formatMonto, resumenRecepcion, type FacturaDetalle, type FacturaResumen } from "@/lib/facturas-shared";
 import { diffDayKeys, isDayKey } from "@/lib/local-day";
 import { esOperacionBot, type OperacionBot } from "@/lib/operacion-shared";
 
@@ -41,6 +41,7 @@ export type PendientesInput = Pick<
 > & {
   recepcion: { lineas: number; sinConfirmar: number; faltantes: number; diferencia: number };
   lineasSinCatalogo: number;
+  propuestasPorConfirmar: { total: number; aRevisar: number };
   validacionesConDiferencia: number;
   /** Null cuando no se buscaron (la lista agregada no los busca). */
   pagosCandidatos: number | null;
@@ -61,8 +62,19 @@ export function diferenciaMontos(
   return Math.abs(diferencia) >= 1 ? diferencia : 0;
 }
 
+function esPorConfirmar(linea: FacturaDetalle["lineas"][number]): boolean {
+  return !linea.productoId && linea.propuesta?.origen === "agente" && linea.propuesta.confianza < PROPUESTA_ACEPTAR_TODAS;
+}
+
+/** Sin producto y sin una propuesta de Phillip que espere a una persona: le toca a Phillip proponer o ligar. */
 export function lineasSinCatalogo(lineas: FacturaDetalle["lineas"]): number {
-  return lineas.filter((linea) => !linea.productoId && (!linea.propuesta || linea.propuesta.confianza < PROPUESTA_UMBRAL)).length;
+  return lineas.filter((linea) => !linea.productoId && !esPorConfirmar(linea)).length;
+}
+
+/** Propuestas de Phillip bajo 90 que confirma una persona. */
+export function propuestasPorConfirmar(lineas: FacturaDetalle["lineas"]): { total: number; aRevisar: number } {
+  const lista = lineas.filter(esPorConfirmar);
+  return { total: lista.length, aRevisar: lista.filter((linea) => (linea.propuesta?.confianza ?? 0) < PROPUESTA_UMBRAL).length };
 }
 
 export function pendientesInputDe(factura: FacturaDetalle): PendientesInput {
@@ -70,6 +82,7 @@ export function pendientesInputDe(factura: FacturaDetalle): PendientesInput {
     ...factura,
     recepcion: resumenRecepcion(factura.lineas),
     lineasSinCatalogo: lineasSinCatalogo(factura.lineas),
+    propuestasPorConfirmar: propuestasPorConfirmar(factura.lineas),
     validacionesConDiferencia: factura.validaciones.filter((validacion) => validacion.resultado === "diferencia").length,
     pagosCandidatos: factura.pagosCandidatos.length,
     lineasConAlerta: factura.lineas.filter((linea) => linea.alertas.length > 0).length,
@@ -151,11 +164,25 @@ export function pendientesDe(factura: PendientesInput, opciones: { hoy: string; 
       id: "catalogo",
       texto:
         factura.lineasSinCatalogo === 1
-          ? "Una línea no tiene producto del catálogo ni una propuesta confiable."
-          : `${factura.lineasSinCatalogo} líneas no tienen producto del catálogo ni una propuesta confiable.`,
+          ? "Una línea no tiene producto del catálogo: Phillip la propone o la liga."
+          : `${factura.lineasSinCatalogo} líneas no tienen producto del catálogo: Phillip las propone o las liga.`,
       seccion: "productos",
       grave: false,
       dueno: "phillip",
+    });
+  }
+  const porConfirmar = factura.propuestasPorConfirmar;
+  if (porConfirmar.total > 0) {
+    const revisar = porConfirmar.aRevisar ? ` (${porConfirmar.aRevisar} bajo ${PROPUESTA_UMBRAL}%, a revisar)` : "";
+    items.push({
+      id: "propuestas",
+      texto:
+        porConfirmar.total === 1
+          ? `Phillip propuso el producto de una línea y espera confirmación${revisar}.`
+          : `Phillip propuso el producto de ${porConfirmar.total} líneas y esperan confirmación${revisar}.`,
+      seccion: "productos",
+      grave: false,
+      dueno: null,
     });
   }
   if (factura.lineasConAlerta) {

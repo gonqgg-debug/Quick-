@@ -33,7 +33,7 @@ export async function pagosDe(facturaId: string): Promise<FacturaPago[]> {
   const { data, error } = await supabase
     .from("factura_pagos")
     .select(
-      "id, ledger_id, movimiento_id, monto, confirmado_por, confirmado_en, caja_ledger ( fecha, caja, concepto, referencia ), banco_movimientos ( fecha, banco, descripcion, referencia )"
+      "id, ledger_id, movimiento_id, monto, confirmado_por, confirmado_en, confianza, razon, caja_ledger ( fecha, caja, concepto, referencia ), banco_movimientos ( fecha, banco, descripcion, referencia )"
     )
     .eq("factura_id", facturaId)
     .order("confirmado_en", { ascending: true });
@@ -56,6 +56,8 @@ export async function pagosDe(facturaId: string): Promise<FacturaPago[]> {
       monto: toMoney(row.monto),
       confirmadoPor: text(row.confirmado_por) ?? "—",
       confirmadoEn: String(row.confirmado_en),
+      confianza: row.confianza == null ? null : Number(row.confianza),
+      razon: text(row.razon),
     };
   });
 }
@@ -191,7 +193,28 @@ function puedeLigar(actor: Actor): void {
 
 export type PagoLigado = { origen: "caja" | "banco"; fecha: string | null; monto: number; referencia: string | null };
 
-async function insertarPago(facturaId: string, fila: { ledger_id: string } | { movimiento_id: string }, monto: number, actor: Actor): Promise<void> {
+type Juicio = { confianza: number | null; razon: string | null };
+
+/** Fred deja su confianza y su razón; el admin puede ligar sin ellas. */
+function juicioDe(body: { confianza?: unknown; razon?: unknown }, actor: Actor): Juicio {
+  const confianza = body.confianza == null || body.confianza === "" ? null : Number(body.confianza);
+  if (confianza != null && (!Number.isFinite(confianza) || confianza < 0 || confianza > 100)) {
+    throw new Error("La confianza tiene que ser un número de 0 a 100");
+  }
+  const razon = typeof body.razon === "string" && body.razon.trim() ? body.razon.trim().slice(0, 500) : null;
+  if (actor === "fred" && (confianza == null || !razon || razon.length < 3)) {
+    throw new Error("Manda confianza (0 a 100) y razon de por qué ese movimiento es el pago");
+  }
+  return { confianza: confianza == null ? null : Math.round(confianza), razon };
+}
+
+async function insertarPago(
+  facturaId: string,
+  fila: { ledger_id: string } | { movimiento_id: string },
+  monto: number,
+  actor: Actor,
+  body: { confianza?: unknown; razon?: unknown }
+): Promise<void> {
   const supabase = getSupabaseAdminClient();
   const columna = "ledger_id" in fila ? "ledger_id" : "movimiento_id";
   const valor = "ledger_id" in fila ? fila.ledger_id : fila.movimiento_id;
@@ -205,9 +228,10 @@ async function insertarPago(facturaId: string, fila: { ledger_id: string } | { m
   if (existente) {
     return;
   }
+  const juicio = juicioDe(body, actor);
   const { error } = await supabase
     .from("factura_pagos")
-    .insert({ factura_id: facturaId, ...fila, monto, confirmado_por: actor === "admin" ? "Admin" : "Fred" });
+    .insert({ factura_id: facturaId, ...fila, monto, confirmado_por: actor === "admin" ? "Admin" : "Fred", confianza: juicio.confianza, razon: juicio.razon });
   if (error) {
     if (error.code === "23505") {
       throw new Error("Ese movimiento ya paga otra factura");
@@ -222,7 +246,11 @@ function idDe(value: unknown): string | null {
 }
 
 /** Liga una salida de caja (ledgerId) o un débito del banco (movimientoId). Un movimiento solo puede pagar una factura. */
-export async function ligarPago(facturaId: string, body: { ledgerId?: unknown; movimientoId?: unknown }, actor: Actor): Promise<PagoLigado> {
+export async function ligarPago(
+  facturaId: string,
+  body: { ledgerId?: unknown; movimientoId?: unknown; confianza?: unknown; razon?: unknown },
+  actor: Actor
+): Promise<PagoLigado> {
   puedeLigar(actor);
   const ledgerId = idDe(body.ledgerId);
   const movimientoId = idDe(body.movimientoId);
@@ -245,7 +273,7 @@ export async function ligarPago(facturaId: string, body: { ledgerId?: unknown; m
       throw new Error("El movimiento tiene que ser una salida de caja");
     }
     const monto = toMoney(data.monto);
-    await insertarPago(facturaId, { ledger_id: ledgerId }, monto, actor);
+    await insertarPago(facturaId, { ledger_id: ledgerId }, monto, actor, body);
     return { origen: "caja", fecha: fechaDe(data.fecha), monto, referencia: text(data.referencia) };
   }
   if (!movimientoId || !isUuid(movimientoId)) {
@@ -262,7 +290,7 @@ export async function ligarPago(facturaId: string, body: { ledgerId?: unknown; m
     throw new Error("El movimiento del banco tiene que ser un débito");
   }
   const monto = toMoney(data.monto);
-  await insertarPago(facturaId, { movimiento_id: movimientoId }, monto, actor);
+  await insertarPago(facturaId, { movimiento_id: movimientoId }, monto, actor, body);
   return { origen: "banco", fecha: fechaDe(data.fecha), monto, referencia: text(data.referencia) };
 }
 
