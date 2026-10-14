@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
-import { createProveedor, listProveedores, parseProveedorInput } from "@/lib/admin-compras";
+import { createProveedor, listProveedores, parseProveedorInput, type ProveedorBody } from "@/lib/admin-compras";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     return auth;
   }
 
-  let body: { nombre?: unknown; tieneCredito?: unknown; diasCredito?: unknown; notas?: unknown };
+  let body: ProveedorBody;
   try {
     body = (await request.json()) as typeof body;
   } catch {

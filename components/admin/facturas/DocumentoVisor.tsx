@@ -4,6 +4,19 @@ import { useEffect, useState } from "react";
 import type { FacturaDetalle } from "@/lib/facturas-shared";
 import { brand } from "@/lib/theme";
 
+function resumenDocumentos(documentos: FacturaDetalle["documentos"]): string {
+  const tickets = documentos.filter((doc) => doc.tipo === "ticket").length;
+  const paginas = documentos.length - tickets;
+  const partes = [];
+  if (paginas) {
+    partes.push(paginas === 1 ? "1 página" : `${paginas} páginas`);
+  }
+  if (tickets) {
+    partes.push(tickets === 1 ? "ticket" : `${tickets} tickets`);
+  }
+  return partes.join(" y ");
+}
+
 export function DocumentoVisor({ factura }: { factura: FacturaDetalle }) {
   const documentos = factura.documentos;
   const [indice, setIndice] = useState(0);
@@ -17,7 +30,8 @@ export function DocumentoVisor({ factura }: { factura: FacturaDetalle }) {
 
   const actual = documentos[Math.min(indice, documentos.length - 1)];
   const src = actual ? `/api/admin/facturas/${factura.id}/documentos/${actual.id}` : null;
-  const etiqueta = (doc: (typeof documentos)[number], i: number) => doc.nombre || (doc.pagina ? `Página ${doc.pagina}` : `Página ${i + 1}`);
+  const etiqueta = (doc: (typeof documentos)[number], i: number) =>
+    doc.tipo === "ticket" ? "Ticket" : doc.nombre || (doc.pagina ? `Página ${doc.pagina}` : `Página ${i + 1}`);
 
   return (
     <div id="documento" className="flex h-full min-h-0 flex-col rounded-2xl border border-[#E7EBE4] bg-white">
@@ -30,7 +44,7 @@ export function DocumentoVisor({ factura }: { factura: FacturaDetalle }) {
         >
           Documento original
           <span className="ml-1 text-brand-muted">
-            {documentos.length ? `· ${documentos.length === 1 ? "1 página" : `${documentos.length} páginas`}` : "· sin foto"}
+            {documentos.length ? `· ${resumenDocumentos(documentos)}` : "· sin foto"}
           </span>
           <span className="ml-2 text-xs font-bold lg:hidden" style={{ color: brand.blue }}>
             {abiertoMovil ? "Ocultar" : "Ver"}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
-import { parseProveedorInput, updateProveedor } from "@/lib/admin-compras";
+import { parseProveedorInput, updateProveedor, type ProveedorBody } from "@/lib/admin-compras";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return auth;
   }
 
-  let body: { nombre?: unknown; tieneCredito?: unknown; diasCredito?: unknown; notas?: unknown };
+  let body: ProveedorBody;
   try {
     body = (await request.json()) as typeof body;
   } catch {

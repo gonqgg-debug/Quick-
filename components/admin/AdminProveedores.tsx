@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Proveedor } from "@/lib/admin-compras-shared";
+import { PROVEEDOR_FORMAS_PAGO, type Proveedor, type ProveedorFormaPago } from "@/lib/admin-compras-shared";
 import { brand } from "@/lib/theme";
-import { AdminInput, AdminTextarea, adminLabelClass } from "@/components/admin/AdminField";
+import { AdminInput, AdminSelect, AdminTextarea, adminLabelClass } from "@/components/admin/AdminField";
 import {
   DataTable,
   DataTableCell,
@@ -15,18 +15,26 @@ import {
 
 type Draft = {
   nombre: string;
+  rnc: string;
   tieneCredito: boolean;
   diasCredito: string;
+  formaPago: ProveedorFormaPago | "";
   notas: string;
 };
 
 function emptyDraft(): Draft {
-  return { nombre: "", tieneCredito: false, diasCredito: "", notas: "" };
+  return { nombre: "", rnc: "", tieneCredito: false, diasCredito: "", formaPago: "", notas: "" };
+}
+
+function formaPagoLabel(formaPago: ProveedorFormaPago | null): string {
+  return PROVEEDOR_FORMAS_PAGO.find((item) => item.id === formaPago)?.label ?? "—";
 }
 
 function draftFrom(proveedor: Proveedor): Draft {
   return {
     nombre: proveedor.nombre,
+    rnc: proveedor.rnc ?? "",
+    formaPago: proveedor.formaPago ?? "",
     tieneCredito: proveedor.tieneCredito,
     diasCredito: proveedor.tieneCredito && proveedor.diasCredito > 0 ? String(proveedor.diasCredito) : "",
     notas: proveedor.notas ?? "",
@@ -108,11 +116,13 @@ export function AdminProveedores() {
           <p className="mt-2 text-sm text-brand-muted">Agrega el primero para poder registrar compras.</p>
         </div>
       ) : (
-        <DataTable className="mt-6" tableClassName="min-w-[640px]">
+        <DataTable className="mt-6" tableClassName="min-w-[860px]">
           <DataTableHead>
             <DataTableTh>Nombre</DataTableTh>
+            <DataTableTh>RNC</DataTableTh>
             <DataTableTh className="whitespace-nowrap">Crédito</DataTableTh>
             <DataTableTh numeric>Días</DataTableTh>
+            <DataTableTh className="whitespace-nowrap">Forma de pago</DataTableTh>
             <DataTableTh>Notas</DataTableTh>
             <DataTableTh className="w-24">
               <span className="sr-only">Editar</span>
@@ -122,8 +132,10 @@ export function AdminProveedores() {
             {proveedores.map((proveedor) => (
               <DataTableRow key={proveedor.id}>
                 <DataTableCell className="font-semibold">{proveedor.nombre}</DataTableCell>
+                <DataTableCell className="whitespace-nowrap tabular-nums">{proveedor.rnc ?? "—"}</DataTableCell>
                 <DataTableCell className="whitespace-nowrap">{proveedor.tieneCredito ? "Sí" : "No"}</DataTableCell>
                 <DataTableCell numeric>{proveedor.tieneCredito ? proveedor.diasCredito : "—"}</DataTableCell>
+                <DataTableCell className="whitespace-nowrap">{formaPagoLabel(proveedor.formaPago)}</DataTableCell>
                 <DataTableCell className="max-w-[280px] truncate text-brand-muted" title={proveedor.notas ?? undefined}>
                   {proveedor.notas || "—"}
                 </DataTableCell>
@@ -202,8 +214,10 @@ function ProveedorModal({
     try {
       const payload = {
         nombre: draft.nombre.trim(),
+        rnc: draft.rnc.trim() || null,
         tieneCredito: draft.tieneCredito,
         diasCredito: draft.tieneCredito ? Number(draft.diasCredito || 0) : 0,
+        formaPago: draft.formaPago || null,
         notas: draft.notas.trim() || null,
       };
       const response = await fetch(isNew ? "/api/admin/proveedores" : `/api/admin/proveedores/${proveedor.id}`, {
@@ -231,7 +245,7 @@ function ProveedorModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="proveedor-title"
-        className="relative z-10 w-full max-w-md overflow-hidden rounded-[28px] bg-white p-6"
+        className="relative z-10 max-h-full w-full max-w-md overflow-y-auto rounded-[28px] bg-white p-6"
         style={{ boxShadow: "0 24px 64px rgba(26, 26, 26, 0.18)", color: brand.ink }}
         onSubmit={(event) => {
           event.preventDefault();
@@ -250,6 +264,16 @@ function ProveedorModal({
             required
             value={draft.nombre}
             onChange={(event) => setDraft((current) => ({ ...current, nombre: event.target.value }))}
+          />
+        </label>
+
+        <label className={`${adminLabelClass} mt-4`}>
+          RNC
+          <AdminInput
+            inputMode="numeric"
+            value={draft.rnc}
+            onChange={(event) => setDraft((current) => ({ ...current, rnc: event.target.value }))}
+            placeholder="9 u 11 dígitos"
           />
         </label>
 
@@ -275,6 +299,21 @@ function ProveedorModal({
             onChange={(event) => setDraft((current) => ({ ...current, diasCredito: event.target.value }))}
             placeholder={draft.tieneCredito ? "0" : "—"}
           />
+        </label>
+
+        <label className={`${adminLabelClass} mt-4`}>
+          Forma de pago habitual
+          <AdminSelect
+            value={draft.formaPago}
+            onChange={(event) => setDraft((current) => ({ ...current, formaPago: event.target.value as Draft["formaPago"] }))}
+          >
+            <option value="">Sin definir</option>
+            {PROVEEDOR_FORMAS_PAGO.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </AdminSelect>
         </label>
 
         <label className={`${adminLabelClass} mt-4`}>

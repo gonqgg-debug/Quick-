@@ -1,4 +1,5 @@
 import { calendarDayKey } from "@/lib/local-day";
+import { revisarNcf } from "@/lib/ncf";
 
 export const FACTURA_ESTADOS = [
   { id: "falta_factura", label: "Falta factura", corto: "Falta factura", ayuda: "Hay una salida de caja y todavía no llegó el comprobante." },
@@ -59,6 +60,17 @@ export const FACTURA_VALIDACIONES = [
   { id: "cantidades", label: "Cantidades y presentaciones claras" },
   { id: "diferencia_matematica", label: "Diferencia matemática detectada" },
   { id: "documento_completo", label: "Documento completo o incompleto" },
+  { id: "ncf_formato", label: "Formato del NCF" },
+  { id: "ncf_unico", label: "NCF no repetido para ese RNC" },
+  { id: "rnc_proveedor", label: "RNC coincide con el proveedor" },
+] as const;
+
+/** Las calcula la plataforma al guardar la factura. Lo que mande un bot con estos códigos se reemplaza. */
+export const FACTURA_VALIDACIONES_AUTOMATICAS = ["ncf_formato", "ncf_unico", "rnc_proveedor"] as const;
+
+export const FACTURA_DOCUMENTO_TIPOS = [
+  { id: "pagina", label: "Página" },
+  { id: "ticket", label: "Ticket" },
 ] as const;
 
 export const FACTURA_RESULTADOS = [
@@ -83,6 +95,7 @@ export type FacturaItbisLinea = (typeof FACTURA_ITBIS_LINEA)[number]["id"];
 export type FacturaValidacionCodigo = (typeof FACTURA_VALIDACIONES)[number]["id"];
 export type FacturaResultado = (typeof FACTURA_RESULTADOS)[number]["id"];
 export type FacturaPreguntaEstado = (typeof FACTURA_PREGUNTA_ESTADOS)[number]["id"];
+export type FacturaDocumentoTipo = (typeof FACTURA_DOCUMENTO_TIPOS)[number]["id"];
 
 export type FacturaLinea = {
   id: string;
@@ -157,8 +170,18 @@ export type FacturaDocumento = {
   nombre: string | null;
   mime: string;
   pagina: number | null;
+  tipo: FacturaDocumentoTipo;
   esImagen: boolean;
   creadoEn: string;
+};
+
+export type FacturaProveedorFicha = {
+  id: string;
+  nombre: string;
+  rnc: string | null;
+  tieneCredito: boolean;
+  diasCredito: number;
+  formaPago: "efectivo" | "transferencia" | "mixto" | null;
 };
 
 export type FacturaResumen = {
@@ -171,6 +194,7 @@ export type FacturaResumen = {
   tipoDocumento: FacturaTipoDocumento;
   tipoDocumentoLabel: string;
   proveedor: string | null;
+  proveedorId: string | null;
   rnc: string | null;
   ncf: string | null;
   numeroFactura: string | null;
@@ -241,6 +265,7 @@ export type FacturaDetalle = FacturaResumen & {
   validaciones: FacturaValidacion[];
   preguntas: FacturaPregunta[];
   documentos: FacturaDocumento[];
+  proveedorFicha: FacturaProveedorFicha | null;
   verificacion: FacturaVerificacion | null;
   conciliacion: FacturaConciliacion | null;
 };
@@ -336,7 +361,7 @@ export type DuplicadoCandidato = {
 };
 
 export const FACTURAS_AGENT_USO =
-  "Guarda cada factura en la misma ficha, con la foto original. POST /api/agent/facturas manda proveedor, tienda, fechas, montos, lineas (o productos), validaciones, preguntas y la foto: en JSON usa fotoBase64 o documentos[{ pagina, base64 }]; en multipart adjunta el archivo en el campo foto (también vale captura o documento). JPG, PNG, WebP o PDF, hasta 4 MB por archivo. Si hay varias páginas, mándalas todas. Identifica la factura con referencia (proveedor, fecha, monto y tienda): el id es interno y no se menciona en la conversación. Si no sabes cuántas unidades trae la caja, el paquete o el fardo, no mandes unidadesPorPresentacion ni calcules unidadesTotales o costoUnitario. Para cruzar una línea con el catálogo manda productoId o codigoOdoo; si no lo mandas, el producto ya elegido se conserva. Repetir el POST con la misma clave no pisa la factura y responde creado: false; una foto nueva de esa clave sí se guarda. Para corregir usa PATCH. Las etapas son falta_factura, recibida, registrada, verificada y conciliada. Completa cuenta como registrada. Phillip solo puede pasar a registrada si la respuesta de Ramón ya está guardada, salvo que sea compra personal. Cada bot escribe con su propio token.";
+  "Guarda cada factura en la misma ficha, con la foto original. POST /api/agent/facturas manda proveedor, tienda, fechas, montos, lineas (o productos), validaciones, preguntas y la foto: en JSON usa fotoBase64 o documentos[{ pagina, base64 }]; en multipart adjunta el archivo en el campo foto (también vale captura o documento). JPG, PNG, WebP o PDF, hasta 4 MB por archivo. Si hay varias páginas, mándalas todas. Identifica la factura con referencia (proveedor, fecha, monto y tienda): el id es interno y no se menciona en la conversación. Si no sabes cuántas unidades trae la caja, el paquete o el fardo, no mandes unidadesPorPresentacion ni calcules unidadesTotales o costoUnitario. Para cruzar una línea con el catálogo manda productoId o codigoOdoo; si no lo mandas, el producto ya elegido se conserva. Repetir el POST con la misma clave no pisa la factura y responde creado: false; una foto nueva de esa clave sí se guarda. Para corregir usa PATCH. Las etapas son falta_factura, recibida, registrada, verificada y conciliada. Completa cuenta como registrada. Phillip solo puede pasar a registrada si la respuesta de Ramón ya está guardada, salvo que sea compra personal. La plataforma liga la factura a la ficha del proveedor (primero por RNC, después por nombre), calcula fecha_vencimiento con sus días de crédito si no la mandas, y revisa sola ncf_formato, ncf_unico y rnc_proveedor: no mandes esas tres validaciones, se reemplazan. El ticket de pago se adjunta a la misma ficha con tipo ticket. Cada bot escribe con su propio token.";
 
 export const FACTURAS_AGENT_ENDPOINTS = [
   {
@@ -380,7 +405,7 @@ export const FACTURAS_AGENT_ENDPOINTS = [
   {
     method: "POST",
     path: "/api/agent/facturas/{id-o-clave}/documentos",
-    describe: "Adjunta otra página. documentos: [{ nombre, pagina, base64 }]. Una foto repetida no se duplica.",
+    describe: "Adjunta otra página o el ticket de pago a la misma ficha. documentos: [{ nombre, pagina, base64 }] para páginas y [{ tipo: \"ticket\", base64 }] para el ticket. Una foto repetida no se duplica.",
   },
   {
     method: "GET",
@@ -791,6 +816,69 @@ export function completarValidaciones(stored: FacturaValidacion[]): FacturaValid
       revisadoEn: null,
     };
   });
+}
+
+const TIPOS_SIN_NCF: FacturaTipoDocumento[] = ["conduce", "recibo", "cotizacion"];
+
+/** ncf_formato, ncf_unico y rnc_proveedor. otraConMismoNcf es la referencia de otra factura con el mismo RNC y NCF. */
+export function validacionesFiscales(input: {
+  tipoDocumento: FacturaTipoDocumento;
+  rnc: string | null;
+  ncf: string | null;
+  proveedor: Pick<FacturaProveedorFicha, "nombre" | "rnc"> | null;
+  otraConMismoNcf: string | null;
+  revisadoEn: string;
+}): FacturaValidacionInput[] {
+  const { tipoDocumento, rnc, ncf, proveedor, otraConMismoNcf, revisadoEn } = input;
+  const sinNcf = TIPOS_SIN_NCF.includes(tipoDocumento);
+  const result = (codigo: FacturaValidacionCodigo, resultado: FacturaResultado, explicacion: string): FacturaValidacionInput => ({
+    codigo,
+    resultado,
+    explicacion,
+    revisadoEn,
+  });
+
+  let formato: FacturaValidacionInput;
+  if (!ncf) {
+    formato = sinNcf ? result("ncf_formato", "no_aplica", `Un ${labelOf(FACTURA_TIPOS, tipoDocumento).toLowerCase()} no lleva NCF.`) : result("ncf_formato", "pendiente", "Falta el NCF.");
+  } else {
+    const revision = revisarNcf(ncf);
+    if (!revision.ok) {
+      formato = result("ncf_formato", "diferencia", `${revision.ncf}: ${revision.motivo}.`);
+    } else if (tipoDocumento === "nota_credito" && !revision.esNotaCredito) {
+      formato = result("ncf_formato", "diferencia", `Es una nota de crédito, pero ${revision.tipo} es ${revision.tipoLabel.toLowerCase()}. Debe ser B04 o E34.`);
+    } else if (tipoDocumento === "factura" && revision.esNotaCredito) {
+      formato = result("ncf_formato", "diferencia", `${revision.tipo} es una nota de crédito. Cambia el tipo de documento o revisa el NCF.`);
+    } else {
+      formato = result("ncf_formato", "correcto", `${revision.tipo}, ${revision.tipoLabel.toLowerCase()}.`);
+    }
+  }
+
+  let unico: FacturaValidacionInput;
+  if (!ncf || !rnc) {
+    unico = sinNcf && !ncf ? result("ncf_unico", "no_aplica", "No lleva NCF.") : result("ncf_unico", "pendiente", !ncf ? "Falta el NCF." : "Falta el RNC.");
+  } else if (otraConMismoNcf) {
+    unico = result("ncf_unico", "diferencia", `El RNC ${rnc} con el NCF ${ncf} ya está en ${otraConMismoNcf}.`);
+  } else {
+    unico = result("ncf_unico", "correcto", "Ninguna otra factura tiene ese RNC y NCF.");
+  }
+
+  let rncProveedor: FacturaValidacionInput;
+  if (rnc && rnc.length !== 9 && rnc.length !== 11) {
+    rncProveedor = result("rnc_proveedor", "diferencia", `El RNC ${rnc} no tiene 9 ni 11 dígitos.`);
+  } else if (!proveedor) {
+    rncProveedor = result("rnc_proveedor", "pendiente", "La factura no está ligada a un proveedor de la lista.");
+  } else if (!rnc) {
+    rncProveedor = result("rnc_proveedor", "pendiente", "Falta el RNC de la factura.");
+  } else if (!proveedor.rnc) {
+    rncProveedor = result("rnc_proveedor", "pendiente", `La ficha de ${proveedor.nombre} no tiene RNC. Agrégalo en Proveedores.`);
+  } else if (proveedor.rnc !== rnc) {
+    rncProveedor = result("rnc_proveedor", "diferencia", `La factura dice ${rnc}, pero la ficha de ${proveedor.nombre} dice ${proveedor.rnc}.`);
+  } else {
+    rncProveedor = result("rnc_proveedor", "correcto", `Coincide con la ficha de ${proveedor.nombre}.`);
+  }
+
+  return [formato, unico, rncProveedor];
 }
 
 function hasKey(body: Record<string, unknown>, keys: string[]): boolean {

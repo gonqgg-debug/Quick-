@@ -1,3 +1,5 @@
+import { dueDateFromCredit, type Proveedor } from "@/lib/admin-compras-shared";
+import { findProveedorParaFactura, getProveedorById } from "@/lib/admin-compras";
 import { borrarArchivos, guardarDocumentos, type DocumentoEntrada } from "@/lib/factura-documentos";
 import {
   FACTURA_CONDICIONES,
@@ -25,6 +27,7 @@ import {
   parseClave,
   parseEstado,
   referenciaFactura,
+  validacionesFiscales,
   type DuplicadoCandidato,
   type FacturaCampos,
   type FacturaCatalogoRef,
@@ -40,6 +43,7 @@ import {
   type FacturaPregunta,
   type FacturaPreguntaInput,
   type FacturaPresentacion,
+  type FacturaProveedorFicha,
   type FacturaResumen,
   type FacturaValidacion,
   type FacturaValidacionInput,
@@ -53,7 +57,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase";
 const LIST_MAX = 500;
 
 const FACTURA_SELECT =
-  "id, clave, recibido_en, enviado_por, tienda, tipo_documento, proveedor, rnc, ncf, numero_factura, fecha_emision, fecha_vencimiento, condicion, metodo_pago, moneda, subtotal, descuento_total, itbis_total, otros_cargos, total, numero_productos, numero_documentos, estado, observaciones, posible_duplicado, duplicado_de, preguntas_abiertas, es_compra_personal, socio, confirmacion_texto, confirmacion_por, confirmacion_en, problema, problema_dueno, problema_desde, problema_falta, ledger_id, compra_id, updated_at";
+  "id, clave, recibido_en, enviado_por, tienda, tipo_documento, proveedor, proveedor_id, rnc, ncf, numero_factura, fecha_emision, fecha_vencimiento, condicion, metodo_pago, moneda, subtotal, descuento_total, itbis_total, otros_cargos, total, numero_productos, numero_documentos, estado, observaciones, posible_duplicado, duplicado_de, preguntas_abiertas, es_compra_personal, socio, confirmacion_texto, confirmacion_por, confirmacion_en, problema, problema_dueno, problema_desde, problema_falta, ledger_id, compra_id, updated_at";
 
 export type FacturaFiltro = {
   q?: string | null;
@@ -139,6 +143,7 @@ function mapResumen(row: Record<string, unknown>, duplicadoReferencia: string | 
     tipoDocumento,
     tipoDocumentoLabel: labelOf(FACTURA_TIPOS, tipoDocumento),
     proveedor,
+    proveedorId: typeof row.proveedor_id === "string" && isUuid(row.proveedor_id) ? row.proveedor_id : null,
     rnc: textOrNull(row.rnc, 20),
     ncf: textOrNull(row.ncf, 20),
     numeroFactura: textOrNull(row.numero_factura, 80),
@@ -274,6 +279,7 @@ function mapDocumento(row: Record<string, unknown>): FacturaDocumento | null {
     nombre: textOrNull(row.nombre, 180),
     mime,
     pagina: pagina != null && Number.isInteger(pagina) ? pagina : null,
+    tipo: row.tipo === "ticket" ? "ticket" : "pagina",
     esImagen: mime.startsWith("image/"),
     creadoEn,
   };
@@ -505,6 +511,88 @@ async function revisarDuplicado(id: string, estadoExplicito: boolean): Promise<v
   const { error: otherError } = await supabase.from("facturas").update({ posible_duplicado: true }).eq("id", match.candidato.id);
   if (otherError) {
     throw otherError;
+  }
+}
+
+function fichaDe(proveedor: Proveedor): FacturaProveedorFicha {
+  return {
+    id: proveedor.id,
+    nombre: proveedor.nombre,
+    rnc: proveedor.rnc,
+    tieneCredito: proveedor.tieneCredito,
+    diasCredito: proveedor.diasCredito,
+    formaPago: proveedor.formaPago,
+  };
+}
+
+async function otraConMismoNcf(factura: FacturaResumen): Promise<string | null> {
+  if (!factura.rnc || !factura.ncf) {
+    return null;
+  }
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("facturas")
+    .select(FACTURA_SELECT)
+    .eq("rnc", factura.rnc)
+    .eq("ncf", factura.ncf)
+    .neq("id", factura.id)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    throw error;
+  }
+  const otra = data ? mapResumen(data as Record<string, unknown>) : null;
+  return otra ? otra.referencia : null;
+}
+
+async function fiscalesDe(factura: FacturaResumen, ficha: FacturaProveedorFicha | null): Promise<FacturaValidacionInput[]> {
+  return validacionesFiscales({
+    tipoDocumento: factura.tipoDocumento,
+    rnc: factura.rnc,
+    ncf: factura.ncf,
+    proveedor: ficha,
+    otraConMismoNcf: await otraConMismoNcf(factura),
+    revisadoEn: new Date().toISOString(),
+  });
+}
+
+function vencimientoCalculado(factura: FacturaResumen, proveedor: Proveedor): string | null {
+  if (factura.fechaVencimiento || !factura.fechaEmision) {
+    return null;
+  }
+  if (factura.condicion === "contado") {
+    return factura.fechaEmision;
+  }
+  if (!proveedor.tieneCredito) {
+    return null;
+  }
+  return dueDateFromCredit(factura.fechaEmision, proveedor);
+}
+
+/** Liga la factura a la ficha del proveedor, completa el vencimiento y guarda las validaciones fiscales. */
+async function revisarProveedorYFiscal(id: string): Promise<void> {
+  const actual = await loadResumen(id);
+  if (!actual) {
+    return;
+  }
+  const proveedor = await findProveedorParaFactura({ rnc: actual.rnc, nombre: actual.proveedor });
+  const update: Record<string, unknown> = {};
+  if ((proveedor?.id ?? null) !== actual.proveedorId) {
+    update.proveedor_id = proveedor?.id ?? null;
+  }
+  const vencimiento = proveedor ? vencimientoCalculado(actual, proveedor) : null;
+  if (vencimiento) {
+    update.fecha_vencimiento = vencimiento;
+  }
+  if (Object.keys(update).length) {
+    const supabase = getSupabaseAdminClient();
+    const { error } = await supabase.from("facturas").update(update).eq("id", id);
+    if (error) {
+      throw error;
+    }
+  }
+  for (const validacion of await fiscalesDe(actual, proveedor ? fichaDe(proveedor) : null)) {
+    await guardarValidacion(id, validacion);
   }
 }
 
@@ -776,7 +864,7 @@ export async function getFactura(idOrClave: string): Promise<FacturaDetalle | nu
     supabase.from("factura_lineas").select("*").eq("factura_id", id).order("numero_linea", { ascending: true }),
     supabase.from("factura_validaciones").select("codigo, resultado, explicacion, revisado_en").eq("factura_id", id),
     supabase.from("factura_preguntas").select("*").eq("factura_id", id).order("created_at", { ascending: true }),
-    supabase.from("factura_documentos").select("id, nombre, mime, pagina, created_at").eq("factura_id", id).order("pagina", { ascending: true }),
+    supabase.from("factura_documentos").select("id, nombre, mime, pagina, tipo, created_at").eq("factura_id", id).order("pagina", { ascending: true }),
   ]);
   if (header.error) {
     throw header.error;
@@ -801,11 +889,26 @@ export async function getFactura(idOrClave: string): Promise<FacturaDetalle | nu
   if (!resumen) {
     return null;
   }
+  const proveedor = resumen.proveedorId ? await getProveedorById(resumen.proveedorId) : null;
+  const proveedorFicha = proveedor ? fichaDe(proveedor) : null;
+  const fiscales = await fiscalesDe(resumen, proveedorFicha);
   const stored = (validaciones.data ?? [])
     .map((row) => mapValidacion(row as Record<string, unknown>))
-    .filter((row): row is FacturaValidacion => Boolean(row));
+    .filter((row): row is FacturaValidacion => Boolean(row))
+    .filter((row) => !fiscales.some((fiscal) => fiscal.codigo === row.codigo));
+  for (const fiscal of fiscales) {
+    stored.push({
+      codigo: fiscal.codigo,
+      codigoLabel: labelOf(FACTURA_VALIDACIONES, fiscal.codigo),
+      resultado: fiscal.resultado,
+      resultadoLabel: labelOf(FACTURA_RESULTADOS, fiscal.resultado),
+      explicacion: fiscal.explicacion,
+      revisadoEn: fiscal.revisadoEn,
+    });
+  }
   return {
     ...resumen,
+    proveedorFicha,
     lineas: await adjuntarCatalogo(
       (lineas.data ?? []).map((row) => mapLinea(row as Record<string, unknown>)).filter((row): row is FacturaLinea => Boolean(row))
     ),
@@ -979,6 +1082,7 @@ export async function createFactura(
   try {
     await applyChildren(id, { ...body, lineas: hasKey(body, ["lineas", "productos"]) ? body.lineas ?? body.productos : undefined }, documentos);
     await revisarDuplicado(id, estadoExplicito);
+    await revisarProveedorYFiscal(id);
     await syncCounters(id);
   } catch (childError) {
     await borrarArchivosDeFactura(id);
@@ -1021,6 +1125,7 @@ export async function updateFactura(
   }
   await applyChildren(id, body, documentos);
   await revisarDuplicado(id, estadoExplicito);
+  await revisarProveedorYFiscal(id);
   await syncCounters(id);
   const factura = await getFactura(id);
   if (!factura) {

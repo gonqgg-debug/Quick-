@@ -8,6 +8,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase";
 import {
   COMPRAS_PAGE_SIZE,
   dueDateFromCredit,
+  parseFormaPago,
   sortProveedores,
   summarizePendientes,
   type Compra,
@@ -21,15 +22,17 @@ const NOMBRE_MAX = 120;
 const NOTAS_MAX = 500;
 const LIST_MAX = 1000;
 
-const PROVEEDOR_SELECT = "id, nombre, tiene_credito, dias_credito, notas";
+const PROVEEDOR_SELECT = "id, nombre, rnc, tiene_credito, dias_credito, forma_pago, notas";
 const COMPRA_SELECT =
   "id, proveedor_id, monto, fecha, due_date, pagado, pagado_en, rnc, ncf, captura_path, proveedores ( id, nombre )";
 
 type ProveedorRow = {
   id: unknown;
   nombre: unknown;
+  rnc: unknown;
   tiene_credito: unknown;
   dias_credito: unknown;
+  forma_pago: unknown;
   notas: unknown;
 };
 
@@ -53,6 +56,11 @@ type CompraStored = Compra & { capturaPath: string | null };
 
 function isUniqueViolation(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "23505");
+}
+
+function uniqueMessage(error: unknown): string {
+  const text = error && typeof error === "object" && "message" in error ? String(error.message) : "";
+  return text.includes("idx_proveedores_rnc") ? "Ya existe un proveedor con ese RNC" : "Ya existe un proveedor con ese nombre";
 }
 
 function trimText(value: unknown, max: number): string {
@@ -82,8 +90,10 @@ function mapProveedor(row: ProveedorRow): Proveedor | null {
   return {
     id,
     nombre,
+    rnc: fiscalText(row.rnc),
     tieneCredito: Boolean(row.tiene_credito),
     diasCredito: Number.isFinite(dias) && dias > 0 ? Math.trunc(dias) : 0,
+    formaPago: parseFormaPago(row.forma_pago),
     notas: trimText(row.notas, NOTAS_MAX) || null,
   };
 }
@@ -141,12 +151,16 @@ function publicCompra(compra: CompraStored): Compra {
   };
 }
 
-export function parseProveedorInput(body: {
+export type ProveedorBody = {
   nombre?: unknown;
+  rnc?: unknown;
   tieneCredito?: unknown;
   diasCredito?: unknown;
+  formaPago?: unknown;
   notas?: unknown;
-}): { ok: true; data: Omit<Proveedor, "id"> } | { ok: false; message: string } {
+};
+
+export function parseProveedorInput(body: ProveedorBody): { ok: true; data: Omit<Proveedor, "id"> } | { ok: false; message: string } {
   const nombre = trimText(body.nombre, NOMBRE_MAX);
   if (!nombre) {
     return { ok: false, message: "El nombre es obligatorio" };
@@ -156,12 +170,26 @@ export function parseProveedorInput(body: {
   if (diasCredito == null) {
     return { ok: false, message: "Los días de crédito no son válidos" };
   }
+  let rnc: string | null = null;
+  if (body.rnc != null && !(typeof body.rnc === "string" && body.rnc.trim() === "")) {
+    const parsedRnc = parseRnc(body.rnc);
+    if (!parsedRnc.ok) {
+      return { ok: false, message: parsedRnc.message };
+    }
+    rnc = parsedRnc.rnc;
+  }
+  const formaPago = parseFormaPago(body.formaPago);
+  if (body.formaPago != null && body.formaPago !== "" && !formaPago) {
+    return { ok: false, message: "La forma de pago tiene que ser efectivo, transferencia o mixto" };
+  }
   return {
     ok: true,
     data: {
       nombre,
+      rnc,
       tieneCredito,
       diasCredito,
+      formaPago,
       notas: trimText(body.notas, NOTAS_MAX) || null,
     },
   };
@@ -183,15 +211,17 @@ export async function createProveedor(input: Omit<Proveedor, "id">): Promise<Pro
     .from("proveedores")
     .insert({
       nombre: input.nombre,
+      rnc: input.rnc,
       tiene_credito: input.tieneCredito,
       dias_credito: input.diasCredito,
+      forma_pago: input.formaPago,
       notas: input.notas,
     })
     .select(PROVEEDOR_SELECT)
     .single();
   if (error) {
     if (isUniqueViolation(error)) {
-      throw new Error("Ya existe un proveedor con ese nombre");
+      throw new Error(uniqueMessage(error));
     }
     throw error;
   }
@@ -220,6 +250,12 @@ export async function updateProveedor(id: string, patch: Partial<Omit<Proveedor,
   if (patch.notas !== undefined) {
     payload.notas = patch.notas;
   }
+  if (patch.rnc !== undefined) {
+    payload.rnc = patch.rnc;
+  }
+  if (patch.formaPago !== undefined) {
+    payload.forma_pago = patch.formaPago;
+  }
   if (Object.keys(payload).length === 0) {
     throw new Error("No hay cambios");
   }
@@ -233,7 +269,7 @@ export async function updateProveedor(id: string, patch: Partial<Omit<Proveedor,
     .maybeSingle();
   if (error) {
     if (isUniqueViolation(error)) {
-      throw new Error("Ya existe un proveedor con ese nombre");
+      throw new Error(uniqueMessage(error));
     }
     throw error;
   }
@@ -262,8 +298,10 @@ export async function findOrCreateProveedor(nombre: string): Promise<Proveedor> 
   try {
     return await createProveedor({
       nombre: nombre.trim(),
+      rnc: null,
       tieneCredito: false,
       diasCredito: 0,
+      formaPago: null,
       notas: null,
     });
   } catch (error) {
@@ -349,7 +387,23 @@ async function loadComprasSummary() {
   return summarizePendientes(rows, todayDayKey());
 }
 
-async function getProveedorById(id: string): Promise<Proveedor | null> {
+/** Primero por RNC y, si no aparece, por nombre normalizado. No crea proveedores. */
+export async function findProveedorParaFactura(input: { rnc: string | null; nombre: string | null }): Promise<Proveedor | null> {
+  if (input.rnc) {
+    const supabase = getSupabaseAdminClient();
+    const { data, error } = await supabase.from("proveedores").select(PROVEEDOR_SELECT).eq("rnc", input.rnc).maybeSingle();
+    if (error) {
+      throw error;
+    }
+    const mapped = data ? mapProveedor(data as ProveedorRow) : null;
+    if (mapped) {
+      return mapped;
+    }
+  }
+  return input.nombre ? findProveedorByNombre(input.nombre) : null;
+}
+
+export async function getProveedorById(id: string): Promise<Proveedor | null> {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase.from("proveedores").select(PROVEEDOR_SELECT).eq("id", id).maybeSingle();
   if (error) {
