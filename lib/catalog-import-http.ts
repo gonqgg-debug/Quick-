@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { batchUpdateAdminCatalogProducts, updateAdminCatalogProduct } from "@/lib/admin-catalog-products";
 import { IMPORT_MAX_BYTES, applyImportPreview, buildImportPreview, fetchImportProducts, type ImportPreview } from "@/lib/catalog-import";
 import type { Actor } from "@/lib/operacion-shared";
 import { getSupabaseAdminClient } from "@/lib/supabase";
@@ -126,4 +127,110 @@ export async function handleImportarCatalogo(request: NextRequest, actor: Actor)
   const aplicado = await applyImportPreview(supabase, preview);
   console.info("[agent] catalogo importado", { por: actor, archivo: preview.fileName, nuevos: aplicado.created, actualizados: aplicado.updated });
   return NextResponse.json({ confirmado: true, aplicados: { nuevos: aplicado.created, actualizados: aplicado.updated }, ...vista }, { status: 201 });
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const LOTE_MAX = 500;
+
+class NoEncontrado extends Error {}
+
+/** Busca por id, código Odoo o código de barras. Un código que apunta a más de un producto no se adivina. */
+async function resolverProductos(referencias: string[]): Promise<{ ids: Map<string, string>; faltan: string[] }> {
+  const supabase = getSupabaseAdminClient();
+  const ids = new Map<string, string>();
+  const faltan: string[] = [];
+  for (const referencia of referencias) {
+    const valor = referencia.trim();
+    if (!valor) {
+      continue;
+    }
+    if (UUID.test(valor)) {
+      const { data, error } = await supabase.from("products").select("id").eq("id", valor).maybeSingle();
+      if (error) {
+        throw error;
+      }
+      if (data?.id) {
+        ids.set(valor, String(data.id));
+      } else {
+        faltan.push(valor);
+      }
+      continue;
+    }
+    const porOdoo = await supabase.from("products").select("id").eq("codigo_odoo", valor).limit(2);
+    if (porOdoo.error) {
+      throw porOdoo.error;
+    }
+    const filas = porOdoo.data?.length ? porOdoo.data : (await supabase.from("products").select("id").eq("codigo_barras", valor).limit(2)).data ?? [];
+    if (filas.length > 1) {
+      throw new Error(`Hay más de un producto con el código ${valor}. Manda el id`);
+    }
+    if (filas[0]?.id) {
+      ids.set(valor, String(filas[0].id));
+    } else {
+      faltan.push(valor);
+    }
+  }
+  return { ids, faltan };
+}
+
+async function cuerpoJson(request: NextRequest): Promise<Record<string, unknown>> {
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("El cuerpo tiene que ser un objeto JSON");
+  }
+  return body;
+}
+
+/** Rodrigo edita nombre, marca, categoría, precio o activo de un producto. Lo que no manda no cambia. */
+export async function handleEditarProducto(referencia: string, request: NextRequest, actor: Actor) {
+  const body = await cuerpoJson(request);
+  const { ids } = await resolverProductos([decodeURIComponent(referencia)]);
+  const id = ids.values().next().value;
+  if (!id) {
+    throw new NoEncontrado("No encontramos ese producto en el catálogo");
+  }
+  const producto = await updateAdminCatalogProduct({
+    id,
+    nombre: body.nombre,
+    marca: body.marca,
+    categoria: body.categoria,
+    precio: body.precio,
+    activo: body.activo,
+    por: actor,
+  });
+  return NextResponse.json({ producto });
+}
+
+/** Activa o desactiva varios productos (y opcionalmente les cambia la categoría) por id, código Odoo o código de barras. */
+export async function handleEstadoProductos(request: NextRequest, actor: Actor) {
+  const body = await cuerpoJson(request);
+  const lista = Array.isArray(body.productos) ? body.productos : Array.isArray(body.ids) ? body.ids : Array.isArray(body.codigos) ? body.codigos : null;
+  const referencias = (lista ?? []).filter((item): item is string | number => typeof item === "string" || typeof item === "number").map(String);
+  if (!referencias.length) {
+    throw new Error("Manda productos: [id, código Odoo o código de barras] y activo: true o false");
+  }
+  if (referencias.length > LOTE_MAX) {
+    throw new Error(`Manda hasta ${LOTE_MAX} productos por llamada`);
+  }
+  if (body.activo === undefined && body.categoria === undefined) {
+    throw new Error("Manda activo: true o false, o categoria");
+  }
+  const { ids, faltan } = await resolverProductos(referencias);
+  if (!ids.size) {
+    throw new NoEncontrado("No encontramos ninguno de esos productos en el catálogo");
+  }
+  const { updated } = await batchUpdateAdminCatalogProducts({
+    ids: Array.from(new Set(ids.values())),
+    activo: body.activo,
+    categoria: body.categoria,
+    por: actor,
+  });
+  return NextResponse.json({ actualizados: updated, noEncontrados: faltan });
+}
+
+export function productoError(error: unknown, fallback: string, logLabel: string): NextResponse {
+  if (error instanceof NoEncontrado) {
+    return NextResponse.json({ error: error.message }, { status: 404 });
+  }
+  return catalogoError(error, fallback, logLabel);
 }

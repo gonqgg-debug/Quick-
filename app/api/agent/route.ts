@@ -46,7 +46,19 @@ export async function GET(request: NextRequest) {
       { method: "POST", path: "/api/agent/compras", describe: "Registra una factura. JSON o multipart: proveedorNombre o proveedorId, monto, fecha, rnc, ncf y captura (archivo o capturaBase64). JPG, PNG, WebP o PDF, máximo 4 MB." },
       { method: "GET", path: "/api/agent/compras/{id}/captura", describe: "Descarga la captura de esa factura" },
       { method: "GET", path: "/api/agent/caja?fecha=YYYY-MM-DD", describe: "Turnos y ledger del rango" },
-      { method: "GET", path: "/api/agent/catalogo?cursor=&q=", describe: "Productos de a 100. stock siempre es null" },
+      { method: "GET", path: "/api/agent/catalogo?cursor=&q=&activo=", describe: "Productos de a 100, activos e inactivos (activo=true o false filtra). stock siempre es null" },
+      {
+        method: "PATCH",
+        path: "/api/agent/catalogo/{id, código Odoo o código de barras}",
+        describe:
+          "Rodrigo edita un producto: nombre, marca (null la quita), categoria, precio y activo (true o false). Lo que no mandas no cambia. Responde el producto guardado.",
+      },
+      {
+        method: "POST",
+        path: "/api/agent/catalogo/estado",
+        describe:
+          "Rodrigo activa o desactiva varios productos de una vez: productos: [id, código Odoo o código de barras] (hasta 500) y activo: true o false; también puede mandar categoria para moverlos. Responde actualizados y noEncontrados. Un producto inactivo no se ofrece, pero no se borra.",
+      },
       {
         method: "POST",
         path: "/api/agent/catalogo",

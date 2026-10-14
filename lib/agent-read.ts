@@ -154,6 +154,10 @@ export async function listAgentCatalogo(search: URLSearchParams) {
   if (q) {
     query = query.or(`nombre.ilike.%${q}%,codigo_odoo.ilike.%${q}%,codigo_barras.ilike.%${q}%`);
   }
+  const activo = search.get("activo");
+  if (activo === "true" || activo === "false") {
+    query = query.eq("activo", activo === "true");
+  }
   const { data, error } = await query;
   if (error) {
     throw error;
