@@ -10,6 +10,9 @@ export type ParametrosConfig = {
   pesoReciente: number;
   pesoIntermedio: number;
   pesoAntiguo: number;
+  /** Variación del precio contra la mediana que dispara la alerta en facturas. 0.15 es 15%. */
+  alertaPrecio: number;
+  alertaCantidad: number;
 };
 
 export type MetaMensual = {

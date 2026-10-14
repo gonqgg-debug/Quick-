@@ -131,6 +131,12 @@ function Linea({
                   : "Sin catálogo"}
             </span>
             {dudosa ? <span style={{ color: "#9A3412" }}>{linea.estadoLabel}</span> : null}
+            {linea.alertas.map((alerta) => (
+              <span key={alerta.tipo} className="font-semibold" style={{ color: "#9A3412" }}>
+                {alerta.tipo === "precio" ? "Precio" : "Cantidad"} {alerta.variacion > 0 ? "+" : "−"}
+                {Math.round(Math.abs(alerta.variacion) * 100)}%
+              </span>
+            ))}
             {linea.recepcion === "faltante" || linea.recepcion === "regalo" ? (
               <span style={{ color: RECEPCION_TONO[linea.recepcion].color }}>
                 {linea.recepcion === "faltante" ? `Llegaron ${linea.cantidadRecibida ?? 0}` : "Regalo"}
@@ -158,6 +164,13 @@ function Linea({
             <Dato label="Estado" value={linea.estadoLabel} />
           </dl>
           {linea.observacion ? <p className="mt-2 text-xs leading-relaxed" style={{ color: "#9A3412" }}>{linea.observacion}</p> : null}
+          {linea.alertas.length ? (
+            <ul className="mt-2 space-y-1 rounded-xl px-3 py-2 text-xs leading-relaxed" style={{ backgroundColor: "#FDF1DE", color: "#9A3412" }}>
+              {linea.alertas.map((alerta) => (
+                <li key={alerta.tipo}>{alerta.texto}</li>
+              ))}
+            </ul>
+          ) : null}
           <RecepcionLinea factura={factura} linea={linea} enviar={enviar} />
           <CatalogoLinea linea={linea} enviar={enviar} />
           <PresentacionLinea factura={factura} linea={linea} enviar={enviar} />

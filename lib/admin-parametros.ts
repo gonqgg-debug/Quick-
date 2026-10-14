@@ -9,12 +9,13 @@ import {
   type MetaMensual,
   type ParametrosConfig,
 } from "@/lib/admin-parametros-shared";
+import { ALERTA_CANTIDAD_DEFECTO, ALERTA_PRECIO_DEFECTO } from "@/lib/facturas-shared";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
 export type { MetaMensual, ParametrosConfig } from "@/lib/admin-parametros-shared";
 
 const PARAMETROS_FIELDS =
-  "id, mes_activo, ratio_recompra, umbral_cuidado, umbral_stop, peso_reciente, peso_intermedio, peso_antiguo";
+  "id, mes_activo, ratio_recompra, umbral_cuidado, umbral_stop, peso_reciente, peso_intermedio, peso_antiguo, alerta_precio, alerta_cantidad";
 const METAS_LIMIT = 240;
 
 function isUniqueViolation(error: unknown): boolean {
@@ -41,6 +42,8 @@ function mapParametros(row: Record<string, unknown> | null): ParametrosConfig {
     pesoReciente: parsePercentOrRatio(row.peso_reciente) ?? 0,
     pesoIntermedio: parsePercentOrRatio(row.peso_intermedio) ?? 0,
     pesoAntiguo: parsePercentOrRatio(row.peso_antiguo) ?? 0,
+    alertaPrecio: row.alerta_precio == null ? ALERTA_PRECIO_DEFECTO : toMoney(row.alerta_precio) || ALERTA_PRECIO_DEFECTO,
+    alertaCantidad: row.alerta_cantidad == null ? ALERTA_CANTIDAD_DEFECTO : toMoney(row.alerta_cantidad) || ALERTA_CANTIDAD_DEFECTO,
   };
 }
 
@@ -81,7 +84,9 @@ export function parseParametrosPatch(body: {
   pesoReciente?: unknown;
   pesoIntermedio?: unknown;
   pesoAntiguo?: unknown;
-}): { ok: true; data: ParametrosConfig } | { ok: false; message: string } {
+  alertaPrecio?: unknown;
+  alertaCantidad?: unknown;
+}): { ok: true; data: ParametrosPatch } | { ok: false; message: string } {
   const mesActivo = monthStartFromInput(body.mesActivo);
   if (!mesActivo) {
     return { ok: false, message: "El mes activo no es válido" };
@@ -119,6 +124,12 @@ export function parseParametrosPatch(body: {
     };
   }
 
+  const alertaPrecio = body.alertaPrecio === undefined ? undefined : parseAlerta(body.alertaPrecio, 5);
+  const alertaCantidad = body.alertaCantidad === undefined ? undefined : parseAlerta(body.alertaCantidad, 10);
+  if (alertaPrecio === null || alertaCantidad === null) {
+    return { ok: false, message: "Las alertas de precio y cantidad tienen que ser un porcentaje mayor que 0" };
+  }
+
   return {
     ok: true,
     data: {
@@ -129,11 +140,21 @@ export function parseParametrosPatch(body: {
       pesoReciente,
       pesoIntermedio,
       pesoAntiguo,
+      ...(alertaPrecio !== undefined ? { alertaPrecio } : {}),
+      ...(alertaCantidad !== undefined ? { alertaCantidad } : {}),
     },
   };
 }
 
-export async function updateParametrosConfig(input: ParametrosConfig): Promise<ParametrosConfig> {
+/** Si no se mandan, las alertas quedan como estaban. */
+export type ParametrosPatch = Omit<ParametrosConfig, "alertaPrecio" | "alertaCantidad"> & Partial<Pick<ParametrosConfig, "alertaPrecio" | "alertaCantidad">>;
+
+function parseAlerta(value: unknown, max: number): number | null {
+  const ratio = parsePercentOrRatio(value);
+  return ratio != null && ratio > 0 && ratio <= max ? ratio : null;
+}
+
+export async function updateParametrosConfig(input: ParametrosPatch): Promise<ParametrosConfig> {
   const id = await parametrosRowId();
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
@@ -146,6 +167,8 @@ export async function updateParametrosConfig(input: ParametrosConfig): Promise<P
       peso_reciente: input.pesoReciente,
       peso_intermedio: input.pesoIntermedio,
       peso_antiguo: input.pesoAntiguo,
+      ...(input.alertaPrecio !== undefined ? { alerta_precio: input.alertaPrecio } : {}),
+      ...(input.alertaCantidad !== undefined ? { alerta_cantidad: input.alertaCantidad } : {}),
     })
     .eq("id", id)
     .select(PARAMETROS_FIELDS)
