@@ -1,4 +1,4 @@
-export type ImportField = "nombre" | "marca" | "categoria" | "precio" | "codigoBarras";
+export type ImportField = "nombre" | "marca" | "categoria" | "precio" | "codigoBarras" | "costo";
 
 export type ImportRow = {
   codigo: string;
@@ -7,6 +7,8 @@ export type ImportRow = {
   categoria: string;
   precio: number;
   codigoBarras: string | null;
+  /** Null cuando el archivo no trae costo: no se toca el costo manual. */
+  costo: number | null;
 };
 
 export type FieldChange = {

@@ -12,11 +12,11 @@ import { guardarListaProductos } from "@/components/admin/catalogo/lista-guardad
 import {
   BrandCheckbox,
   EstadoProducto,
+  CostoProducto,
   FotoProducto,
   MargenProducto,
   ProveedoresProducto,
   lineaSecundaria,
-  textoCosto,
 } from "@/components/admin/catalogo/producto-ui";
 import { Aviso, TONO } from "@/components/admin/facturas/ui";
 import {
@@ -519,8 +519,8 @@ export function AdminCatalogProducts() {
                   <DataTableCell numeric className="font-semibold">
                     {formatPrice(product.precio)}
                   </DataTableCell>
-                  <DataTableCell numeric className={product.costo == null ? "text-brand-muted" : "font-semibold"}>
-                    {textoCosto(product.costo)}
+                  <DataTableCell numeric>
+                    <CostoProducto costo={product.costo} fuente={product.costoFuente} />
                   </DataTableCell>
                   <DataTableCell>
                     <MargenProducto margen={product.margen} />
@@ -567,7 +567,9 @@ export function AdminCatalogProducts() {
                     </div>
                     <div>
                       <dt className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted">Costo</dt>
-                      <dd className={`mt-0.5 tabular-nums ${product.costo == null ? "text-brand-muted" : "font-semibold"}`}>{textoCosto(product.costo)}</dd>
+                      <dd className="mt-0.5 tabular-nums">
+                        <CostoProducto costo={product.costo} fuente={product.costoFuente} />
+                      </dd>
                     </div>
                     <div>
                       <dt className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted">Margen</dt>

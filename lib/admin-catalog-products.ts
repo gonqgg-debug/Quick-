@@ -13,9 +13,12 @@ import type {
   AdminCatalogProductList,
   AdminCatalogProveedor,
   CatalogoEstado,
+  CostoManualFuente,
 } from "@/lib/admin-catalog-products-shared";
 import {
   CATALOG_PRODUCTS_PAGE_SIZE,
+  elegirCosto,
+  etiquetaCostoFuente,
   isUncategorized,
   margenDe,
   recorteDescripcion,
@@ -35,7 +38,7 @@ export type {
 } from "@/lib/admin-catalog-products-shared";
 
 const SELECT_FIELDS =
-  "id, nombre, descripcion, marca, categoria, precio, codigo_odoo, codigo_barras, foto_url, activo";
+  "id, nombre, descripcion, marca, categoria, precio, codigo_odoo, codigo_barras, foto_url, activo, costo_manual, costo_manual_fuente, costo_manual_en";
 const EXPORT_MAX = 5000;
 const BATCH_MAX = 2000;
 const IDS_MAX = 2000;
@@ -68,12 +71,16 @@ type ProductRow = {
   codigo_barras: string | null;
   foto_url: string | null;
   activo: boolean;
+  costo_manual: number | string | null;
+  costo_manual_fuente: string | null;
+  costo_manual_en: string | null;
 };
 
 type LineaCompra = {
   productoId: string;
   facturaId: string;
   fecha: string;
+  instante: string;
   costo: number | null;
   proveedorId: string | null;
   proveedorNombre: string | null;
@@ -82,6 +89,7 @@ type LineaCompra = {
 type ResumenProducto = {
   costo: number | null;
   costoEn: string | null;
+  costoClave: string | null;
   proveedores: AdminCatalogProveedor[];
   compra: AdminCatalogCompra | null;
 };
@@ -117,8 +125,37 @@ function uno<T>(value: T | T[] | null | undefined): T | null {
   return value ?? null;
 }
 
-function vacioComercial(): Pick<AdminCatalogProduct, "costo" | "costoEn" | "margen" | "proveedores"> {
-  return { costo: null, costoEn: null, margen: null, proveedores: [] };
+function fuenteManual(value: unknown): CostoManualFuente | null {
+  return value === "odoo" || value === "admin" ? value : null;
+}
+
+function vacioComercial(): Pick<
+  AdminCatalogProduct,
+  | "costo"
+  | "costoEn"
+  | "costoFuente"
+  | "costoFactura"
+  | "costoFacturaEn"
+  | "costoFacturaClave"
+  | "costoManual"
+  | "costoManualEn"
+  | "costoManualFuente"
+  | "margen"
+  | "proveedores"
+> {
+  return {
+    costo: null,
+    costoEn: null,
+    costoFuente: null,
+    costoFactura: null,
+    costoFacturaEn: null,
+    costoFacturaClave: null,
+    costoManual: null,
+    costoManualEn: null,
+    costoManualFuente: null,
+    margen: null,
+    proveedores: [],
+  };
 }
 
 function mapRow(row: ProductRow): AdminCatalogProduct {
@@ -135,16 +172,31 @@ function mapRow(row: ProductRow): AdminCatalogProduct {
     fotoUrl: row.foto_url ? String(row.foto_url) : null,
     activo: Boolean(row.activo),
     ...vacioComercial(),
+    costoManual: num(row.costo_manual),
+    costoManualEn: text(row.costo_manual_en),
+    costoManualFuente: fuenteManual(row.costo_manual_fuente),
   };
 }
 
 function aplicarResumen(product: AdminCatalogProduct, resumen: ResumenProducto | undefined): AdminCatalogProduct {
-  const costo = resumen?.costo ?? null;
+  const facturaCosto = resumen?.costo ?? null;
+  const elegido = elegirCosto({
+    facturaCosto,
+    facturaEn: resumen?.costoClave ?? resumen?.costoEn ?? null,
+    manualCosto: product.costoManual,
+    manualEn: product.costoManualEn,
+    manualFuente: product.costoManualFuente,
+  });
+  const costoEn = elegido.en ? elegido.en.slice(0, 10) : null;
   return {
     ...product,
-    costo,
-    costoEn: resumen?.costoEn ?? null,
-    margen: margenDe(product.precio, costo),
+    costo: elegido.costo,
+    costoEn,
+    costoFuente: elegido.fuente,
+    costoFactura: facturaCosto,
+    costoFacturaEn: resumen?.costoEn ?? null,
+    costoFacturaClave: resumen?.costoClave ?? null,
+    margen: margenDe(product.precio, elegido.costo),
     proveedores: resumen?.proveedores ?? [],
   };
 }
@@ -210,6 +262,26 @@ async function idsConCosto(): Promise<Set<string>> {
     }
     for (const row of data ?? []) {
       const id = text((row as { producto_id?: unknown }).producto_id);
+      if (id) {
+        ids.add(id);
+      }
+    }
+    if ((data ?? []).length < 1000) {
+      break;
+    }
+  }
+  for (let from = 0; from < 20000; from += 1000) {
+    const { data, error } = await supabase
+      .from("products")
+      .select("id")
+      .not("costo_manual", "is", null)
+      .order("id", { ascending: true })
+      .range(from, from + 999);
+    if (error) {
+      throw error;
+    }
+    for (const row of data ?? []) {
+      const id = text((row as { id?: unknown }).id);
       if (id) {
         ids.add(id);
       }
@@ -419,10 +491,13 @@ async function lineasDe(ids: string[]): Promise<LineaCompra[]> {
         const factura = uno(record.facturas) as Record<string, unknown> | null;
         const proveedor = uno(factura?.proveedores) as { id?: unknown; nombre?: unknown } | null;
         const unitario = num(record.costo_unitario);
+        const recibido = text(factura?.recibido_en);
+        const emision = text(factura?.fecha_emision)?.slice(0, 10) ?? "";
         lineas.push({
           productoId,
           facturaId,
           fecha: fechaClave(factura?.fecha_emision, factura?.recibido_en),
+          instante: recibido || emision,
           costo: unitario ?? num(record.costo_por_presentacion),
           proveedorId: text(proveedor?.id) ?? text(factura?.proveedor_id),
           proveedorNombre: text(proveedor?.nombre),
@@ -468,6 +543,7 @@ function resumir(ids: string[], lineas: LineaCompra[]): Map<string, ResumenProdu
     resumen.set(id, {
       costo,
       costoEn: mejor?.fecha.slice(0, 10) || null,
+      costoClave: mejor?.instante || null,
       proveedores: Array.from(proveedores.values())
         .sort((left, right) => right.clave.localeCompare(left.clave))
         .map(({ id: proveedorId, nombre, ultimaCompra }) => ({ id: proveedorId, nombre, ultimaCompra })),
@@ -633,6 +709,7 @@ export function catalogExportRows(products: AdminCatalogProduct[]): Array<Array<
     isUncategorized(product.categoria) ? "Sin categoría" : product.categoria,
     product.precio,
     product.costo ?? "",
+    etiquetaCostoFuente(product.costoFuente),
     product.margen == null ? "" : Math.round(product.margen * 1000) / 10,
     product.proveedores.map((item) => item.nombre).join(", "),
     product.codigoOdoo || "",
@@ -648,6 +725,7 @@ export async function updateAdminCatalogProduct(input: {
   marca?: unknown;
   categoria?: unknown;
   precio?: unknown;
+  costo?: unknown;
   activo?: unknown;
 }): Promise<AdminCatalogProduct> {
   if (!input.id) {
@@ -659,6 +737,9 @@ export async function updateAdminCatalogProduct(input: {
     marca?: string | null;
     categoria?: string;
     precio?: number;
+    costo_manual?: number | null;
+    costo_manual_fuente?: CostoManualFuente | null;
+    costo_manual_en?: string | null;
     activo?: boolean;
   } = {};
   if (input.nombre !== undefined) {
@@ -690,6 +771,21 @@ export async function updateAdminCatalogProduct(input: {
     }
     patch.precio = Math.round(parsed * 100) / 100;
   }
+  if (input.costo !== undefined) {
+    if (input.costo == null || input.costo === "") {
+      patch.costo_manual = null;
+      patch.costo_manual_fuente = null;
+      patch.costo_manual_en = null;
+    } else {
+      const parsed = typeof input.costo === "number" ? input.costo : parsePrice(String(input.costo));
+      if (parsed == null || parsed < 0) {
+        throw new Error("Costo inválido");
+      }
+      patch.costo_manual = Math.round(parsed * 10000) / 10000;
+      patch.costo_manual_fuente = "admin";
+      patch.costo_manual_en = new Date().toISOString();
+    }
+  }
   if (input.activo !== undefined) {
     if (typeof input.activo !== "boolean") {
       throw new Error("Estado inválido");
@@ -705,6 +801,8 @@ export async function updateAdminCatalogProduct(input: {
   if (error || !data) {
     throw error ?? new Error("No pudimos guardar el producto");
   }
+  costoCache = null;
+  conteoCache = null;
   const mapped = mapRow(data as ProductRow);
   let product = mapped;
   try {

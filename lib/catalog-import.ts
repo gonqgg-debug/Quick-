@@ -37,6 +37,7 @@ type DbProduct = {
   marca: string | null;
   categoria: string;
   precio: number;
+  costo_manual?: number | null;
 };
 
 const HEADER_ALIASES: Record<"codigo" | ImportField, string[]> = {
@@ -96,6 +97,15 @@ const HEADER_ALIASES: Record<"codigo" | ImportField, string[]> = {
     "ean13",
     "gtin",
     "upc",
+  ],
+  costo: [
+    "costo",
+    "cost",
+    "standard price",
+    "standard_price",
+    "costo estandar",
+    "costo de compra",
+    "purchase price",
   ],
 };
 
@@ -231,7 +241,7 @@ export async function fetchImportProducts(supabase: SupabaseClient): Promise<DbP
   for (let from = 0; from < 50_000; from += pageSize) {
     const { data, error } = await supabase
       .from("products")
-      .select("id, codigo_odoo, codigo_barras, nombre, marca, categoria, precio")
+      .select("id, codigo_odoo, codigo_barras, nombre, marca, categoria, precio, costo_manual")
       .order("nombre", { ascending: true })
       .range(from, from + pageSize - 1);
     if (error) {
@@ -242,6 +252,7 @@ export async function fetchImportProducts(supabase: SupabaseClient): Promise<DbP
       ...batch.map((row) => ({
         ...row,
         precio: toMoney(row.precio),
+        costo_manual: row.costo_manual == null ? null : toMoney(row.costo_manual),
         marca: row.marca ? String(row.marca) : null,
         codigo_odoo: row.codigo_odoo ? String(row.codigo_odoo).trim() : null,
         codigo_barras: row.codigo_barras ? String(row.codigo_barras).trim() : null,
@@ -320,6 +331,16 @@ export function buildImportPreview(buffer: Buffer, fileName: string, existing: D
       return;
     }
 
+    const costoRaw = columns.costo == null ? "" : cell(raw, columns.costo);
+    let costo: number | null = null;
+    if (costoRaw) {
+      costo = parsePrice(costoRaw);
+      if (costo == null) {
+        invalid.push({ row: rowNumber, codigo, reason: `Costo inválido (${costoRaw})` });
+        return;
+      }
+    }
+
     const current = byCode.get(codigo);
     const marca = pickMarca(raw, brandIndexes, current?.marca ?? currentMarcaForCode(byCode, codigo));
     let categoria = pickCategory(raw, categoryIndexes, current?.categoria ?? null);
@@ -342,6 +363,7 @@ export function buildImportPreview(buffer: Buffer, fileName: string, existing: D
         normalizeBarcode(codigo) ||
         current?.codigo_barras ||
         null,
+      costo,
     };
     if (!current) {
       created.push(incoming);
@@ -393,6 +415,15 @@ export function buildImportPreview(buffer: Buffer, fileName: string, existing: D
         to: precio,
         fromLabel: formatPrice(current.precio),
         toLabel: formatPrice(precio),
+      });
+    }
+    if (costo != null && (current.costo_manual == null || !moneyEqual(current.costo_manual, costo))) {
+      changes.push({
+        field: "costo",
+        from: current.costo_manual ?? null,
+        to: costo,
+        fromLabel: current.costo_manual == null ? "—" : formatPrice(current.costo_manual),
+        toLabel: formatPrice(costo),
       });
     }
 
@@ -456,6 +487,27 @@ export async function applyImportPreview(
     const { error } = await supabase.from("products").upsert(batch, { onConflict: "codigo_odoo" });
     if (error) {
       throw error;
+    }
+  }
+
+  const ahora = new Date().toISOString();
+  const conCosto = [
+    ...preview.created.filter((item) => item.costo != null),
+    ...preview.updated.filter((item) => item.costo != null && item.changes.some((change) => change.field === "costo")),
+  ];
+  for (let i = 0; i < conCosto.length; i += 20) {
+    const batch = conCosto.slice(i, i + 20);
+    const resultados = await Promise.all(
+      batch.map((item) =>
+        supabase
+          .from("products")
+          .update({ costo_manual: item.costo, costo_manual_fuente: "odoo", costo_manual_en: ahora })
+          .eq("codigo_odoo", item.codigo)
+      )
+    );
+    const fallo = resultados.find((resultado) => resultado.error);
+    if (fallo?.error) {
+      throw fallo.error;
     }
   }
 

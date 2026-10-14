@@ -8,6 +8,7 @@ import {
   type PendientesInput,
 } from "../lib/facturas-pendientes";
 import type { FacturaLinea } from "../lib/facturas-shared";
+import { elegirCosto } from "../lib/admin-catalog-products-shared";
 import { buildImportPreview } from "../lib/catalog-import";
 import { productosACsv } from "../lib/catalog-import-http";
 import { documentosDesdeValor } from "../lib/factura-documentos";
@@ -509,7 +510,61 @@ const vistaCatalogo = buildImportPreview(Buffer.from(csvCatalogo), "productos.cs
   { id: "p-b2", codigo_odoo: "B2", codigo_barras: null, nombre: "Pan", marca: null, categoria: "Panadería", precio: 55 },
 ]);
 assert(vistaCatalogo.created.length === 1 && vistaCatalogo.created[0].nombre === "Agua, 16oz", "Rodrigo crea productos desde JSON, con comas en el nombre");
+assert(vistaCatalogo.created[0]?.costo == null, "sin costo en el JSON no se propone un costo manual");
 assert(vistaCatalogo.updated[0]?.changes.map((change) => change.field).join() === "precio", "un código existente solo cambia lo que difiere");
 assert(vistaCatalogo.invalid[0]?.codigo === "C3", "sin precio no se importa");
+
+const csvCosto = productosACsv([
+  { codigo: "A1", nombre: "Agua, 16oz", precio: 25, categoria: "Bebidas", costo: 10 },
+  { codigo: "B2", nombre: "Pan", precio: 55, categoria: "Panadería" },
+  { codigo: "D4", nombre: "Jugo", precio: 40, categoria: "Bebidas", costo: "abc" },
+]);
+const vistaCosto = buildImportPreview(Buffer.from(csvCosto), "productos.csv", [
+  { id: "p-a1", codigo_odoo: "A1", codigo_barras: null, nombre: "Agua, 16oz", marca: null, categoria: "Bebidas", precio: 25, costo_manual: 9 },
+  { id: "p-b2", codigo_odoo: "B2", codigo_barras: null, nombre: "Pan", marca: null, categoria: "Panadería", precio: 55, costo_manual: 8 },
+]);
+assert(
+  vistaCosto.updated.find((item) => item.codigo === "A1")?.changes.some((change) => change.field === "costo" && change.to === 10),
+  "un costo distinto se propone como cambio"
+);
+assert(
+  vistaCosto.unchanged.some((item) => item.codigo === "B2") && !vistaCosto.updated.some((item) => item.codigo === "B2"),
+  "omitir el costo no toca el costo manual"
+);
+assert(vistaCosto.invalid.some((item) => item.codigo === "D4"), "un costo que no es número invalida la fila");
+
+const mismoCosto = buildImportPreview(
+  Buffer.from(productosACsv([{ codigo: "A1", nombre: "Agua, 16oz", precio: 25, categoria: "Bebidas", costo: 9 }])),
+  "productos.csv",
+  [{ id: "p-a1", codigo_odoo: "A1", codigo_barras: null, nombre: "Agua, 16oz", marca: null, categoria: "Bebidas", precio: 25, costo_manual: 9 }]
+);
+assert(mismoCosto.unchanged.length === 1 && mismoCosto.updated.length === 0, "el mismo costo no refresca la fecha");
+
+const vistaOdoo = buildImportPreview(
+  Buffer.from("codigo,nombre,precio,categoria,standard_price\nE5,Cafe,30,Bebidas,7.5\n"),
+  "odoo.csv",
+  []
+);
+assert(vistaOdoo.created[0]?.costo === 7.5, "standard_price de Odoo se lee como costo");
+
+const costoBase = {
+  facturaCosto: 12,
+  facturaEn: "2026-10-14T18:00:00Z",
+  manualCosto: 10,
+  manualEn: "2026-10-14T15:00:00.000Z",
+  manualFuente: "odoo" as const,
+};
+assert(elegirCosto(costoBase).fuente === "factura", "la factura más nueva gana");
+assert(elegirCosto({ ...costoBase, manualEn: "2026-10-14T20:00:00.000Z" }).fuente === "odoo", "el costo manual más nuevo gana");
+assert(elegirCosto({ ...costoBase, manualEn: "2026-10-14T18:00:00.000Z" }).fuente === "factura", "en empate queda la factura");
+assert(
+  elegirCosto({ ...costoBase, facturaEn: "2026-10-14", manualEn: "2026-10-14T15:00:00-04:00" }).fuente === "odoo",
+  "un costo manual del mismo día, después de medianoche, gana sobre una fecha de factura"
+);
+assert(
+  elegirCosto({ facturaCosto: null, facturaEn: null, manualCosto: 10, manualEn: "2026-10-14T15:00:00Z", manualFuente: "admin" }).fuente === "admin",
+  "solo el costo manual se muestra"
+);
+assert(elegirCosto({ ...costoBase, manualCosto: null }).fuente === "factura", "sin costo manual queda el de la factura");
 
 console.log("facturas ok");

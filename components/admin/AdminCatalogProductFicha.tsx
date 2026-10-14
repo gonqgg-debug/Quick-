@@ -10,6 +10,8 @@ import { leerListaProductos } from "@/components/admin/catalogo/lista-guardada";
 import { EstadoProducto, FotoProducto, MargenProducto, lineaSecundaria } from "@/components/admin/catalogo/producto-ui";
 import { Aviso, BotonPrincipal, BotonSecundario, Dato, Seccion, fechaCorta } from "@/components/admin/facturas/ui";
 import {
+  elegirCosto,
+  etiquetaCostoFuente,
   formatoMargen,
   isUncategorized,
   margenDe,
@@ -157,6 +159,7 @@ function Editor({
   const [categoriaNueva, setCategoriaNueva] = useState("");
   const [categoriaModo, setCategoriaModo] = useState<"select" | "nueva">("select");
   const [precio, setPrecio] = useState(String(product.precio));
+  const [costoManual, setCostoManual] = useState(product.costoManual == null ? "" : String(product.costoManual));
   const [activo, setActivo] = useState(product.activo);
   const [fotoUrl, setFotoUrl] = useState(product.fotoUrl);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -170,6 +173,8 @@ function Editor({
   const categoriaResuelta = categoriaModo === "nueva" ? categoriaNueva.trim() : categoria.trim();
   const categoriaOriginal = isUncategorized(product.categoria) ? "" : product.categoria;
   const precioNumero = parsePrice(precio);
+  const costoNumero = costoManual.trim() === "" ? null : parsePrice(costoManual);
+  const costoDistinto = !mismoDinero(costoNumero, product.costoManual) || (costoManual.trim() !== "" && costoNumero == null);
   const dirty =
     Boolean(imageFile) ||
     nombre.trim() !== product.nombre.trim() ||
@@ -177,7 +182,8 @@ function Editor({
     descripcion.trim() !== (product.descripcion ?? "") ||
     categoriaResuelta !== categoriaOriginal ||
     (precioNumero == null ? precio.trim() !== String(product.precio) : precioNumero !== product.precio) ||
-    activo !== product.activo;
+    activo !== product.activo ||
+    costoDistinto;
 
   useEffect(() => {
     return () => {
@@ -283,6 +289,10 @@ function Editor({
       setError("Precio inválido");
       return;
     }
+    if (costoManual.trim() && costoNumero == null) {
+      setError("Costo inválido");
+      return;
+    }
     if (product.activo && !activo && !window.confirm("Este producto dejará de verse en el catálogo público. ¿Desactivar?")) {
       return;
     }
@@ -317,6 +327,9 @@ function Editor({
       if (precioNumero !== product.precio) {
         patch.precio = precioNumero;
       }
+      if (!mismoDinero(costoNumero, product.costoManual)) {
+        patch.costo = costoNumero;
+      }
       if (activo !== product.activo) {
         patch.activo = activo;
       }
@@ -347,7 +360,14 @@ function Editor({
   }
 
   const preview = imagePreview || fotoUrl;
-  const margenVista = margenDe(precioNumero ?? product.precio, product.costo);
+  const costoVigente = elegirCosto({
+    facturaCosto: product.costoFactura,
+    facturaEn: product.costoFacturaClave ?? product.costoFacturaEn,
+    manualCosto: costoNumero,
+    manualEn: costoNumero == null ? null : mismoDinero(costoNumero, product.costoManual) ? product.costoManualEn : new Date().toISOString(),
+    manualFuente: costoNumero == null ? null : mismoDinero(costoNumero, product.costoManual) ? product.costoManualFuente : "admin",
+  });
+  const margenVista = margenDe(precioNumero ?? product.precio, costoManual.trim() && costoNumero == null ? product.costo : costoVigente.costo);
   const compra = detalle.compra;
 
   return (
@@ -487,11 +507,41 @@ function Editor({
             </span>
           </label>
           <dl className="contents">
-            <Dato label="Último costo" value={product.costo == null ? "Sin costo" : formatPrice(product.costo)} strong />
+            <Dato
+              label="Costo en uso"
+              value={
+                costoVigente.costo == null
+                  ? "Sin costo"
+                  : `${formatPrice(costoVigente.costo)}${costoVigente.fuente ? ` · ${etiquetaCostoFuente(costoVigente.fuente)}` : ""}`
+              }
+              strong
+            />
             <Dato label="Margen" value={margenVista == null ? "Sin costo" : formatoMargen(margenVista)} strong />
           </dl>
+          <label className={adminLabelClass}>
+            Costo manual
+            <span className="relative mt-1.5 block">
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-semibold" style={{ color: brand.orange }}>
+                RD$
+              </span>
+              <AdminInput
+                bare
+                className="pl-12 font-semibold tabular-nums"
+                inputMode="decimal"
+                value={costoManual}
+                placeholder="Vacío para quitarlo"
+                onChange={(event) => {
+                  setCostoManual(event.target.value);
+                  setSaved(false);
+                }}
+              />
+            </span>
+          </label>
         </div>
-        <p className="mt-3 text-sm text-brand-muted">El costo sale de la última compra ligada. No se edita aquí.</p>
+        <p className="mt-3 text-sm text-brand-muted">
+          Se muestra el más reciente entre la factura
+          {product.costoFactura == null ? "" : ` (${formatPrice(product.costoFactura)}${product.costoFacturaEn ? `, ${fechaCorta(product.costoFacturaEn)}` : ""})`} y este costo manual. Guardarlo aquí deja la fuente como manual.
+        </p>
       </Seccion>
 
       <Seccion id="compras" titulo="Compras" extra={compra ? <Link href={`/admin/facturas/${compra.facturaId}`} className="text-sm font-bold" style={{ color: brand.blue }}>Ver factura</Link> : null}>
@@ -500,9 +550,9 @@ function Editor({
         ) : (
           <div className="space-y-4">
             <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Dato label="Compra del costo" value={compra ? fechaCorta(compra.fecha) : fechaCorta(product.costoEn)} />
+              <Dato label="Última compra" value={compra ? fechaCorta(compra.fecha) : fechaCorta(product.costoFacturaEn)} />
               <Dato label="Proveedor" value={compra?.proveedor ?? null} />
-              <Dato label="Costo" value={product.costo == null ? "Sin costo" : formatPrice(product.costo)} strong />
+              <Dato label="Costo de la factura" value={product.costoFactura == null ? "Sin costo" : formatPrice(product.costoFactura)} strong />
             </dl>
             {product.proveedores.length > 0 ? (
               <ul className="divide-y divide-[#E7EBE4] border-t border-[#E7EBE4]">
@@ -535,6 +585,13 @@ function Editor({
       </Seccion>
     </div>
   );
+}
+
+function mismoDinero(left: number | null, right: number | null): boolean {
+  if (left == null || right == null) {
+    return left == null && right == null;
+  }
+  return Math.round(left * 100) === Math.round(right * 100);
 }
 
 function NavButton({ label, tecla, disabled, onClick }: { label: string; tecla: string; disabled: boolean; onClick: () => void }) {

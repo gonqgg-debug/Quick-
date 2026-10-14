@@ -6,7 +6,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase";
 /** Lo que el agente ve de cada lista; el total completo va en totales. */
 const MUESTRA = 50;
 
-const COLUMNAS = ["codigo", "nombre", "precio", "categoria", "marca", "codigo de barras"] as const;
+const COLUMNAS = ["codigo", "nombre", "precio", "categoria", "marca", "codigo de barras", "costo"] as const;
 
 function csvCelda(value: unknown): string {
   const text = value == null ? "" : String(value);
@@ -24,6 +24,7 @@ export function productosACsv(productos: unknown[]): string {
       item.categoria,
       item.marca,
       item.codigoBarras ?? item.barras,
+      item.costo ?? item.cost,
     ]
       .map(csvCelda)
       .join(",");
@@ -69,7 +70,7 @@ async function leerEntrada(request: NextRequest): Promise<Entrada> {
     buffer = Buffer.from(body.base64.replace(/^data:[^,]*,/, ""), "base64");
   }
   if (!buffer) {
-    throw new Error("Manda productos: [{ codigo, nombre, precio, categoria }], csv, o base64 con nombre");
+    throw new Error("Manda productos: [{ codigo, nombre, precio, categoria, costo }], csv, o base64 con nombre");
   }
   if (buffer.length > IMPORT_MAX_BYTES) {
     throw new Error("El archivo pasa de 4 MB");
@@ -110,7 +111,7 @@ export function catalogoError(error: unknown, fallback: string, logLabel: string
 
 /**
  * Rodrigo importa productos al catálogo con el mismo lector que el admin: código Odoo, nombre, precio y categoría
- * son obligatorios. Sin confirmar solo muestra qué cambiaría. Nunca borra: lo que no viene en el archivo se queda igual.
+ * son obligatorios. costo es opcional: si viene, se guarda como costo manual con fuente odoo y la fecha de esta importación. Si no viene, el costo manual no se toca. Sin confirmar solo muestra qué cambiaría. Nunca borra: lo que no viene en el archivo se queda igual.
  */
 export async function handleImportarCatalogo(request: NextRequest, actor: Actor) {
   const entrada = await leerEntrada(request);

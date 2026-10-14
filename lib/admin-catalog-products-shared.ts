@@ -13,6 +13,9 @@ export type AdminCatalogProveedor = {
   ultimaCompra: string | null;
 };
 
+export type CostoManualFuente = "odoo" | "admin";
+export type CostoFuente = "factura" | CostoManualFuente;
+
 export type AdminCatalogProduct = {
   id: string;
   nombre: string;
@@ -20,8 +23,18 @@ export type AdminCatalogProduct = {
   marca: string | null;
   categoria: string;
   precio: number;
+  /** Costo que se muestra: el más reciente entre la factura y el costo manual. */
   costo: number | null;
   costoEn: string | null;
+  costoFuente: CostoFuente | null;
+  costoFactura: number | null;
+  /** Fecha de la factura, para mostrarla. */
+  costoFacturaEn: string | null;
+  /** Instante con el que se compara el costo manual. Puede incluir la hora de recibido. */
+  costoFacturaClave: string | null;
+  costoManual: number | null;
+  costoManualEn: string | null;
+  costoManualFuente: CostoManualFuente | null;
   margen: number | null;
   proveedores: AdminCatalogProveedor[];
   codigoOdoo: string | null;
@@ -101,6 +114,52 @@ export function shortOdooCode(value: string): string {
     return trimmed;
   }
   return `…${trimmed.slice(-8)}`;
+}
+
+export function etiquetaCostoFuente(fuente: CostoFuente | null): string {
+  if (fuente === "factura") {
+    return "Factura";
+  }
+  if (fuente === "odoo") {
+    return "Odoo";
+  }
+  if (fuente === "admin") {
+    return "Manual";
+  }
+  return "";
+}
+
+function instanteCosto(value: string | null): number {
+  if (!value) {
+    return Number.NEGATIVE_INFINITY;
+  }
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value) ? Date.parse(`${value}T00:00:00-04:00`) : Date.parse(value);
+  return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
+}
+
+/** El costo que se muestra es el que tiene la fecha más nueva. En empate queda el de la factura. */
+export function elegirCosto(input: {
+  facturaCosto: number | null;
+  facturaEn: string | null;
+  manualCosto: number | null;
+  manualEn: string | null;
+  manualFuente: CostoManualFuente | null;
+}): { costo: number | null; en: string | null; fuente: CostoFuente | null } {
+  const factura = input.facturaCosto == null ? null : { costo: input.facturaCosto, en: input.facturaEn, fuente: "factura" as const };
+  const manual =
+    input.manualCosto == null || input.manualFuente == null
+      ? null
+      : { costo: input.manualCosto, en: input.manualEn, fuente: input.manualFuente };
+  if (!factura) {
+    return manual ? { costo: manual.costo, en: manual.en, fuente: manual.fuente } : { costo: null, en: null, fuente: null };
+  }
+  if (!manual) {
+    return { costo: factura.costo, en: factura.en, fuente: factura.fuente };
+  }
+  if (instanteCosto(manual.en) > instanteCosto(factura.en)) {
+    return { costo: manual.costo, en: manual.en, fuente: manual.fuente };
+  }
+  return { costo: factura.costo, en: factura.en, fuente: factura.fuente };
 }
 
 /** (precio − costo) / precio. Null si no hay costo o el precio no alcanza para un margen. */
