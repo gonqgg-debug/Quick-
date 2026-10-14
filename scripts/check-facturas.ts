@@ -1,4 +1,5 @@
-import { dueDateFromCredit, parseFormaPago } from "../lib/admin-compras-shared";
+import { dueDateFromCredit, parseFormaPago, saldoCompra, summarizePendientes } from "../lib/admin-compras-shared";
+import { casosRecordatorio, diferenciaMontos, pendientesDe, type PendientesInput } from "../lib/facturas-pendientes";
 import { documentosDesdeValor } from "../lib/factura-documentos";
 import { revisarNcf } from "../lib/ncf";
 import {
@@ -16,7 +17,9 @@ import {
   PROPUESTA_CONFIANZA,
   PROPUESTA_UMBRAL,
   cantidadRecibidaDe,
+  confianzaPago,
   confianzaTexto,
+  diferenciaPagos,
   diferenciaRecepcion,
   leerRecepcion,
   normalizarDescripcion,
@@ -234,6 +237,82 @@ try {
 assert(todasFaltante, "los faltantes van por línea");
 assert(FACTURAS_AGENT_USO.includes("/recepcion") && FACTURAS_AGENT_USO.includes("propuesta"), "el texto de uso explica recepción y propuestas");
 
+const pagoBase = { total: 1500, monto: 1500, diasDeDiferencia: 0, proveedor: "Distribuidora Rica SRL", concepto: "FACTURA RICA", referencia: null };
+assert(confianzaPago(pagoBase) === 100, "mismo monto, mismo día y el concepto nombra al proveedor");
+assert(confianzaPago({ ...pagoBase, concepto: "PAGO VARIOS" }) === 85, "sin el nombre del proveedor baja a 85");
+assert(confianzaPago({ ...pagoBase, concepto: "PAGO VARIOS", monto: 1504, diasDeDiferencia: 1 }) === 70, "a RD$ 4 y un día queda en 70");
+assert(confianzaPago({ ...pagoBase, monto: 1506 }) === null, "a más de RD$ 5 no es el pago");
+assert(confianzaPago({ ...pagoBase, diasDeDiferencia: 2 }) === null, "a dos días no es el pago");
+assert(confianzaPago({ ...pagoBase, concepto: "SRL DISTRIBUIDORA", monto: 1500 }) === 85, "palabras genéricas del nombre no cuentan");
+assert(diferenciaPagos(1500, []) === null, "sin pagos no hay diferencia");
+assert(diferenciaPagos(1500, [{ monto: 1000 }, { monto: 500 }]) === 0, "dos pagos pueden sumar el total");
+assert(diferenciaPagos(1500, [{ monto: 1000 }]) === 500, "falta lo que no se ligó");
+
+assert(leerCamposFactura({ tipoDocumento: "nota_credito", facturaOrigen: "ABC-1" }, "create").campos.facturaOrigen === "ABC-1", "la nota manda facturaOrigen");
+assert(leerCamposFactura({ factura_origen_id: null }, "patch").campos.facturaOrigen === null, "facturaOrigen null la desliga");
+assert(saldoCompra(1500, 500) === 1000, "la nota se resta del saldo");
+assert(saldoCompra(1500, 2000) === 0, "el saldo nunca queda negativo");
+const resumenCompras = summarizePendientes([{ pagado: false, monto: 1500, notasCredito: 500, dueDate: "2026-01-01" }], "2026-02-01");
+assert(resumenCompras.totalPendiente === 1000 && resumenCompras.vencidas === 1000, "cuentas por pagar usan el saldo");
+
+const pendienteBase: PendientesInput = {
+  problema: false,
+  problemaDueno: null,
+  problemaDesde: null,
+  problemaFalta: null,
+  posibleDuplicado: false,
+  duplicadoReferencia: null,
+  preguntasAbiertas: 0,
+  estado: "verificada",
+  esCompraPersonal: false,
+  moneda: "DOP",
+  tieneFoto: true,
+  tipoDocumento: "factura",
+  facturaOrigenId: null,
+  fechaVencimiento: null,
+  subtotal: 1000,
+  descuentoTotal: 0,
+  itbisTotal: 180,
+  otrosCargos: 0,
+  total: 1180,
+  recepcion: { lineas: 2, sinConfirmar: 0, faltantes: 0, diferencia: 0 },
+  lineasSinCatalogo: 0,
+  validacionesConDiferencia: 0,
+  pagosCandidatos: 0,
+  pagosDiferencia: null,
+};
+const opciones = { hoy: "2026-10-14", formatDesde: (value: string | null) => value ?? "" };
+assert(diferenciaMontos(pendienteBase) === 0, "subtotal más ITBIS da el total");
+assert(pendientesDe(pendienteBase, opciones).length === 0, "una factura completa no tiene pendientes");
+const vence = pendientesDe({ ...pendienteBase, fechaVencimiento: "2026-10-16" }, opciones);
+assert(vence.length === 1 && vence[0].id === "vencimiento" && vence[0].dueno === "fred" && !vence[0].grave, "vence en 2 días le toca a Fred");
+assert(pendientesDe({ ...pendienteBase, fechaVencimiento: "2026-10-20" }, opciones).length === 0, "a 6 días todavía no avisa");
+assert(pendientesDe({ ...pendienteBase, fechaVencimiento: "2026-10-10" }, opciones)[0]?.grave === true, "vencida es grave");
+assert(pendientesDe({ ...pendienteBase, fechaVencimiento: "2026-10-10", estado: "conciliada" }, opciones).length === 0, "conciliada no avisa");
+assert(pendientesDe({ ...pendienteBase, fechaVencimiento: "2026-10-10", pagosDiferencia: 0 }, opciones).length === 0, "pagada en caja no avisa el vencimiento");
+assert(pendientesDe({ ...pendienteBase, pagosCandidatos: 2 }, opciones)[0]?.id === "pago_candidato", "avisa a Fred de pagos para ligar");
+assert(pendientesDe({ ...pendienteBase, pagosDiferencia: 80 }, opciones)[0]?.id === "pago_diferencia", "avisa si lo ligado no cuadra");
+assert(pendientesDe({ ...pendienteBase, tipoDocumento: "nota_credito" }, opciones)[0]?.id === "nota_origen", "la nota sin original es pendiente");
+assert(pendientesDe({ ...pendienteBase, lineasSinCatalogo: 1 }, opciones)[0]?.dueno === "phillip", "el catálogo le toca a Phillip");
+assert(pendientesDe({ ...pendienteBase, estado: "recibida", recepcion: { lineas: 2, sinConfirmar: 2, faltantes: 0, diferencia: 0 } }, opciones)[0]?.dueno === "rodrigo", "la recepción le toca a Rodrigo");
+
+const ahora = { hoy: "2026-10-14", ms: Date.parse("2026-10-14T12:00:00.000Z") };
+const recordatorioBase = {
+  estado: "recibida" as const,
+  esCompraPersonal: false,
+  tipoDocumento: "factura" as const,
+  recibidoEn: "2026-10-13T11:00:00.000Z",
+  lineasSinRecepcion: 3,
+  venceSinPagar: null,
+};
+assert(casosRecordatorio(recordatorioBase, ahora)[0]?.caso === "sin_recepcion", "más de 24 horas sin recepción abre caso");
+assert(casosRecordatorio({ ...recordatorioBase, recibidoEn: "2026-10-13T13:00:00.000Z" }, ahora).length === 0, "menos de 24 horas espera");
+assert(casosRecordatorio({ ...recordatorioBase, esCompraPersonal: true }, ahora).length === 0, "la compra personal no necesita recepción");
+const venceCaso = casosRecordatorio({ ...recordatorioBase, lineasSinRecepcion: 0, estado: "verificada", venceSinPagar: "2026-10-17" }, ahora);
+assert(venceCaso.length === 1 && venceCaso[0].caso === "vence:2026-10-17" && venceCaso[0].dueno === "fred", "vence en 3 días abre caso de Fred");
+assert(casosRecordatorio({ ...recordatorioBase, lineasSinRecepcion: 0, venceSinPagar: "2026-10-18" }, ahora).length === 0, "a 4 días todavía no");
+
+assert(FACTURAS_AGENT_USO.includes("facturaOrigen") && FACTURAS_AGENT_USO.includes("/api/agent/pendientes"), "el texto de uso explica notas y pendientes");
 assert(FACTURAS_AGENT_ENDPOINTS.length === 13, "el directorio del agente lista las rutas de facturas");
 assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path === "/api/agent/presentaciones"), "hay una ruta para guardar presentaciones");
 assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path.includes("documentos")), "hay una ruta para subir la foto");

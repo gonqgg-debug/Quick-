@@ -295,12 +295,31 @@ export const OPERACION_AGENT_ENDPOINTS = [
   {
     method: "POST",
     path: "/api/agent/facturas/{id}/verificacion",
-    describe: "Boris publica resultado cuadra, falta o diferencia, con RNC, NCF y los montos de factura, sistema, caja y DGII. Solo él deja la etapa en verificada.",
+    describe:
+      "Boris publica resultado cuadra, falta o diferencia, con RNC, NCF y los montos de factura, sistema, caja y DGII. Solo él deja la etapa en verificada. En una nota de crédito, cuadra descuenta su total de la cuenta por pagar de la factura original (una sola vez); si el saldo llega a cero, la cuenta queda pagada. La original tiene que estar verificada antes.",
   },
   {
     method: "POST",
     path: "/api/agent/facturas/{id}/conciliacion",
-    describe: "Fred publica pagada, vencida_sin_pagar, pagada_sin_movimiento o falta_factura, con medio banco, caja o cardnet. Solo él deja la etapa en conciliada.",
+    describe:
+      "Fred publica pagada, vencida_sin_pagar, pagada_sin_movimiento o falta_factura, con medio banco, caja o cardnet. Solo él deja la etapa en conciliada. Con ledgerId (solo para pagada) liga esa salida de caja y toma de ella medio caja, fecha y monto si no los mandas.",
+  },
+  {
+    method: "POST",
+    path: "/api/agent/facturas/{id}/pagos",
+    describe:
+      "Fred liga una salida de caja a la factura sin cerrarla todavía. JSON: ledgerId. La factura trae pagosCandidatos (salidas en DOP a ±1 día y ±RD$ 5 del total, con confianza) y pagosDiferencia (total menos lo ligado). Un movimiento paga una sola factura.",
+  },
+  {
+    method: "DELETE",
+    path: "/api/agent/facturas/{id}/pagos/{pagoId}",
+    describe: "Fred quita un pago mal ligado. No se puede después de conciliada.",
+  },
+  {
+    method: "GET",
+    path: "/api/agent/pendientes?fecha=YYYY-MM-DD&dueno=",
+    describe:
+      "Lo que falta en cada factura sin conciliar, con dueño (rodrigo, phillip, boris o fred; null es del admin). Con dueno=fred solo trae lo de Fred. fecha cambia el día contra el que se cuentan los vencimientos. No incluye pagos candidatos: esos salen en la factura.",
   },
   {
     method: "GET",
@@ -315,7 +334,8 @@ export const OPERACION_AGENT_ENDPOINTS = [
   {
     method: "GET",
     path: "/api/agent/excepciones",
-    describe: "Casos abiertos con dueño, desde cuándo y qué falta.",
+    describe:
+      "Casos abiertos con dueño, desde cuándo y qué falta. Los que abre el recordatorio diario (8:00 a. m.) traen caso: sin_recepcion (Rodrigo, más de 24 horas sin confirmar la recepción) o vence:YYYY-MM-DD (Fred, cuenta por pagar que vence en 3 días o menos). No se repiten y se cierran solos cuando ya no aplican.",
   },
   {
     method: "POST",

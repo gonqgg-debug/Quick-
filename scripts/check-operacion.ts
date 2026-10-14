@@ -1,3 +1,4 @@
+import { AGENT_EVENT_TYPES } from "../lib/agent-events";
 import { parseVentaInput } from "../lib/admin-ventas";
 import { leerCamposFactura } from "../lib/facturas-shared";
 import {
@@ -69,5 +70,11 @@ try {
   ventaFutura = error instanceof Error && error.message === "La fecha no es válida";
 }
 assert(ventaFutura, "una venta futura no se guarda");
+
+assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.method === "POST" && item.path.endsWith("/pagos")), "el directorio lista cómo Fred liga pagos");
+assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.method === "DELETE" && item.path.includes("/pagos/")), "el directorio lista cómo Fred quita un pago");
+assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.path.startsWith("/api/agent/pendientes")), "el directorio lista los pendientes");
+assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.path.endsWith("/conciliacion") && item.describe.includes("ledgerId")), "la conciliación explica ledgerId");
+assert((AGENT_EVENT_TYPES as readonly string[]).includes("factura.recordatorio"), "el recordatorio se publica como evento");
 
 console.log("operacion ok");
