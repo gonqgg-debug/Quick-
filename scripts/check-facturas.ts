@@ -12,6 +12,15 @@ import {
   referenciaFactura,
   resolverUnidades,
   validacionesFiscales,
+  PROPUESTA_ACEPTAR_TODAS,
+  PROPUESTA_CONFIANZA,
+  PROPUESTA_UMBRAL,
+  cantidadRecibidaDe,
+  confianzaTexto,
+  diferenciaRecepcion,
+  leerRecepcion,
+  normalizarDescripcion,
+  resumenRecepcion,
 } from "../lib/facturas-shared";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -87,7 +96,7 @@ assert(leida.campos.estado === "registrada", "completa cuenta como registrada");
 assert(leida.campos.moneda === "DOP", "RD$ es DOP");
 assert(leida.campos.tipoDocumento === "nota_credito", "acepta nota de crédito");
 assert(leida.campos.total === 1234.5, "lee el monto con separador local");
-assert(FACTURA_ESTADOS.find((item) => item.id === "registrada")?.ayuda.includes("Ramón"), "registrada pide la respuesta de Ramón");
+assert(FACTURA_ESTADOS.find((item) => item.id === "registrada")?.ayuda.includes("Rodrigo"), "registrada pide la recepción de Rodrigo");
 
 const duplicado = buscarDuplicado(
   { proveedor: "Sol", ncf: "b0100000001", numeroFactura: "100", fechaEmision: "2026-09-20" },
@@ -180,7 +189,53 @@ assert(parseFormaPago("Transferencia") === "transferencia" && parseFormaPago("ch
 assert(dueDateFromCredit("2026-10-14", { tieneCredito: true, diasCredito: 30 }) === "2026-11-13", "30 días de crédito desde el 14 de octubre vencen el 13 de noviembre");
 assert(FACTURAS_AGENT_USO.includes("rnc_proveedor") && FACTURAS_AGENT_USO.includes("ticket"), "el texto de uso explica las validaciones automáticas y el ticket");
 
-assert(FACTURAS_AGENT_ENDPOINTS.length === 10, "el directorio del agente lista las rutas de facturas");
+assert(normalizarDescripcion("  CAFÉ Santo Domingo 1lb. ") === "cafe santo domingo 1lb", "la descripción se normaliza para el alias");
+assert(normalizarDescripcion("x") === null, "una descripción de una letra no sirve de alias");
+assert(confianzaTexto(0.62) === 74 && confianzaTexto(0.95) === 85, "la confianza por nombre se escala y nunca pasa de 85");
+assert(confianzaTexto(1) < PROPUESTA_ACEPTAR_TODAS && PROPUESTA_CONFIANZA.odoo >= PROPUESTA_ACEPTAR_TODAS, "aceptar todas toma Odoo, barras y alias, pero no texto");
+assert(PROPUESTA_UMBRAL === 70, "bajo 70 la línea queda para revisión");
+
+const faltante = { recepcion: "faltante" as const, cantidadComprada: 10, cantidadRecibida: 7, costoPorPresentacion: 120, totalLinea: 1200 };
+assert(diferenciaRecepcion(faltante) === 360, "3 cajas faltantes de 120 son 360");
+assert(diferenciaRecepcion({ ...faltante, costoPorPresentacion: null }) === 360, "sin costo por presentación usa el total de la línea");
+assert(diferenciaRecepcion({ ...faltante, recepcion: "regalo" }) === 0, "un regalo no suma diferencia");
+assert(diferenciaRecepcion({ ...faltante, recepcion: "pendiente" }) === null, "sin confirmar no hay diferencia todavía");
+const resumen = resumenRecepcion([
+  { recepcion: "completa", diferenciaRecepcion: 0 },
+  { recepcion: "faltante", diferenciaRecepcion: 360 },
+  { recepcion: "pendiente", diferenciaRecepcion: null },
+]);
+assert(resumen.sinConfirmar === 1 && resumen.faltantes === 1 && resumen.diferencia === 360, "el resumen cuenta pendientes, faltantes y la diferencia");
+
+const recibida = leerRecepcion({ lineas: [{ numeroLinea: 1, recepcion: "llegó" }, { numeroLinea: 2, recepcion: "faltante", cantidadRecibida: "3" }] });
+assert(recibida.lineas[0]?.recepcion === "completa" && recibida.lineas[1]?.cantidadRecibida === 3, "lee la recepción por línea");
+assert(leerRecepcion({ todas: "completa" }).todas === "completa", "todas: completa marca todo");
+let faltaSinCantidad = false;
+try {
+  cantidadRecibidaDe({ numeroLinea: 2, recepcion: "faltante", cantidadRecibida: null }, 10);
+} catch (error) {
+  faltaSinCantidad = error instanceof Error && error.message.includes("cantidadRecibida");
+}
+assert(faltaSinCantidad, "un faltante necesita cuántas llegaron");
+let faltaCompleta = false;
+try {
+  cantidadRecibidaDe({ numeroLinea: 2, recepcion: "faltante", cantidadRecibida: 10 }, 10);
+} catch {
+  faltaCompleta = true;
+}
+assert(faltaCompleta, "si llegaron todas no es faltante");
+assert(cantidadRecibidaDe({ numeroLinea: 1, recepcion: "completa", cantidadRecibida: null }, 10) === 10, "completa guarda la cantidad comprada");
+let todasFaltante = false;
+try {
+  leerRecepcion({ todas: "faltante" });
+} catch {
+  todasFaltante = true;
+}
+assert(todasFaltante, "los faltantes van por línea");
+assert(FACTURAS_AGENT_USO.includes("/recepcion") && FACTURAS_AGENT_USO.includes("propuesta"), "el texto de uso explica recepción y propuestas");
+
+assert(FACTURAS_AGENT_ENDPOINTS.length === 13, "el directorio del agente lista las rutas de facturas");
+assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path === "/api/agent/presentaciones"), "hay una ruta para guardar presentaciones");
 assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path.includes("documentos")), "hay una ruta para subir la foto");
 
 console.log("facturas ok");

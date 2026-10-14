@@ -1,5 +1,5 @@
-import { puedeRegistrar } from "@/lib/operacion-shared";
-import type { FacturaDetalle } from "@/lib/facturas-shared";
+import { motivoNoRegistrable, type RecepcionConteo } from "@/lib/operacion-shared";
+import { PROPUESTA_UMBRAL, formatMonto, resumenRecepcion, type FacturaDetalle } from "@/lib/facturas-shared";
 
 export type SeccionId = "datos" | "productos" | "equipo" | "validaciones" | "preguntas" | "notas" | "documento";
 
@@ -22,8 +22,14 @@ export function diferenciaMontos(factura: FacturaDetalle): number | null {
   return Math.abs(diferencia) >= 1 ? diferencia : 0;
 }
 
-export function faltaRespuestaTienda(factura: FacturaDetalle): boolean {
-  return factura.estado === "recibida" && !puedeRegistrar({ esCompraPersonal: factura.esCompraPersonal, confirmacionEn: factura.confirmacionEn });
+export function conteoRecepcion(factura: FacturaDetalle): RecepcionConteo {
+  const resumen = resumenRecepcion(factura.lineas);
+  return { esCompraPersonal: factura.esCompraPersonal, lineas: resumen.lineas, lineasSinRecepcion: resumen.sinConfirmar };
+}
+
+/** Null when Phillip can mark it registrada. */
+export function bloqueoRegistro(factura: FacturaDetalle): string | null {
+  return motivoNoRegistrable(conteoRecepcion(factura));
 }
 
 export type Pendiente = { id: string; texto: string; seccion: SeccionId; grave: boolean };
@@ -56,8 +62,34 @@ export function pendientesDe(factura: FacturaDetalle, formatDesde: (value: strin
       grave: false,
     });
   }
-  if (faltaRespuestaTienda(factura)) {
-    items.push({ id: "ramon", texto: "Falta la respuesta de Ramón para que Phillip la registre.", seccion: "equipo", grave: false });
+  const recepcion = resumenRecepcion(factura.lineas);
+  if (factura.estado === "recibida" && !factura.esCompraPersonal && recepcion.sinConfirmar > 0) {
+    items.push({
+      id: "recepcion",
+      texto:
+        recepcion.sinConfirmar === 1
+          ? "Rodrigo todavía no confirma la recepción de 1 línea."
+          : `Rodrigo todavía no confirma la recepción de ${recepcion.sinConfirmar} líneas.`,
+      seccion: "productos",
+      grave: false,
+    });
+  }
+  if (recepcion.faltantes > 0) {
+    items.push({
+      id: "faltantes",
+      texto: `${recepcion.faltantes === 1 ? "Una línea llegó incompleta" : `${recepcion.faltantes} líneas llegaron incompletas`}${recepcion.diferencia ? `: faltan ${formatMonto(recepcion.diferencia, factura.moneda)}` : ""}.`,
+      seccion: "productos",
+      grave: true,
+    });
+  }
+  const bajas = factura.lineas.filter((linea) => !linea.productoId && (!linea.propuesta || linea.propuesta.confianza < PROPUESTA_UMBRAL)).length;
+  if (bajas > 0) {
+    items.push({
+      id: "catalogo",
+      texto: bajas === 1 ? "Una línea no tiene producto del catálogo ni una propuesta confiable." : `${bajas} líneas no tienen producto del catálogo ni una propuesta confiable.`,
+      seccion: "productos",
+      grave: false,
+    });
   }
   if (!factura.tieneFoto) {
     items.push({ id: "foto", texto: "Falta la foto o el PDF original.", seccion: "documento", grave: false });

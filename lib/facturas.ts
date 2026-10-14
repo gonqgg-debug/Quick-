@@ -1,5 +1,6 @@
 import { dueDateFromCredit, type Proveedor } from "@/lib/admin-compras-shared";
 import { findProveedorParaFactura, getProveedorById } from "@/lib/admin-compras";
+import { aprenderAlias, aprenderVinculos, completarUnidades, lineasParaAceptar, proponerCatalogo, type Vinculo } from "@/lib/factura-catalogo";
 import { borrarArchivos, guardarDocumentos, type DocumentoEntrada } from "@/lib/factura-documentos";
 import {
   FACTURA_CONDICIONES,
@@ -8,11 +9,14 @@ import {
   FACTURA_ITBIS_LINEA,
   FACTURA_PRESENTACIONES,
   FACTURA_PREGUNTA_ESTADOS,
+  FACTURA_PROPUESTA_ORIGENES,
+  FACTURA_RECEPCIONES,
   FACTURA_RESULTADOS,
   FACTURA_TIPOS,
   FACTURA_VALIDACIONES,
   buscarDuplicado,
   completarValidaciones,
+  diferenciaRecepcion,
   explicacionDuplicado,
   facturaTieneIdentidad,
   isUuid,
@@ -43,7 +47,9 @@ import {
   type FacturaPregunta,
   type FacturaPreguntaInput,
   type FacturaPresentacion,
+  type FacturaPropuestaOrigen,
   type FacturaProveedorFicha,
+  type FacturaRecepcion,
   type FacturaResumen,
   type FacturaValidacion,
   type FacturaValidacionInput,
@@ -194,6 +200,8 @@ function mapLinea(row: Record<string, unknown>): FacturaLinea | null {
   if (!id || !estado || numeroLinea < 1) {
     return null;
   }
+  const recepcion: FacturaRecepcion = FACTURA_RECEPCIONES.find((item) => item.id === row.recepcion)?.id ?? "pendiente";
+  const cantidadRecibida = num(row.cantidad_recibida);
   return {
     id,
     numeroLinea,
@@ -222,7 +230,30 @@ function mapLinea(row: Record<string, unknown>): FacturaLinea | null {
     observacion: textOrNull(row.observacion, 1000),
     productoId: typeof row.producto_id === "string" && isUuid(row.producto_id) ? row.producto_id : null,
     productoCatalogo: null,
+    propuesta: propuestaDe(row),
+    recepcion,
+    recepcionLabel: labelOf(FACTURA_RECEPCIONES, recepcion),
+    cantidadRecibida,
+    recepcionPor: textOrNull(row.recepcion_por, 160),
+    recepcionEn: iso(row.recepcion_en),
+    diferenciaRecepcion: diferenciaRecepcion({
+      recepcion,
+      cantidadComprada: num(row.cantidad_comprada),
+      cantidadRecibida,
+      costoPorPresentacion: num(row.costo_por_presentacion),
+      totalLinea: num(row.total_linea),
+    }),
   };
+}
+
+function propuestaDe(row: Record<string, unknown>): FacturaLinea["propuesta"] {
+  const productoId = typeof row.propuesta_producto_id === "string" && isUuid(row.propuesta_producto_id) ? row.propuesta_producto_id : null;
+  const origen = FACTURA_PROPUESTA_ORIGENES.find((item) => item.id === row.propuesta_origen)?.id ?? null;
+  const confianza = num(row.propuesta_confianza);
+  if (!productoId || !origen || confianza == null || row.producto_id) {
+    return null;
+  }
+  return { productoId, confianza, origen: origen as FacturaPropuestaOrigen, origenLabel: labelOf(FACTURA_PROPUESTA_ORIGENES, origen), producto: null };
 }
 
 function mapValidacion(row: Record<string, unknown>): FacturaValidacion | null {
@@ -656,7 +687,8 @@ async function productoIdDeLinea(linea: FacturaLineaInput, actuales: Map<number,
   return buscarProductoCatalogo(linea.catalogo);
 }
 
-async function upsertLineas(id: string, lineas: FacturaLineaInput[], reemplazar: boolean): Promise<void> {
+/** Devuelve las líneas que llegaron con un producto elegido a propósito, para aprender el alias. */
+async function upsertLineas(id: string, lineas: FacturaLineaInput[], reemplazar: boolean): Promise<Vinculo[]> {
   const supabase = getSupabaseAdminClient();
   if (reemplazar) {
     if (!lineas.length) {
@@ -664,7 +696,7 @@ async function upsertLineas(id: string, lineas: FacturaLineaInput[], reemplazar:
       if (error) {
         throw error;
       }
-      return;
+      return [];
     }
     const numeros = lineas.map((linea) => linea.numeroLinea);
     const { error } = await supabase.from("factura_lineas").delete().eq("factura_id", id).not("numero_linea", "in", `(${numeros.join(",")})`);
@@ -673,7 +705,7 @@ async function upsertLineas(id: string, lineas: FacturaLineaInput[], reemplazar:
     }
   }
   if (!lineas.length) {
-    return;
+    return [];
   }
   const actuales = new Map<number, string | null>();
   const { data: existentes, error: existentesError } = await supabase.from("factura_lineas").select("numero_linea, producto_id").eq("factura_id", id);
@@ -686,16 +718,31 @@ async function upsertLineas(id: string, lineas: FacturaLineaInput[], reemplazar:
     actuales.set(numero, typeof productoId === "string" && isUuid(productoId) ? productoId : null);
   }
   const rows = [];
+  const vinculos: Vinculo[] = [];
   for (const linea of lineas) {
-    rows.push({
-      ...lineaRow(id, linea),
-      producto_id: await productoIdDeLinea(linea, actuales),
-    });
+    const productoId = await productoIdDeLinea(linea, actuales);
+    const row: Record<string, unknown> = { ...lineaRow(id, linea), producto_id: productoId };
+    if (productoId) {
+      Object.assign(row, SIN_PROPUESTA);
+    }
+    if (productoId && (linea.catalogo.accion === "id" || linea.catalogo.accion === "codigo")) {
+      vinculos.push({ descripcion: linea.descripcionOriginal ?? linea.productoNormalizado, productoId });
+    }
+    rows.push(row);
   }
   const { error } = await supabase.from("factura_lineas").upsert(rows, { onConflict: "factura_id,numero_linea" });
   if (error) {
     throw error;
   }
+  return vinculos;
+}
+
+const SIN_PROPUESTA = { propuesta_producto_id: null, propuesta_confianza: null, propuesta_origen: null };
+
+async function revisarCatalogo(id: string, vinculos: Vinculo[], actor: Actor): Promise<void> {
+  await aprenderVinculos(id, vinculos, actor);
+  await proponerCatalogo(id);
+  await completarUnidades(id);
 }
 
 async function savePreguntas(id: string, preguntas: FacturaPreguntaInput[]): Promise<void> {
@@ -823,7 +870,9 @@ export async function resumenFacturas(): Promise<FacturasResumen> {
 }
 
 async function adjuntarCatalogo(lineas: FacturaLinea[]): Promise<FacturaLinea[]> {
-  const ids = Array.from(new Set(lineas.map((linea) => linea.productoId).filter((id): id is string => Boolean(id))));
+  const ids = Array.from(
+    new Set(lineas.flatMap((linea) => [linea.productoId, linea.propuesta?.productoId ?? null]).filter((id): id is string => Boolean(id)))
+  );
   if (!ids.length) {
     return lineas;
   }
@@ -850,6 +899,7 @@ async function adjuntarCatalogo(lineas: FacturaLinea[]): Promise<FacturaLinea[]>
   return lineas.map((linea) => ({
     ...linea,
     productoCatalogo: linea.productoId ? porId.get(linea.productoId) ?? null : null,
+    propuesta: linea.propuesta ? { ...linea.propuesta, producto: porId.get(linea.propuesta.productoId) ?? null } : null,
   }));
 }
 
@@ -1003,10 +1053,11 @@ async function ultimaConciliacion(facturaId: string): Promise<FacturaConciliacio
   };
 }
 
-async function applyChildren(id: string, body: Record<string, unknown>, documentos: DocumentoEntrada[]): Promise<void> {
-  if (hasKey(body, ["lineas", "productos"])) {
+async function applyChildren(id: string, body: Record<string, unknown>, documentos: DocumentoEntrada[]): Promise<Vinculo[] | null> {
+  let vinculos: Vinculo[] | null = null;
+  if (hasKey(body, ["lineas", "productos"]) && (body.lineas ?? body.productos) !== undefined) {
     const lineas = leerLineas(body.lineas ?? body.productos);
-    await upsertLineas(id, lineas, body.reemplazarLineas === true || body.reemplazarProductos === true);
+    vinculos = await upsertLineas(id, lineas, body.reemplazarLineas === true || body.reemplazarProductos === true);
   }
   if (hasKey(body, ["validaciones"])) {
     for (const validacion of leerValidaciones(body.validaciones)) {
@@ -1019,6 +1070,7 @@ async function applyChildren(id: string, body: Record<string, unknown>, document
   if (documentos.length) {
     await guardarDocumentos(id, documentos);
   }
+  return vinculos;
 }
 
 async function exigirEtapa(id: string | null, estado: FacturaCampos["estado"], actor: Actor, personalNuevo: boolean | undefined): Promise<void> {
@@ -1026,17 +1078,25 @@ async function exigirEtapa(id: string | null, estado: FacturaCampos["estado"], a
     return;
   }
   let esCompraPersonal = personalNuevo === true;
-  let confirmacionEn: string | null = null;
+  let lineas = 0;
+  let lineasSinRecepcion = 0;
   if (id) {
     const supabase = getSupabaseAdminClient();
-    const { data, error } = await supabase.from("facturas").select("es_compra_personal, confirmacion_en").eq("id", id).maybeSingle();
-    if (error) {
-      throw error;
+    const [header, recepciones] = await Promise.all([
+      supabase.from("facturas").select("es_compra_personal").eq("id", id).maybeSingle(),
+      supabase.from("factura_lineas").select("recepcion").eq("factura_id", id),
+    ]);
+    if (header.error) {
+      throw header.error;
     }
-    esCompraPersonal = personalNuevo ?? data?.es_compra_personal === true;
-    confirmacionEn = iso(data?.confirmacion_en);
+    if (recepciones.error) {
+      throw recepciones.error;
+    }
+    esCompraPersonal = personalNuevo ?? header.data?.es_compra_personal === true;
+    lineas = recepciones.data?.length ?? 0;
+    lineasSinRecepcion = (recepciones.data ?? []).filter((row) => row.recepcion === "pendiente").length;
   }
-  validarCambioEstado({ actor, estado, esCompraPersonal, confirmacionEn });
+  validarCambioEstado({ actor, estado, esCompraPersonal, lineas, lineasSinRecepcion });
 }
 
 export async function createFactura(
@@ -1080,9 +1140,12 @@ export async function createFactura(
   }
   const id = String(data.id);
   try {
-    await applyChildren(id, { ...body, lineas: hasKey(body, ["lineas", "productos"]) ? body.lineas ?? body.productos : undefined }, documentos);
+    const vinculos = await applyChildren(id, { ...body, lineas: hasKey(body, ["lineas", "productos"]) ? body.lineas ?? body.productos : undefined }, documentos);
     await revisarDuplicado(id, estadoExplicito);
     await revisarProveedorYFiscal(id);
+    if (vinculos) {
+      await revisarCatalogo(id, vinculos, actor);
+    }
     await syncCounters(id);
   } catch (childError) {
     await borrarArchivosDeFactura(id);
@@ -1123,9 +1186,12 @@ export async function updateFactura(
       throw error;
     }
   }
-  await applyChildren(id, body, documentos);
+  const vinculos = await applyChildren(id, body, documentos);
   await revisarDuplicado(id, estadoExplicito);
   await revisarProveedorYFiscal(id);
+  if (vinculos) {
+    await revisarCatalogo(id, vinculos, actor);
+  }
   await syncCounters(id);
   const factura = await getFactura(id);
   if (!factura) {
@@ -1134,11 +1200,34 @@ export async function updateFactura(
   return factura;
 }
 
-export async function asignarProductoLinea(idOrClave: string, lineaId: string, productoId: unknown): Promise<FacturaDetalle> {
+export async function asignarProductoLinea(
+  idOrClave: string,
+  lineaId: string,
+  body: Record<string, unknown>,
+  actor: Actor = "admin"
+): Promise<FacturaDetalle> {
   if (!isUuid(lineaId)) {
     throw new Error("No encontramos esa línea");
   }
   const facturaId = await requireFacturaId(idOrClave);
+  const supabase = getSupabaseAdminClient();
+  const { data: linea, error: lineaError } = await supabase
+    .from("factura_lineas")
+    .select("id, descripcion_original, producto_normalizado, propuesta_producto_id")
+    .eq("id", lineaId)
+    .eq("factura_id", facturaId)
+    .maybeSingle();
+  if (lineaError) {
+    throw lineaError;
+  }
+  if (!linea) {
+    throw new Error("No encontramos esa línea");
+  }
+  const aceptar = body.aceptarPropuesta === true || body.aceptar === true;
+  const productoId = aceptar ? linea.propuesta_producto_id : body.productoId;
+  if (aceptar && !productoId) {
+    throw new Error("Esa línea no tiene propuesta para aceptar");
+  }
   let next: string | null = null;
   if (productoId != null && productoId !== "") {
     if (typeof productoId !== "string" || !isUuid(productoId.trim())) {
@@ -1146,13 +1235,21 @@ export async function asignarProductoLinea(idOrClave: string, lineaId: string, p
     }
     next = await buscarProductoCatalogo({ accion: "id", id: productoId.trim() });
   }
-  const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase.from("factura_lineas").update({ producto_id: next }).eq("id", lineaId).eq("factura_id", facturaId).select("id").maybeSingle();
+  const { error } = await supabase
+    .from("factura_lineas")
+    .update(next ? { producto_id: next, ...SIN_PROPUESTA } : { producto_id: null })
+    .eq("id", lineaId)
+    .eq("factura_id", facturaId);
   if (error) {
     throw error;
   }
-  if (!data) {
-    throw new Error("No encontramos esa línea");
+  const descripcion = textOrNull(linea.descripcion_original, 500) ?? textOrNull(linea.producto_normalizado, 200);
+  if (next) {
+    const proveedor = await loadResumen(facturaId);
+    await aprenderAlias(proveedor?.proveedorId ?? null, descripcion, next, actor);
+    await completarUnidades(facturaId);
+  } else {
+    await proponerCatalogo(facturaId);
   }
   await supabase.from("facturas").update({ updated_at: new Date().toISOString() }).eq("id", facturaId);
   const factura = await getFactura(facturaId);
@@ -1160,6 +1257,34 @@ export async function asignarProductoLinea(idOrClave: string, lineaId: string, p
     throw new Error("No encontramos esa factura");
   }
   return factura;
+}
+
+/** Acepta de una vez las propuestas de 90 o más: alias, código de barras y código de Odoo. */
+export async function aceptarPropuestas(idOrClave: string, body: Record<string, unknown>, actor: Actor): Promise<{ aceptadas: number; factura: FacturaDetalle }> {
+  if (actor !== "phillip" && actor !== "admin") {
+    throw new Error("Solo Phillip acepta las propuestas del catálogo");
+  }
+  const facturaId = await requireFacturaId(idOrClave);
+  const minimo = num(body.minimo) ?? 90;
+  const lineas = await lineasParaAceptar(facturaId, minimo);
+  const supabase = getSupabaseAdminClient();
+  const proveedorId = (await loadResumen(facturaId))?.proveedorId ?? null;
+  for (const linea of lineas) {
+    const { error } = await supabase.from("factura_lineas").update({ producto_id: linea.productoId, ...SIN_PROPUESTA }).eq("id", linea.id);
+    if (error) {
+      throw error;
+    }
+    await aprenderAlias(proveedorId, linea.descripcion, linea.productoId, actor);
+  }
+  if (lineas.length) {
+    await completarUnidades(facturaId);
+    await supabase.from("facturas").update({ updated_at: new Date().toISOString() }).eq("id", facturaId);
+  }
+  const factura = await getFactura(facturaId);
+  if (!factura) {
+    throw new Error("No encontramos esa factura");
+  }
+  return { aceptadas: lineas.length, factura };
 }
 
 export async function responderPregunta(idOrClave: string, preguntaId: string, body: Record<string, unknown>): Promise<FacturaDetalle> {

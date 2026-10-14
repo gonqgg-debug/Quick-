@@ -3,7 +3,7 @@ import { isMonthKey } from "@/lib/admin-parametros-shared";
 import { getTodosLosBalances } from "@/lib/caja";
 import { getFactura } from "@/lib/facturas";
 import type { FacturaDetalle } from "@/lib/facturas-shared";
-import { isUuid } from "@/lib/facturas-shared";
+import { cantidadRecibidaDe, isUuid, leerRecepcion } from "@/lib/facturas-shared";
 import { isDayKey, todayDayKey } from "@/lib/local-day";
 import { toMoney } from "@/lib/money";
 import {
@@ -128,6 +128,46 @@ export async function guardarConfirmacion(
   if (error) {
     throw error;
   }
+  return requireFactura(factura.id);
+}
+
+/** Rodrigo marca cada línea como completa, faltante o regalo según lo que dijo la tienda. */
+export async function guardarRecepcion(idOrClave: string, body: Record<string, unknown>, actor: Actor): Promise<FacturaDetalle> {
+  if (actor !== "rodrigo" && actor !== "admin") {
+    throw new Error("Solo Rodrigo confirma la recepción");
+  }
+  const factura = await requireFactura(idOrClave);
+  if (!factura.lineas.length) {
+    throw new Error("Esa factura todavía no tiene productos. Phillip tiene que extraerlos primero");
+  }
+  const { todas, lineas, por } = leerRecepcion(body);
+  const quien = por ?? (actor === "admin" ? "Admin" : "Rodrigo");
+  const ahora = new Date().toISOString();
+  const porNumero = new Map(factura.lineas.map((linea) => [linea.numeroLinea, linea]));
+  const entradas = todas
+    ? factura.lineas.map((linea) => ({ numeroLinea: linea.numeroLinea, recepcion: todas, cantidadRecibida: null }))
+    : lineas;
+  const supabase = getSupabaseAdminClient();
+  for (const entrada of entradas) {
+    const linea = porNumero.get(entrada.numeroLinea);
+    if (!linea) {
+      throw new Error(`La factura no tiene la línea ${entrada.numeroLinea}`);
+    }
+    const pendiente = entrada.recepcion === "pendiente";
+    const { error } = await supabase
+      .from("factura_lineas")
+      .update({
+        recepcion: entrada.recepcion,
+        cantidad_recibida: cantidadRecibidaDe(entrada, linea.cantidadComprada),
+        recepcion_por: pendiente ? null : quien,
+        recepcion_en: pendiente ? null : ahora,
+      })
+      .eq("id", linea.id);
+    if (error) {
+      throw error;
+    }
+  }
+  await supabase.from("facturas").update({ updated_at: ahora }).eq("id", factura.id);
   return requireFactura(factura.id);
 }
 

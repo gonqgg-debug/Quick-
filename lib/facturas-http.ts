@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { abrirDocumento, leerPeticionFactura } from "@/lib/factura-documentos";
+import { guardarPresentacion } from "@/lib/factura-catalogo";
 import {
+  aceptarPropuestas,
   asignarProductoLinea,
   createFactura,
   filtroDesdeParams,
@@ -19,6 +21,8 @@ import {
   FACTURA_MONEDAS,
   FACTURA_PRESENTACIONES,
   FACTURA_PREGUNTA_ESTADOS,
+  FACTURA_PROPUESTA_ORIGENES,
+  FACTURA_RECEPCIONES,
   FACTURA_RESULTADOS,
   FACTURA_TIPOS,
   FACTURA_DOCUMENTO_TIPOS,
@@ -26,6 +30,7 @@ import {
   FACTURA_VALIDACIONES_AUTOMATICAS,
   FACTURAS_AGENT_ENDPOINTS,
   FACTURAS_AGENT_USO,
+  PROPUESTA_UMBRAL,
 } from "@/lib/facturas-shared";
 
 function statusFor(message: string): number {
@@ -46,6 +51,7 @@ function statusFor(message: string): number {
     message.startsWith("Troy ") ||
     message.startsWith("Todavía ") ||
     message.startsWith("Cada ") ||
+    message.startsWith("En la línea") ||
     message.startsWith("El cuerpo")
   ) {
     return 400;
@@ -81,6 +87,9 @@ export function facturasVocabulario() {
     resultados: FACTURA_RESULTADOS,
     estadosPregunta: FACTURA_PREGUNTA_ESTADOS,
     validacionesAutomaticas: FACTURA_VALIDACIONES_AUTOMATICAS,
+    recepciones: FACTURA_RECEPCIONES,
+    propuestaOrigenes: FACTURA_PROPUESTA_ORIGENES,
+    propuestaUmbral: PROPUESTA_UMBRAL,
     tiposArchivo: FACTURA_DOCUMENTO_TIPOS,
     foto: "JPG, PNG, WebP o PDF. Hasta 4 MB por archivo. JSON: fotoBase64 o documentos[{ pagina, base64 }]. El ticket de pago va en documentos[{ tipo: \"ticket\", base64 }] o ticketBase64. Multipart: archivo en el campo foto, y el ticket en el campo ticket.",
     endpoints: FACTURAS_AGENT_ENDPOINTS,
@@ -202,13 +211,26 @@ export async function handleGetDocumento(idOrClave: string, documentoId: string)
   return documentoResponse(file);
 }
 
-export async function handleAsignarProducto(idOrClave: string, lineaId: string, request: NextRequest) {
-  const { body } = await leerPeticionFactura(request);
-  if (!("productoId" in body)) {
-    throw new Error("Manda productoId del catálogo, o null para quitarlo");
+export async function handleAsignarProducto(idOrClave: string, lineaId: string, request: NextRequest, actor: Actor = "admin") {
+  if (actor !== "phillip" && actor !== "admin") {
+    throw new Error("Solo Phillip elige el producto del catálogo");
   }
-  const factura = await asignarProductoLinea(idOrClave, lineaId, body.productoId);
+  const { body } = await leerPeticionFactura(request);
+  if (!("productoId" in body) && body.aceptarPropuesta !== true && body.aceptar !== true) {
+    throw new Error("Manda productoId del catálogo (null para quitarlo) o aceptarPropuesta: true");
+  }
+  const factura = await asignarProductoLinea(idOrClave, lineaId, body, actor);
   return NextResponse.json({ factura });
+}
+
+export async function handleAceptarPropuestas(idOrClave: string, request: NextRequest, actor: Actor) {
+  const { body } = await leerPeticionFactura(request).catch(() => ({ body: {} as Record<string, unknown> }));
+  return NextResponse.json(await aceptarPropuestas(idOrClave, body, actor));
+}
+
+export async function handleGuardarPresentacion(request: NextRequest, actor: Actor) {
+  const { body } = await leerPeticionFactura(request);
+  return NextResponse.json({ presentacion: await guardarPresentacion(body, actor) });
 }
 
 export async function handleAdminPatch(id: string, request: NextRequest) {

@@ -40,10 +40,10 @@ export function useFactura(id: string) {
     };
   }, [recargar]);
 
-  /** Sends a write under /api/admin/facturas/{id} and reloads the ficha. Throws the server message on failure. */
+  /** Sends a write under /api/admin/facturas/{id} (or to an absolute /api/ path) and reloads the ficha. Throws the server message on failure. */
   const enviar = useCallback<EnviarFactura>(
     async (path, method, body) => {
-      const response = await fetch(`/api/admin/facturas/${id}${path}`, {
+      const response = await fetch(path.startsWith("/api/") ? path : `/api/admin/facturas/${id}${path}`, {
         method,
         credentials: "include",
         headers: { "Content-Type": "application/json" },

@@ -7,6 +7,7 @@ import {
   puedeCambiarEtapa,
   puedeRegistrar,
   validarCambioEstado,
+  OPERACION_AGENT_ENDPOINTS,
 } from "../lib/operacion-shared";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -24,17 +25,19 @@ assert(puedeCambiarEtapa("fred", "conciliada"), "Fred marca conciliada");
 assert(!puedeCambiarEtapa("boris", "conciliada"), "Boris no marca conciliada");
 assert(puedeCambiarEtapa("phillip", "registrada"), "Phillip marca registrada");
 assert(puedeCambiarEtapa("fred", "falta_factura"), "Fred deja falta factura");
-assert(!puedeRegistrar({ esCompraPersonal: false, confirmacionEn: null }), "sin Ramón no se registra");
-assert(puedeRegistrar({ esCompraPersonal: false, confirmacionEn: "2026-10-01T12:00:00.000Z" }), "con Ramón sí se registra");
-assert(puedeRegistrar({ esCompraPersonal: true, confirmacionEn: null }), "la compra personal no espera a la tienda");
+assert(!puedeRegistrar({ esCompraPersonal: false, lineas: 3, lineasSinRecepcion: 1 }), "con una línea sin recepción no se registra");
+assert(puedeRegistrar({ esCompraPersonal: false, lineas: 3, lineasSinRecepcion: 0 }), "con todas las líneas confirmadas sí se registra");
+assert(!puedeRegistrar({ esCompraPersonal: false, lineas: 0, lineasSinRecepcion: 0 }), "sin productos no se registra");
+assert(puedeRegistrar({ esCompraPersonal: true, lineas: 0, lineasSinRecepcion: 0 }), "la compra personal no espera a la tienda");
 
 let bloqueada = false;
 try {
-  validarCambioEstado({ actor: "phillip", estado: "registrada", esCompraPersonal: false, confirmacionEn: null });
+  validarCambioEstado({ actor: "phillip", estado: "registrada", esCompraPersonal: false, lineas: 2, lineasSinRecepcion: 2 });
 } catch (error) {
-  bloqueada = error instanceof Error && error.message.includes("Ramón");
+  bloqueada = error instanceof Error && error.message.includes("Rodrigo todavía no confirma la recepción de 2 líneas");
 }
-assert(bloqueada, "Phillip no cierra registrada sin la respuesta");
+assert(bloqueada, "Phillip no cierra registrada sin la recepción");
+assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.path.endsWith("/recepcion")), "el directorio lista la recepción de Rodrigo");
 
 let aprobada = false;
 try {

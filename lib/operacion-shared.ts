@@ -55,22 +55,40 @@ export function puedeCambiarEtapa(actor: Actor, estado: FacturaEstado): boolean 
   return ETAPA_ACTORES[estado].includes(actor);
 }
 
-export function validarCambioEstado(input: {
-  actor: Actor;
-  estado: FacturaEstado;
+export type RecepcionConteo = {
   esCompraPersonal: boolean;
-  confirmacionEn: string | null;
-}): void {
+  /** Líneas de productos de la factura. */
+  lineas: number;
+  /** Líneas que Rodrigo todavía no marcó completa, faltante o regalo. */
+  lineasSinRecepcion: number;
+};
+
+export function validarCambioEstado(input: RecepcionConteo & { actor: Actor; estado: FacturaEstado }): void {
   if (!puedeCambiarEtapa(input.actor, input.estado)) {
     throw new Error(mensajePermisoEtapa(input.estado));
   }
   if (input.estado === "registrada" && !puedeRegistrar(input)) {
-    throw new Error("Phillip no puede dejarla registrada sin la respuesta de Ramón en la ficha");
+    throw new Error(motivoNoRegistrable(input) ?? "Phillip todavía no puede dejarla registrada");
   }
 }
 
-export function puedeRegistrar(input: { esCompraPersonal: boolean; confirmacionEn: string | null }): boolean {
-  return input.esCompraPersonal || Boolean(input.confirmacionEn);
+export function puedeRegistrar(input: RecepcionConteo): boolean {
+  return motivoNoRegistrable(input) === null;
+}
+
+export function motivoNoRegistrable(input: RecepcionConteo): string | null {
+  if (input.esCompraPersonal) {
+    return null;
+  }
+  if (input.lineas === 0) {
+    return "Phillip no puede dejarla registrada sin productos";
+  }
+  if (input.lineasSinRecepcion > 0) {
+    return input.lineasSinRecepcion === 1
+      ? "Phillip no puede dejarla registrada: Rodrigo todavía no confirma la recepción de 1 línea"
+      : `Phillip no puede dejarla registrada: Rodrigo todavía no confirma la recepción de ${input.lineasSinRecepcion} líneas`;
+  }
+  return null;
 }
 
 function mensajePermisoEtapa(estado: FacturaEstado): string {
@@ -259,7 +277,13 @@ export const OPERACION_AGENT_ENDPOINTS = [
   {
     method: "POST",
     path: "/api/agent/facturas/{id}/confirmacion",
-    describe: "Rodrigo guarda la respuesta de Ramón: texto, confirmadoPor y fecha. Sin eso Phillip no puede pasar a registrada, salvo compra personal.",
+    describe: "Rodrigo guarda la respuesta de Ramón: texto, confirmadoPor y fecha. Queda como evidencia; lo que habilita registrada es la recepción por línea.",
+  },
+  {
+    method: "POST",
+    path: "/api/agent/facturas/{id}/recepcion",
+    describe:
+      "Rodrigo confirma qué llegó. lineas[{ numeroLinea, recepcion, cantidadRecibida }] con recepcion completa, faltante (cantidadRecibida obligatoria, 0 si no llegó nada) o regalo. Si llegó todo, manda todas: \"completa\". Phillip solo puede pasar a registrada cuando ninguna línea queda sin confirmar, salvo compra personal.",
   },
   {
     method: "POST",
