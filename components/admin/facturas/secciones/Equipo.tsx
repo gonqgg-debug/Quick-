@@ -279,7 +279,9 @@ function Fred({ factura, enviar }: { factura: FacturaDetalle; enviar: EnviarFact
                   <p className="font-semibold tabular-nums">{formatMonto(pago.monto, "DOP")}</p>
                   <p className="text-xs text-brand-muted">
                     {[pago.origen === "banco" ? "Banco" : "Caja", fechaCorta(pago.fecha), pago.caja, pago.concepto].filter(Boolean).join(" · ")} · ligado por {pago.confirmadoPor}
+                    {pago.confianza != null ? ` · ${pago.confianza}% seguro` : ""}
                   </p>
+                  {pago.razon ? <p className="text-xs leading-relaxed text-brand-muted">{pago.razon}</p> : null}
                 </div>
                 {abierta ? (
                   <button
@@ -310,7 +312,7 @@ function Fred({ factura, enviar }: { factura: FacturaDetalle; enviar: EnviarFact
                 <li key={clave} className="flex flex-wrap items-center justify-between gap-2 py-2">
                   <div>
                     <p className="font-semibold tabular-nums">
-                      {formatMonto(candidato.monto, "DOP")} <span className="text-xs font-medium text-brand-muted">· {candidato.confianza}% seguro</span>
+                      {formatMonto(candidato.monto, "DOP")} <span className="text-xs font-medium text-brand-muted">· coincide {candidato.confianza}%</span>
                     </p>
                     <p className="text-xs text-brand-muted">
                       {[candidato.origen === "banco" ? "Banco" : "Caja", fechaCorta(candidato.fecha), candidato.caja, candidato.concepto, candidato.referencia].filter(Boolean).join(" · ")}

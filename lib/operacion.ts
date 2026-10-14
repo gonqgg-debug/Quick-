@@ -371,7 +371,7 @@ export async function publicarConciliacion(
   if (liga && medio && medio !== medioLigado) {
     throw new Error(`El movimiento es de ${medioLigado}. Manda medio ${medioLigado} o no mandes medio`);
   }
-  const pago = liga ? await ligarPago(factura.id, { ledgerId, movimientoId }, actor) : null;
+  const pago = liga ? await ligarPago(factura.id, { ledgerId, movimientoId, confianza: body.confianza, razon: body.razon }, actor) : null;
   const fecha = dayOrNull(body.fecha, "La fecha") ?? pago?.fecha ?? null;
   const supabase = getSupabaseAdminClient();
   const { error } = await supabase.from("factura_conciliaciones").insert({
@@ -417,7 +417,11 @@ export async function ligarPagoCaja(idOrClave: string, body: Record<string, unkn
   if (factura.estado === "conciliada") {
     throw new Error("La factura ya está conciliada");
   }
-  await ligarPago(factura.id, { ledgerId: body.ledgerId ?? body.ledger_id, movimientoId: body.movimientoId ?? body.movimiento_id }, actor);
+  await ligarPago(
+    factura.id,
+    { ledgerId: body.ledgerId ?? body.ledger_id, movimientoId: body.movimientoId ?? body.movimiento_id, confianza: body.confianza, razon: body.razon },
+    actor
+  );
   return requireFactura(factura.id);
 }
 

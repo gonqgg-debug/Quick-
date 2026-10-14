@@ -92,13 +92,16 @@ export const FACTURA_PROPUESTA_ORIGENES = [
   { id: "barras", label: "Código de barras" },
   { id: "odoo", label: "Código de Odoo" },
   { id: "texto", label: "Nombre parecido" },
+  { id: "agente", label: "Propuesta de Phillip" },
 ] as const;
 
 /** Bajo este porcentaje la propuesta se muestra, pero la línea queda para revisión. */
 export const PROPUESTA_UMBRAL = 70;
-/** «Aceptar todas» solo toma propuestas desde este porcentaje: alias, barras y Odoo. */
+/** «Aceptar todas» solo toma propuestas desde este porcentaje. */
 export const PROPUESTA_ACEPTAR_TODAS = 90;
 export const PROPUESTA_CONFIANZA = { alias: 100, barras: 95, odoo: 90 } as const;
+/** Cuántos productos por nombre parecido se le dan a Phillip por línea. */
+export const CANDIDATOS_POR_LINEA = 5;
 
 export const FACTURA_PREGUNTA_ESTADOS = [
   { id: "abierta", label: "Abierta" },
@@ -125,6 +128,44 @@ export type FacturaPropuesta = {
   origen: FacturaPropuestaOrigen;
   origenLabel: string;
   producto: FacturaProductoCatalogo | null;
+  /** Solo en las propuestas del agente. */
+  razon: string | null;
+  por: string | null;
+  en: string | null;
+};
+
+export type FacturaCandidatoSenal = "alias" | "barras" | "odoo" | "texto";
+
+export type FacturaCandidato = {
+  producto: FacturaProductoCatalogo;
+  /** alias, barras y odoo son coincidencias exactas; texto es por nombre parecido. */
+  senales: FacturaCandidatoSenal[];
+  /** 0 a 1, solo cuando el nombre se parece. */
+  similitud: number | null;
+  presentaciones: Array<{ presentacion: FacturaPresentacion; unidades: number; delProveedor: boolean }>;
+  /** Última compra de este producto a este proveedor. */
+  ultimaCompra: {
+    fecha: string | null;
+    descripcion: string | null;
+    presentacion: FacturaPresentacion | null;
+    cantidad: number | null;
+    costoPorPresentacion: number | null;
+    costoUnitario: number | null;
+  } | null;
+};
+
+export type FacturaLineaCandidatos = {
+  lineaId: string;
+  numeroLinea: number;
+  descripcion: string | null;
+  codigoSku: string | null;
+  codigoBarras: string | null;
+  presentacion: FacturaPresentacion | null;
+  cantidadComprada: number | null;
+  costoPorPresentacion: number | null;
+  productoId: string | null;
+  propuesta: FacturaPropuesta | null;
+  candidatos: FacturaCandidato[];
 };
 
 export type FacturaLinea = {
@@ -302,6 +343,9 @@ export type FacturaPago = {
   monto: number;
   confirmadoPor: string;
   confirmadoEn: string;
+  /** Lo que Fred dejó al ligarlo. */
+  confianza: number | null;
+  razon: string | null;
 };
 
 export type FacturaPagoCandidato = {
@@ -455,7 +499,7 @@ export type DuplicadoCandidato = {
 };
 
 export const FACTURAS_AGENT_USO =
-  "Guarda cada factura en la misma ficha, con la foto original. POST /api/agent/facturas manda proveedor, tienda, fechas, montos, lineas (o productos), validaciones, preguntas y la foto: en JSON usa fotoBase64 o documentos[{ pagina, base64 }]; en multipart adjunta el archivo en el campo foto (también vale captura o documento). JPG, PNG, WebP o PDF, hasta 4 MB por archivo. Si hay varias páginas, mándalas todas. Identifica la factura con referencia (proveedor, fecha, monto y tienda): el id es interno y no se menciona en la conversación. Si no sabes cuántas unidades trae la caja, el paquete o el fardo, no mandes unidadesPorPresentacion ni calcules unidadesTotales o costoUnitario. Para cruzar una línea con el catálogo manda productoId o codigoOdoo; si no lo mandas, el producto ya elegido se conserva. Repetir el POST con la misma clave no pisa la factura y responde creado: false; una foto nueva de esa clave sí se guarda. Para corregir usa PATCH. Las etapas son falta_factura, recibida, registrada, verificada y conciliada. Completa cuenta como registrada. Phillip solo puede pasar a registrada cuando Rodrigo confirmó la recepción de todas las líneas (POST /recepcion: completa, faltante o regalo), salvo que sea compra personal. La respuesta de Ramón en texto se guarda igual, como evidencia. Cada línea sin catálogo trae propuesta { productoId, confianza, origen }: alias 100 (ya confirmado antes para ese proveedor, se liga solo), barras 95, odoo 90 y texto hasta 85. Bajo 70 hay que revisarla. Phillip la acepta con PATCH /lineas/{lineaId} y productoId, o todas las de 90 o más con POST /lineas/aceptar. Cuando un producto tiene las unidades por presentación guardadas (POST /api/agent/presentaciones), la plataforma completa unidades y costo unitario. La plataforma liga la factura a la ficha del proveedor (primero por RNC, después por nombre), calcula fecha_vencimiento con sus días de crédito si no la mandas, y revisa sola ncf_formato, ncf_unico y rnc_proveedor: no mandes esas tres validaciones, se reemplazan. El ticket de pago se adjunta a la misma ficha con tipo ticket. Una nota de crédito (tipoDocumento nota_credito) manda facturaOrigen con el id o la clave de la factura que corrige; Boris la verifica después de la original y la plataforma la descuenta de la cuenta por pagar. Fred liga los pagos con POST /pagos: ledgerId para caja o movimientoId para un débito del banco ya importado (POST /api/agent/banco). Cada línea ligada al catálogo trae alertas cuando su precio o su cantidad se sale de la mediana de las últimas 6 compras del mismo producto al mismo proveedor (15% en precio y 50% en cantidad, se cambian en Parámetros; necesita al menos 3 compras). GET /api/agent/pendientes dice qué le falta a cada factura y a quién le toca. Cada bot escribe con su propio token.";
+  "Guarda cada factura en la misma ficha, con la foto original. POST /api/agent/facturas manda proveedor, tienda, fechas, montos, lineas (o productos), validaciones, preguntas y la foto: en JSON usa fotoBase64 o documentos[{ pagina, base64 }]; en multipart adjunta el archivo en el campo foto (también vale captura o documento). JPG, PNG, WebP o PDF, hasta 4 MB por archivo. Si hay varias páginas, mándalas todas. Identifica la factura con referencia (proveedor, fecha, monto y tienda): el id es interno y no se menciona en la conversación. Si no sabes cuántas unidades trae la caja, el paquete o el fardo, no mandes unidadesPorPresentacion ni calcules unidadesTotales o costoUnitario. Para cruzar una línea con el catálogo manda productoId o codigoOdoo; si no lo mandas, el producto ya elegido se conserva. Repetir el POST con la misma clave no pisa la factura y responde creado: false; una foto nueva de esa clave sí se guarda. Para corregir usa PATCH. Las etapas son falta_factura, recibida, registrada, verificada y conciliada. Completa cuenta como registrada. Phillip solo puede pasar a registrada cuando Rodrigo confirmó la recepción de todas las líneas (POST /recepcion: completa, faltante o regalo), salvo que sea compra personal. La respuesta de Ramón en texto se guarda igual, como evidencia. Phillip decide el producto de cada línea: pide GET /lineas/candidatos (señales exactas por alias, código de barras u Odoo, nombres parecidos, presentaciones y última compra a ese proveedor) y manda POST /lineas/propuestas con productoId, confianza de 0 a 100 y razon. Un alias ya confirmado para ese proveedor se liga solo; barras (95) y odoo (90) quedan como propuesta de la plataforma. Con aceptar: true, las de 90 o más se ligan y quedan aprendidas; las demás las confirma una persona, y bajo 70 hay que revisarlas. También puede elegir directo con PATCH /lineas/{lineaId} y productoId. Cuando un producto tiene las unidades por presentación guardadas (POST /api/agent/presentaciones), la plataforma completa unidades y costo unitario. La plataforma liga la factura a la ficha del proveedor (primero por RNC, después por nombre), calcula fecha_vencimiento con sus días de crédito si no la mandas, y revisa sola ncf_formato, ncf_unico y rnc_proveedor: no mandes esas tres validaciones, se reemplazan. El ticket de pago se adjunta a la misma ficha con tipo ticket. Una nota de crédito (tipoDocumento nota_credito) manda facturaOrigen con el id o la clave de la factura que corrige; Boris la verifica después de la original y la plataforma la descuenta de la cuenta por pagar. Fred liga los pagos con POST /pagos: ledgerId para caja o movimientoId para un débito del banco ya importado (POST /api/agent/banco), con su confianza de 0 a 100 y razon. pagosCandidatos son solo la lista de movimientos que cuadran en monto y fecha: Fred decide cuál es. Cada línea ligada al catálogo trae alertas cuando su precio o su cantidad se sale de la mediana de las últimas 6 compras del mismo producto al mismo proveedor (15% en precio y 50% en cantidad, se cambian en Parámetros; necesita al menos 3 compras). GET /api/agent/pendientes dice qué le falta a cada factura y a quién le toca. Cada bot escribe con su propio token.";
 
 export const FACTURAS_AGENT_ENDPOINTS = [
   {
@@ -492,9 +536,21 @@ export const FACTURAS_AGENT_ENDPOINTS = [
     describe: "Phillip elige el producto de una línea: productoId (null para quitarlo) o aceptarPropuesta: true. Queda aprendido para ese proveedor y la próxima factura se liga sola.",
   },
   {
+    method: "GET",
+    path: "/api/agent/facturas/{id-o-clave}/lineas/candidatos",
+    describe:
+      "Phillip pide los candidatos del catálogo para cada línea sin producto (todas=true incluye las ya ligadas). Cada candidato trae producto, senales exactas (alias, barras, odoo) o texto con similitud, presentaciones guardadas y la última compra a ese proveedor. La plataforma no decide: Phillip propone.",
+  },
+  {
+    method: "POST",
+    path: "/api/agent/facturas/{id-o-clave}/lineas/propuestas",
+    describe:
+      "Phillip deja su propuesta por línea: propuestas: [{ numeroLinea o lineaId, productoId o codigoOdoo, confianza (0 a 100), razon }]. Con aceptar: true liga de una vez las de 90 o más y quedan aprendidas para ese proveedor; las demás esperan a una persona. Bajo 70 queda para revisión.",
+  },
+  {
     method: "POST",
     path: "/api/agent/facturas/{id-o-clave}/lineas/aceptar",
-    describe: "Phillip acepta de una vez las propuestas de 90 o más (alias, código de barras, código de Odoo). Responde aceptadas y la factura.",
+    describe: "Phillip acepta de una vez las propuestas de 90 o más (suyas o por alias, código de barras o código de Odoo). Responde aceptadas y la factura.",
   },
   {
     method: "POST",
