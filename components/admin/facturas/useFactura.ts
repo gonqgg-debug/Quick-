@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FacturaDetalle } from "@/lib/facturas-shared";
 
-export type EnviarFactura = (path: string, method: "POST" | "PATCH", body: unknown) => Promise<void>;
+export type EnviarFactura = (path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) => Promise<void>;
 
 export function useFactura(id: string) {
   const [factura, setFactura] = useState<FacturaDetalle | null>(null);
@@ -40,14 +40,14 @@ export function useFactura(id: string) {
     };
   }, [recargar]);
 
-  /** Sends a write under /api/admin/facturas/{id} and reloads the ficha. Throws the server message on failure. */
+  /** Sends a write under /api/admin/facturas/{id} (or to an absolute /api/ path) and reloads the ficha. Throws the server message on failure. */
   const enviar = useCallback<EnviarFactura>(
     async (path, method, body) => {
-      const response = await fetch(`/api/admin/facturas/${id}${path}`, {
+      const response = await fetch(path.startsWith("/api/") ? path : `/api/admin/facturas/${id}${path}`, {
         method,
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: body === undefined ? undefined : JSON.stringify(body),
       });
       const parsed = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {

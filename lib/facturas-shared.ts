@@ -4,7 +4,7 @@ import { revisarNcf } from "@/lib/ncf";
 export const FACTURA_ESTADOS = [
   { id: "falta_factura", label: "Falta factura", corto: "Falta factura", ayuda: "Hay una salida de caja y todavía no llegó el comprobante." },
   { id: "recibida", label: "Recibida", corto: "Recibida", ayuda: "Llegó la foto y Phillip todavía no cierra los renglones." },
-  { id: "registrada", label: "Registrada", corto: "Registrada", ayuda: "Phillip terminó los renglones y la respuesta de Ramón está en la ficha." },
+  { id: "registrada", label: "Registrada", corto: "Registrada", ayuda: "Phillip terminó los renglones y Rodrigo confirmó qué llegó de cada uno." },
   { id: "verificada", label: "Verificada", corto: "Verificada", ayuda: "Boris cuadró RNC, NCF y montos contra el sistema, la caja y la DGII." },
   { id: "conciliada", label: "Conciliada", corto: "Conciliada", ayuda: "Fred encontró el pago en banco, caja o CardNET." },
 ] as const;
@@ -80,6 +80,26 @@ export const FACTURA_RESULTADOS = [
   { id: "no_aplica", label: "No aplica" },
 ] as const;
 
+export const FACTURA_RECEPCIONES = [
+  { id: "pendiente", label: "Sin confirmar" },
+  { id: "completa", label: "Completa" },
+  { id: "faltante", label: "Faltante" },
+  { id: "regalo", label: "Regalo" },
+] as const;
+
+export const FACTURA_PROPUESTA_ORIGENES = [
+  { id: "alias", label: "Confirmado antes con este proveedor" },
+  { id: "barras", label: "Código de barras" },
+  { id: "odoo", label: "Código de Odoo" },
+  { id: "texto", label: "Nombre parecido" },
+] as const;
+
+/** Bajo este porcentaje la propuesta se muestra, pero la línea queda para revisión. */
+export const PROPUESTA_UMBRAL = 70;
+/** «Aceptar todas» solo toma propuestas desde este porcentaje: alias, barras y Odoo. */
+export const PROPUESTA_ACEPTAR_TODAS = 90;
+export const PROPUESTA_CONFIANZA = { alias: 100, barras: 95, odoo: 90 } as const;
+
 export const FACTURA_PREGUNTA_ESTADOS = [
   { id: "abierta", label: "Abierta" },
   { id: "resuelta", label: "Resuelta" },
@@ -96,6 +116,16 @@ export type FacturaValidacionCodigo = (typeof FACTURA_VALIDACIONES)[number]["id"
 export type FacturaResultado = (typeof FACTURA_RESULTADOS)[number]["id"];
 export type FacturaPreguntaEstado = (typeof FACTURA_PREGUNTA_ESTADOS)[number]["id"];
 export type FacturaDocumentoTipo = (typeof FACTURA_DOCUMENTO_TIPOS)[number]["id"];
+export type FacturaRecepcion = (typeof FACTURA_RECEPCIONES)[number]["id"];
+export type FacturaPropuestaOrigen = (typeof FACTURA_PROPUESTA_ORIGENES)[number]["id"];
+
+export type FacturaPropuesta = {
+  productoId: string;
+  confianza: number;
+  origen: FacturaPropuestaOrigen;
+  origenLabel: string;
+  producto: FacturaProductoCatalogo | null;
+};
 
 export type FacturaLinea = {
   id: string;
@@ -125,6 +155,29 @@ export type FacturaLinea = {
   observacion: string | null;
   productoId: string | null;
   productoCatalogo: FacturaProductoCatalogo | null;
+  propuesta: FacturaPropuesta | null;
+  recepcion: FacturaRecepcion;
+  recepcionLabel: string;
+  cantidadRecibida: number | null;
+  recepcionPor: string | null;
+  recepcionEn: string | null;
+  /** Monto que no llegó: costo por presentación × (comprada − recibida). Cero si llegó completa o es regalo. */
+  diferenciaRecepcion: number | null;
+  /** Precio o cantidad fuera de lo normal contra las últimas compras del mismo producto al mismo proveedor. */
+  alertas: FacturaLineaAlerta[];
+};
+
+export type FacturaLineaAlerta = {
+  tipo: "precio" | "cantidad";
+  valor: number;
+  mediana: number;
+  /** (valor − mediana) / mediana. 0.2 es 20% más. */
+  variacion: number;
+  /** Compras anteriores que entraron en la mediana. */
+  compras: number;
+  /** precio por unidad, o por presentación cuando la línea no tiene unidades. */
+  medida: "unidad" | "presentacion";
+  texto: string;
 };
 
 export type FacturaProductoCatalogo = {
@@ -230,8 +283,40 @@ export type FacturaResumen = {
   problemaFalta: string | null;
   ledgerId: string | null;
   compraId: string | null;
+  facturaOrigenId: string | null;
   actualizadoEn: string;
 };
+
+export type FacturaPagoOrigen = "caja" | "banco";
+
+export type FacturaPago = {
+  id: string;
+  origen: FacturaPagoOrigen;
+  ledgerId: string | null;
+  movimientoId: string | null;
+  fecha: string | null;
+  /** Caja del movimiento, o el banco si vino del estado de cuenta. */
+  caja: string | null;
+  concepto: string | null;
+  referencia: string | null;
+  monto: number;
+  confirmadoPor: string;
+  confirmadoEn: string;
+};
+
+export type FacturaPagoCandidato = {
+  origen: FacturaPagoOrigen;
+  ledgerId: string | null;
+  movimientoId: string | null;
+  fecha: string;
+  caja: string | null;
+  concepto: string | null;
+  referencia: string | null;
+  monto: number;
+  confianza: number;
+};
+
+export type FacturaNotaRef = { id: string; referencia: string; total: number | null; estado: FacturaEstado; estadoLabel: string };
 
 export type FacturaVerificacion = {
   id: string;
@@ -266,6 +351,13 @@ export type FacturaDetalle = FacturaResumen & {
   preguntas: FacturaPregunta[];
   documentos: FacturaDocumento[];
   proveedorFicha: FacturaProveedorFicha | null;
+  pagos: FacturaPago[];
+  /** Salidas de caja que podrían ser el pago. Vacío si ya está conciliada. */
+  pagosCandidatos: FacturaPagoCandidato[];
+  /** Total menos lo ligado en caja. Null sin total o sin pagos. */
+  pagosDiferencia: number | null;
+  facturaOrigen: { id: string; referencia: string } | null;
+  notasCredito: FacturaNotaRef[];
   verificacion: FacturaVerificacion | null;
   conciliacion: FacturaConciliacion | null;
 };
@@ -302,6 +394,8 @@ export type FacturaCampos = {
   total?: number | null;
   estado?: FacturaEstado;
   observaciones?: string | null;
+  /** Id o clave de la factura original. Solo para notas de crédito. */
+  facturaOrigen?: string | null;
 };
 
 export type FacturaLineaInput = {
@@ -361,7 +455,7 @@ export type DuplicadoCandidato = {
 };
 
 export const FACTURAS_AGENT_USO =
-  "Guarda cada factura en la misma ficha, con la foto original. POST /api/agent/facturas manda proveedor, tienda, fechas, montos, lineas (o productos), validaciones, preguntas y la foto: en JSON usa fotoBase64 o documentos[{ pagina, base64 }]; en multipart adjunta el archivo en el campo foto (también vale captura o documento). JPG, PNG, WebP o PDF, hasta 4 MB por archivo. Si hay varias páginas, mándalas todas. Identifica la factura con referencia (proveedor, fecha, monto y tienda): el id es interno y no se menciona en la conversación. Si no sabes cuántas unidades trae la caja, el paquete o el fardo, no mandes unidadesPorPresentacion ni calcules unidadesTotales o costoUnitario. Para cruzar una línea con el catálogo manda productoId o codigoOdoo; si no lo mandas, el producto ya elegido se conserva. Repetir el POST con la misma clave no pisa la factura y responde creado: false; una foto nueva de esa clave sí se guarda. Para corregir usa PATCH. Las etapas son falta_factura, recibida, registrada, verificada y conciliada. Completa cuenta como registrada. Phillip solo puede pasar a registrada si la respuesta de Ramón ya está guardada, salvo que sea compra personal. La plataforma liga la factura a la ficha del proveedor (primero por RNC, después por nombre), calcula fecha_vencimiento con sus días de crédito si no la mandas, y revisa sola ncf_formato, ncf_unico y rnc_proveedor: no mandes esas tres validaciones, se reemplazan. El ticket de pago se adjunta a la misma ficha con tipo ticket. Cada bot escribe con su propio token.";
+  "Guarda cada factura en la misma ficha, con la foto original. POST /api/agent/facturas manda proveedor, tienda, fechas, montos, lineas (o productos), validaciones, preguntas y la foto: en JSON usa fotoBase64 o documentos[{ pagina, base64 }]; en multipart adjunta el archivo en el campo foto (también vale captura o documento). JPG, PNG, WebP o PDF, hasta 4 MB por archivo. Si hay varias páginas, mándalas todas. Identifica la factura con referencia (proveedor, fecha, monto y tienda): el id es interno y no se menciona en la conversación. Si no sabes cuántas unidades trae la caja, el paquete o el fardo, no mandes unidadesPorPresentacion ni calcules unidadesTotales o costoUnitario. Para cruzar una línea con el catálogo manda productoId o codigoOdoo; si no lo mandas, el producto ya elegido se conserva. Repetir el POST con la misma clave no pisa la factura y responde creado: false; una foto nueva de esa clave sí se guarda. Para corregir usa PATCH. Las etapas son falta_factura, recibida, registrada, verificada y conciliada. Completa cuenta como registrada. Phillip solo puede pasar a registrada cuando Rodrigo confirmó la recepción de todas las líneas (POST /recepcion: completa, faltante o regalo), salvo que sea compra personal. La respuesta de Ramón en texto se guarda igual, como evidencia. Cada línea sin catálogo trae propuesta { productoId, confianza, origen }: alias 100 (ya confirmado antes para ese proveedor, se liga solo), barras 95, odoo 90 y texto hasta 85. Bajo 70 hay que revisarla. Phillip la acepta con PATCH /lineas/{lineaId} y productoId, o todas las de 90 o más con POST /lineas/aceptar. Cuando un producto tiene las unidades por presentación guardadas (POST /api/agent/presentaciones), la plataforma completa unidades y costo unitario. La plataforma liga la factura a la ficha del proveedor (primero por RNC, después por nombre), calcula fecha_vencimiento con sus días de crédito si no la mandas, y revisa sola ncf_formato, ncf_unico y rnc_proveedor: no mandes esas tres validaciones, se reemplazan. El ticket de pago se adjunta a la misma ficha con tipo ticket. Una nota de crédito (tipoDocumento nota_credito) manda facturaOrigen con el id o la clave de la factura que corrige; Boris la verifica después de la original y la plataforma la descuenta de la cuenta por pagar. Fred liga los pagos con POST /pagos: ledgerId para caja o movimientoId para un débito del banco ya importado (POST /api/agent/banco). Cada línea ligada al catálogo trae alertas cuando su precio o su cantidad se sale de la mediana de las últimas 6 compras del mismo producto al mismo proveedor (15% en precio y 50% en cantidad, se cambian en Parámetros; necesita al menos 3 compras). GET /api/agent/pendientes dice qué le falta a cada factura y a quién le toca. Cada bot escribe con su propio token.";
 
 export const FACTURAS_AGENT_ENDPOINTS = [
   {
@@ -375,7 +469,12 @@ export const FACTURAS_AGENT_ENDPOINTS = [
     describe:
       "Crea la factura y sube la foto. JSON: fotoBase64 o documentos[{ nombre, pagina, base64 }]. Multipart: archivo en foto, captura o documento, y el resto de los campos como texto (lineas y validaciones van en JSON dentro del campo). JPG, PNG, WebP o PDF, hasta 4 MB. clave es opcional. Si ya existe, responde 200 con creado: false, no pisa los datos y sí guarda una foto nueva.",
   },
-  { method: "GET", path: "/api/agent/facturas/{id-o-clave}", describe: "La factura completa: cabecera, productos, validaciones, preguntas y documentos." },
+  {
+    method: "GET",
+    path: "/api/agent/facturas/{id-o-clave}",
+    describe:
+      "La factura completa: cabecera, productos (con alertas de precio y cantidad), validaciones, preguntas, documentos, pagos ligados de caja y banco, pagosCandidatos, pagosDiferencia, facturaOrigen (si es nota de crédito) y notasCredito (si es la original).",
+  },
   {
     method: "PATCH",
     path: "/api/agent/facturas/{id-o-clave}",
@@ -386,6 +485,22 @@ export const FACTURAS_AGENT_ENDPOINTS = [
     method: "POST",
     path: "/api/agent/facturas/{id-o-clave}/lineas",
     describe: "Agrega o corrige productos. El mismo numeroLinea actualiza la fila. Para enlazar el catálogo manda productoId o codigoOdoo. No calcules unidades si no conoces las unidades por presentación.",
+  },
+  {
+    method: "PATCH",
+    path: "/api/agent/facturas/{id-o-clave}/lineas/{lineaId}",
+    describe: "Phillip elige el producto de una línea: productoId (null para quitarlo) o aceptarPropuesta: true. Queda aprendido para ese proveedor y la próxima factura se liga sola.",
+  },
+  {
+    method: "POST",
+    path: "/api/agent/facturas/{id-o-clave}/lineas/aceptar",
+    describe: "Phillip acepta de una vez las propuestas de 90 o más (alias, código de barras, código de Odoo). Responde aceptadas y la factura.",
+  },
+  {
+    method: "POST",
+    path: "/api/agent/presentaciones",
+    describe:
+      "Phillip guarda cuántas unidades trae una presentación: productoId, presentacion (paquete, caja, fardo u otro), unidades y, si es solo de un proveedor, proveedorId. Completa unidades y costo unitario de las líneas abiertas de ese producto.",
   },
   {
     method: "POST",
@@ -801,6 +916,199 @@ export function resolverUnidades(input: {
   };
 }
 
+/** Una salida de caja cuenta como el pago si cae a ±1 día y a ±RD$ 5 del total. */
+export const PAGO_DIAS = 1;
+export const PAGO_TOLERANCIA = 5;
+
+function palabrasProveedor(proveedor: string | null): string[] {
+  const norm = normalizarDescripcion(proveedor);
+  if (!norm) {
+    return [];
+  }
+  const vacias = new Set(["srl", "sas", "sa", "eirl", "distribuidora", "comercial", "industrias", "grupo", "dominicana", "del", "las", "los"]);
+  return norm.split(" ").filter((palabra) => palabra.length >= 4 && !vacias.has(palabra));
+}
+
+/** Null si el movimiento no puede ser el pago. Si no, 70 a 100 según monto, fecha y si el concepto nombra al proveedor. */
+export function confianzaPago(input: {
+  total: number;
+  monto: number;
+  diasDeDiferencia: number;
+  proveedor: string | null;
+  concepto: string | null;
+  referencia: string | null;
+  /** Por defecto PAGO_DIAS (caja). El banco pasa la distancia a su ventana y BANCO_DIAS_DESPUES. */
+  maxDias?: number;
+}): number | null {
+  const diferencia = Math.abs(input.monto - input.total);
+  if (diferencia > PAGO_TOLERANCIA || Math.abs(input.diasDeDiferencia) > (input.maxDias ?? PAGO_DIAS)) {
+    return null;
+  }
+  let confianza = diferencia <= 1 ? 80 : 70;
+  if (input.diasDeDiferencia === 0) {
+    confianza += 5;
+  }
+  const texto = normalizarDescripcion([input.concepto, input.referencia].filter(Boolean).join(" ")) ?? "";
+  if (palabrasProveedor(input.proveedor).some((palabra) => texto.split(" ").includes(palabra))) {
+    confianza += 15;
+  }
+  return Math.min(100, confianza);
+}
+
+export function diferenciaPagos(total: number | null, pagos: Array<{ monto: number }>): number | null {
+  if (total == null || !pagos.length) {
+    return null;
+  }
+  return roundTo(total - pagos.reduce((sum, pago) => sum + pago.monto, 0), 2);
+}
+
+/** Confianza de una coincidencia por nombre. Nunca llega a 90, así «aceptar todas» no toma coincidencias de texto. */
+export function confianzaTexto(similitud: number): number {
+  if (!Number.isFinite(similitud)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(85, Math.round(similitud * 120)));
+}
+
+export function normalizarDescripcion(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  const text = value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+  return text.length >= 2 ? text.slice(0, 300) : null;
+}
+
+export function diferenciaRecepcion(linea: {
+  recepcion: FacturaRecepcion;
+  cantidadComprada: number | null;
+  cantidadRecibida: number | null;
+  costoPorPresentacion: number | null;
+  totalLinea: number | null;
+}): number | null {
+  if (linea.recepcion === "pendiente") {
+    return null;
+  }
+  if (linea.recepcion !== "faltante") {
+    return 0;
+  }
+  if (linea.cantidadComprada == null || linea.cantidadRecibida == null) {
+    return null;
+  }
+  const costo =
+    linea.costoPorPresentacion ?? (linea.totalLinea != null && linea.cantidadComprada > 0 ? linea.totalLinea / linea.cantidadComprada : null);
+  if (costo == null) {
+    return null;
+  }
+  return roundTo(costo * Math.max(0, linea.cantidadComprada - linea.cantidadRecibida), 2);
+}
+
+export type RecepcionResumen = { lineas: number; sinConfirmar: number; faltantes: number; regalos: number; diferencia: number };
+
+export function resumenRecepcion(lineas: Array<Pick<FacturaLinea, "recepcion" | "diferenciaRecepcion">>): RecepcionResumen {
+  return lineas.reduce<RecepcionResumen>(
+    (total, linea) => ({
+      lineas: total.lineas + 1,
+      sinConfirmar: total.sinConfirmar + (linea.recepcion === "pendiente" ? 1 : 0),
+      faltantes: total.faltantes + (linea.recepcion === "faltante" ? 1 : 0),
+      regalos: total.regalos + (linea.recepcion === "regalo" ? 1 : 0),
+      diferencia: roundTo(total.diferencia + (linea.diferenciaRecepcion ?? 0), 2),
+    }),
+    { lineas: 0, sinConfirmar: 0, faltantes: 0, regalos: 0, diferencia: 0 }
+  );
+}
+
+export type RecepcionLineaInput = { numeroLinea: number; recepcion: FacturaRecepcion; cantidadRecibida: number | null };
+
+export function parseRecepcion(value: unknown): FacturaRecepcion | null {
+  const text = typeof value === "string" ? normalizeToken(value) : "";
+  const alias: Record<string, FacturaRecepcion> = {
+    completa: "completa",
+    completo: "completa",
+    llego: "completa",
+    ok: "completa",
+    faltante: "faltante",
+    falta: "faltante",
+    incompleta: "faltante",
+    regalo: "regalo",
+    bonificacion: "regalo",
+    pendiente: "pendiente",
+    sin_confirmar: "pendiente",
+  };
+  return alias[text] ?? null;
+}
+
+/** Lee lineas[{ numeroLinea, recepcion, cantidadRecibida }] o todas: "completa". */
+export function leerRecepcion(body: Record<string, unknown>): { todas: FacturaRecepcion | null; lineas: RecepcionLineaInput[]; por: string | null } {
+  const por = typeof body.por === "string" && body.por.trim() ? body.por.trim().slice(0, 160) : typeof body.recibidoPor === "string" && body.recibidoPor.trim() ? body.recibidoPor.trim().slice(0, 160) : null;
+  const todasRaw = body.todas ?? body.todo;
+  if (todasRaw != null && todasRaw !== "") {
+    const todas = parseRecepcion(todasRaw);
+    if (todas !== "completa" && todas !== "pendiente") {
+      throw new Error("El campo todas solo puede ser completa o pendiente. Los faltantes y regalos van por línea");
+    }
+    return { todas, lineas: [], por };
+  }
+  if (!Array.isArray(body.lineas) || body.lineas.length === 0) {
+    throw new Error("Manda lineas[{ numeroLinea, recepcion, cantidadRecibida }] o todas: \"completa\"");
+  }
+  const vistas = new Set<number>();
+  const lineas = body.lineas.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error(`La línea ${index + 1} de la recepción no es válida`);
+    }
+    const raw = item as Record<string, unknown>;
+    const numero = Number(raw.numeroLinea ?? raw.numero_linea ?? raw.linea);
+    if (!Number.isInteger(numero) || numero < 1) {
+      throw new Error(`La línea ${index + 1} de la recepción necesita numeroLinea`);
+    }
+    if (vistas.has(numero)) {
+      throw new Error(`La línea ${numero} está repetida en la recepción`);
+    }
+    vistas.add(numero);
+    const recepcion = parseRecepcion(raw.recepcion ?? raw.estado);
+    if (!recepcion) {
+      throw new Error(`La línea ${numero} necesita recepcion: completa, faltante, regalo o pendiente`);
+    }
+    const cantidadRaw = raw.cantidadRecibida ?? raw.cantidad_recibida ?? raw.recibida;
+    let cantidadRecibida: number | null = null;
+    if (cantidadRaw != null && cantidadRaw !== "") {
+      const cantidad = typeof cantidadRaw === "number" ? cantidadRaw : Number(String(cantidadRaw).replace(",", "."));
+      if (!Number.isFinite(cantidad) || cantidad < 0) {
+        throw new Error(`La cantidad recibida de la línea ${numero} no es válida`);
+      }
+      cantidadRecibida = cantidad;
+    }
+    return { numeroLinea: numero, recepcion, cantidadRecibida };
+  });
+  return { todas: null, lineas, por };
+}
+
+/** Cantidad que se guarda según lo que dijo la tienda y lo que dice la factura. */
+export function cantidadRecibidaDe(input: RecepcionLineaInput, cantidadComprada: number | null): number | null {
+  if (input.recepcion === "pendiente") {
+    return null;
+  }
+  if (input.recepcion === "completa") {
+    return cantidadComprada;
+  }
+  if (input.recepcion === "regalo") {
+    return input.cantidadRecibida ?? cantidadComprada;
+  }
+  if (input.cantidadRecibida == null) {
+    throw new Error(`La línea ${input.numeroLinea} es faltante: manda cuántas llegaron en cantidadRecibida (0 si no llegó nada)`);
+  }
+  if (cantidadComprada != null && input.cantidadRecibida >= cantidadComprada) {
+    throw new Error(`En la línea ${input.numeroLinea} llegaron ${input.cantidadRecibida} de ${cantidadComprada}: eso es completa, no faltante`);
+  }
+  return input.cantidadRecibida;
+}
+
 export function completarValidaciones(stored: FacturaValidacion[]): FacturaValidacion[] {
   return FACTURA_VALIDACIONES.map((item) => {
     const found = stored.find((row) => row.codigo === item.id);
@@ -1041,6 +1349,9 @@ export function leerCamposFactura(body: Record<string, unknown>, mode: "create" 
   }
   take(["observaciones"], (value) => {
     campos.observaciones = textOrNull(value, 4000);
+  });
+  take(["facturaOrigenId", "facturaOrigen", "factura_origen_id"], (value) => {
+    campos.facturaOrigen = textOrNull(value, 80);
   });
 
   if (mode === "create") {
@@ -1308,4 +1619,99 @@ export function leerRespuestaPregunta(body: Record<string, unknown>): FacturaRes
     estado,
     respondidoEn,
   };
+}
+
+/** Hace falta este historial mínimo para avisar. */
+export const ALERTA_MIN_COMPRAS = 3;
+/** Cuántas compras anteriores entran en la mediana. */
+export const ALERTA_HISTORIAL = 6;
+export const ALERTA_PRECIO_DEFECTO = 0.15;
+export const ALERTA_CANTIDAD_DEFECTO = 0.5;
+
+export function mediana(valores: number[]): number | null {
+  const ordenados = valores.filter((valor) => Number.isFinite(valor)).sort((a, b) => a - b);
+  if (!ordenados.length) {
+    return null;
+  }
+  const medio = Math.floor(ordenados.length / 2);
+  return ordenados.length % 2 ? ordenados[medio] : (ordenados[medio - 1] + ordenados[medio]) / 2;
+}
+
+export type MedidaLinea = { clave: string; medida: "unidad" | "presentacion"; costo: number | null; cantidad: number | null };
+
+/** Qué se compara: costo por unidad si se conoce; si no, costo por presentación de la misma presentación y tamaño. */
+export function medidaLinea(linea: {
+  costoUnitario: number | null;
+  unidadesTotales: number | null;
+  costoPorPresentacion: number | null;
+  cantidadComprada: number | null;
+  presentacion: string | null;
+  unidadesPorPresentacion: number | null;
+}): MedidaLinea | null {
+  if (linea.costoUnitario != null && linea.costoUnitario > 0) {
+    return { clave: "unidad", medida: "unidad", costo: linea.costoUnitario, cantidad: linea.unidadesTotales };
+  }
+  if (linea.costoPorPresentacion != null && linea.costoPorPresentacion > 0) {
+    return {
+      clave: `presentacion:${linea.presentacion ?? "?"}:${linea.unidadesPorPresentacion ?? "?"}`,
+      medida: "presentacion",
+      costo: linea.costoPorPresentacion,
+      cantidad: linea.cantidadComprada,
+    };
+  }
+  return null;
+}
+
+function porcentaje(variacion: number): string {
+  return `${Math.round(Math.abs(variacion) * 100)}%`;
+}
+
+/**
+ * Compara la línea con la mediana de las últimas compras (historial ya filtrado al mismo producto y proveedor,
+ * la más reciente primero). Avisa si se sale más que el umbral, hacia arriba o hacia abajo.
+ */
+export function alertasLinea(
+  actual: MedidaLinea | null,
+  historial: Array<MedidaLinea | null>,
+  umbral: { precio: number; cantidad: number },
+  moneda: FacturaMoneda = "DOP"
+): FacturaLineaAlerta[] {
+  if (!actual) {
+    return [];
+  }
+  const previas = historial.filter((item): item is MedidaLinea => Boolean(item && item.clave === actual.clave)).slice(0, ALERTA_HISTORIAL);
+  const alertas: FacturaLineaAlerta[] = [];
+  const costos = previas.map((item) => item.costo).filter((valor): valor is number => valor != null && valor > 0);
+  const medianaCosto = costos.length >= ALERTA_MIN_COMPRAS ? mediana(costos) : null;
+  if (actual.costo != null && medianaCosto) {
+    const variacion = roundTo((actual.costo - medianaCosto) / medianaCosto, 4);
+    if (Math.abs(variacion) > umbral.precio) {
+      alertas.push({
+        tipo: "precio",
+        valor: actual.costo,
+        mediana: roundTo(medianaCosto, 2),
+        variacion,
+        compras: costos.length,
+        medida: actual.medida,
+        texto: `Precio ${porcentaje(variacion)} ${variacion > 0 ? "más alto" : "más bajo"} que lo normal: ${formatMonto(medianaCosto, moneda)} ${actual.medida === "unidad" ? "por unidad" : "por presentación"} en las últimas ${costos.length} compras.`,
+      });
+    }
+  }
+  const cantidades = previas.map((item) => item.cantidad).filter((valor): valor is number => valor != null && valor > 0);
+  const medianaCantidad = cantidades.length >= ALERTA_MIN_COMPRAS ? mediana(cantidades) : null;
+  if (actual.cantidad != null && actual.cantidad > 0 && medianaCantidad) {
+    const variacion = roundTo((actual.cantidad - medianaCantidad) / medianaCantidad, 4);
+    if (Math.abs(variacion) > umbral.cantidad) {
+      alertas.push({
+        tipo: "cantidad",
+        valor: actual.cantidad,
+        mediana: roundTo(medianaCantidad, 2),
+        variacion,
+        compras: cantidades.length,
+        medida: actual.medida,
+        texto: `Cantidad ${porcentaje(variacion)} ${variacion > 0 ? "mayor" : "menor"} que lo normal: ${medianaCantidad} ${actual.medida === "unidad" ? "unidades" : "presentaciones"} en las últimas ${cantidades.length} compras.`,
+      });
+    }
+  }
+  return alertas;
 }

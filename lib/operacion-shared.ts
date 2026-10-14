@@ -55,22 +55,40 @@ export function puedeCambiarEtapa(actor: Actor, estado: FacturaEstado): boolean 
   return ETAPA_ACTORES[estado].includes(actor);
 }
 
-export function validarCambioEstado(input: {
-  actor: Actor;
-  estado: FacturaEstado;
+export type RecepcionConteo = {
   esCompraPersonal: boolean;
-  confirmacionEn: string | null;
-}): void {
+  /** Líneas de productos de la factura. */
+  lineas: number;
+  /** Líneas que Rodrigo todavía no marcó completa, faltante o regalo. */
+  lineasSinRecepcion: number;
+};
+
+export function validarCambioEstado(input: RecepcionConteo & { actor: Actor; estado: FacturaEstado }): void {
   if (!puedeCambiarEtapa(input.actor, input.estado)) {
     throw new Error(mensajePermisoEtapa(input.estado));
   }
   if (input.estado === "registrada" && !puedeRegistrar(input)) {
-    throw new Error("Phillip no puede dejarla registrada sin la respuesta de Ramón en la ficha");
+    throw new Error(motivoNoRegistrable(input) ?? "Phillip todavía no puede dejarla registrada");
   }
 }
 
-export function puedeRegistrar(input: { esCompraPersonal: boolean; confirmacionEn: string | null }): boolean {
-  return input.esCompraPersonal || Boolean(input.confirmacionEn);
+export function puedeRegistrar(input: RecepcionConteo): boolean {
+  return motivoNoRegistrable(input) === null;
+}
+
+export function motivoNoRegistrable(input: RecepcionConteo): string | null {
+  if (input.esCompraPersonal) {
+    return null;
+  }
+  if (input.lineas === 0) {
+    return "Phillip no puede dejarla registrada sin productos";
+  }
+  if (input.lineasSinRecepcion > 0) {
+    return input.lineasSinRecepcion === 1
+      ? "Phillip no puede dejarla registrada: Rodrigo todavía no confirma la recepción de 1 línea"
+      : `Phillip no puede dejarla registrada: Rodrigo todavía no confirma la recepción de ${input.lineasSinRecepcion} líneas`;
+  }
+  return null;
 }
 
 function mensajePermisoEtapa(estado: FacturaEstado): string {
@@ -181,6 +199,8 @@ export type Excepcion = {
   autor: OperacionBot;
   dueno: OperacionBot;
   queFalta: string;
+  /** Lo pone el recordatorio diario (sin_recepcion o vence:YYYY-MM-DD). Null si la abrió un bot. */
+  caso: string | null;
   estado: ExcepcionEstado;
   resolucion: string | null;
   abiertaEn: string;
@@ -259,7 +279,13 @@ export const OPERACION_AGENT_ENDPOINTS = [
   {
     method: "POST",
     path: "/api/agent/facturas/{id}/confirmacion",
-    describe: "Rodrigo guarda la respuesta de Ramón: texto, confirmadoPor y fecha. Sin eso Phillip no puede pasar a registrada, salvo compra personal.",
+    describe: "Rodrigo guarda la respuesta de Ramón: texto, confirmadoPor y fecha. Queda como evidencia; lo que habilita registrada es la recepción por línea.",
+  },
+  {
+    method: "POST",
+    path: "/api/agent/facturas/{id}/recepcion",
+    describe:
+      "Rodrigo confirma qué llegó. lineas[{ numeroLinea, recepcion, cantidadRecibida }] con recepcion completa, faltante (cantidadRecibida obligatoria, 0 si no llegó nada) o regalo. Si llegó todo, manda todas: \"completa\". Phillip solo puede pasar a registrada cuando ninguna línea queda sin confirmar, salvo compra personal.",
   },
   {
     method: "POST",
@@ -269,12 +295,42 @@ export const OPERACION_AGENT_ENDPOINTS = [
   {
     method: "POST",
     path: "/api/agent/facturas/{id}/verificacion",
-    describe: "Boris publica resultado cuadra, falta o diferencia, con RNC, NCF y los montos de factura, sistema, caja y DGII. Solo él deja la etapa en verificada.",
+    describe:
+      "Boris publica resultado cuadra, falta o diferencia, con RNC, NCF y los montos de factura, sistema, caja y DGII. Solo él deja la etapa en verificada. En una nota de crédito, cuadra descuenta su total de la cuenta por pagar de la factura original (una sola vez); si el saldo llega a cero, la cuenta queda pagada. La original tiene que estar verificada antes.",
   },
   {
     method: "POST",
     path: "/api/agent/facturas/{id}/conciliacion",
-    describe: "Fred publica pagada, vencida_sin_pagar, pagada_sin_movimiento o falta_factura, con medio banco, caja o cardnet. Solo él deja la etapa en conciliada.",
+    describe:
+      "Fred publica pagada, vencida_sin_pagar, pagada_sin_movimiento o falta_factura, con medio banco, caja o cardnet. Solo él deja la etapa en conciliada. Con ledgerId (salida de caja) o movimientoId (débito del banco), solo para pagada, liga ese movimiento y toma de él medio, fecha, monto y referencia si no los mandas.",
+  },
+  {
+    method: "POST",
+    path: "/api/agent/facturas/{id}/pagos",
+    describe:
+      "Fred liga un pago a la factura sin cerrarla todavía. JSON: ledgerId (caja) o movimientoId (banco). La factura trae pagosCandidatos con origen caja o banco: caja a ±1 día de la factura; banco desde un día antes de la emisión hasta 7 días después del vencimiento; los dos a ±RD$ 5 del total y con confianza. pagosDiferencia es el total menos lo ligado. Un movimiento paga una sola factura.",
+  },
+  {
+    method: "POST",
+    path: "/api/agent/banco",
+    describe:
+      "Fred importa el estado de cuenta. Multipart: archivo (CSV o Excel) y banco, cuenta y moneda como texto. JSON: banco, cuenta, moneda y csv (texto) o base64 con nombre. Lee sola la fila de encabezado (Fecha y Monto con signo, o Débito y Crédito; Descripción y Referencia si están). Reimportar el mismo archivo no duplica. Responde nuevos, repetidos y descartadas.",
+  },
+  {
+    method: "GET",
+    path: "/api/agent/banco?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&tipo=debito&sinLigar=true",
+    describe: "Movimientos importados del banco, con la factura que pagan si ya están ligados.",
+  },
+  {
+    method: "DELETE",
+    path: "/api/agent/facturas/{id}/pagos/{pagoId}",
+    describe: "Fred quita un pago mal ligado. No se puede después de conciliada.",
+  },
+  {
+    method: "GET",
+    path: "/api/agent/pendientes?fecha=YYYY-MM-DD&dueno=",
+    describe:
+      "Lo que falta en cada factura sin conciliar, con dueño (rodrigo, phillip, boris o fred; null es del admin). Con dueno=fred solo trae lo de Fred. fecha cambia el día contra el que se cuentan los vencimientos. No incluye pagos candidatos: esos salen en la factura.",
   },
   {
     method: "GET",
@@ -289,7 +345,8 @@ export const OPERACION_AGENT_ENDPOINTS = [
   {
     method: "GET",
     path: "/api/agent/excepciones",
-    describe: "Casos abiertos con dueño, desde cuándo y qué falta.",
+    describe:
+      "Casos abiertos con dueño, desde cuándo y qué falta. Los que abre el recordatorio diario (8:00 a. m.) traen caso: sin_recepcion (Rodrigo, más de 24 horas sin confirmar la recepción) o vence:YYYY-MM-DD (Fred, cuenta por pagar que vence en 3 días o menos). No se repiten y se cierran solos cuando ya no aplican.",
   },
   {
     method: "POST",

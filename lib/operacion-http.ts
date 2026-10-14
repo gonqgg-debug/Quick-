@@ -7,6 +7,8 @@ import {
   aprobarCierre,
   cargarCierre,
   guardarConfirmacion,
+  guardarRecepcion,
+  ligarPagoCaja,
   listarDecisiones,
   listarExcepciones,
   marcarCompraPersonal,
@@ -15,6 +17,7 @@ import {
   publicarEntrega,
   publicarReporte,
   publicarVerificacion,
+  quitarPagoCaja,
   resolverExcepcion,
   responderDecision,
 } from "@/lib/operacion";
@@ -37,6 +40,11 @@ export async function handleConfirmacion(id: string, request: NextRequest, actor
   return NextResponse.json({ factura });
 }
 
+export async function handleRecepcion(id: string, request: NextRequest, actor: Actor) {
+  const factura = await guardarRecepcion(id, await leerJson(request), actor);
+  return NextResponse.json({ factura });
+}
+
 export async function handleMarca(id: string, request: NextRequest, actor: Actor) {
   const factura = await marcarCompraPersonal(id, await leerJson(request), actor);
   return NextResponse.json({ factura });
@@ -49,6 +57,16 @@ export async function handleVerificacion(id: string, request: NextRequest, actor
 
 export async function handleConciliacion(id: string, request: NextRequest, actor: Actor) {
   const factura = await publicarConciliacion(id, await leerJson(request), actor);
+  return NextResponse.json({ factura });
+}
+
+export async function handleLigarPago(id: string, request: NextRequest, actor: Actor) {
+  const factura = await ligarPagoCaja(id, await leerJson(request), actor);
+  return NextResponse.json({ factura });
+}
+
+export async function handleQuitarPago(id: string, pagoId: string, actor: Actor) {
+  const factura = await quitarPagoCaja(id, pagoId, actor);
   return NextResponse.json({ factura });
 }
 

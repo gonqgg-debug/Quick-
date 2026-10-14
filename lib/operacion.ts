@@ -1,9 +1,10 @@
 import { CompraDuplicadaError, createCompra, updateCompra } from "@/lib/admin-compras";
 import { isMonthKey } from "@/lib/admin-parametros-shared";
 import { getTodosLosBalances } from "@/lib/caja";
+import { ligarPago, quitarPago } from "@/lib/factura-pagos";
 import { getFactura } from "@/lib/facturas";
 import type { FacturaDetalle } from "@/lib/facturas-shared";
-import { isUuid } from "@/lib/facturas-shared";
+import { cantidadRecibidaDe, isUuid, leerRecepcion } from "@/lib/facturas-shared";
 import { isDayKey, todayDayKey } from "@/lib/local-day";
 import { toMoney } from "@/lib/money";
 import {
@@ -131,6 +132,46 @@ export async function guardarConfirmacion(
   return requireFactura(factura.id);
 }
 
+/** Rodrigo marca cada línea como completa, faltante o regalo según lo que dijo la tienda. */
+export async function guardarRecepcion(idOrClave: string, body: Record<string, unknown>, actor: Actor): Promise<FacturaDetalle> {
+  if (actor !== "rodrigo" && actor !== "admin") {
+    throw new Error("Solo Rodrigo confirma la recepción");
+  }
+  const factura = await requireFactura(idOrClave);
+  if (!factura.lineas.length) {
+    throw new Error("Esa factura todavía no tiene productos. Phillip tiene que extraerlos primero");
+  }
+  const { todas, lineas, por } = leerRecepcion(body);
+  const quien = por ?? (actor === "admin" ? "Admin" : "Rodrigo");
+  const ahora = new Date().toISOString();
+  const porNumero = new Map(factura.lineas.map((linea) => [linea.numeroLinea, linea]));
+  const entradas = todas
+    ? factura.lineas.map((linea) => ({ numeroLinea: linea.numeroLinea, recepcion: todas, cantidadRecibida: null }))
+    : lineas;
+  const supabase = getSupabaseAdminClient();
+  for (const entrada of entradas) {
+    const linea = porNumero.get(entrada.numeroLinea);
+    if (!linea) {
+      throw new Error(`La factura no tiene la línea ${entrada.numeroLinea}`);
+    }
+    const pendiente = entrada.recepcion === "pendiente";
+    const { error } = await supabase
+      .from("factura_lineas")
+      .update({
+        recepcion: entrada.recepcion,
+        cantidad_recibida: cantidadRecibidaDe(entrada, linea.cantidadComprada),
+        recepcion_por: pendiente ? null : quien,
+        recepcion_en: pendiente ? null : ahora,
+      })
+      .eq("id", linea.id);
+    if (error) {
+      throw error;
+    }
+  }
+  await supabase.from("facturas").update({ updated_at: ahora }).eq("id", factura.id);
+  return requireFactura(factura.id);
+}
+
 export async function marcarCompraPersonal(
   idOrClave: string,
   body: Record<string, unknown>,
@@ -178,7 +219,7 @@ async function limpiarProblema(facturaId: string): Promise<void> {
 }
 
 async function abrirCuentaPorPagar(factura: FacturaDetalle): Promise<string | null> {
-  if (factura.esCompraPersonal || factura.compraId || factura.moneda !== "DOP") {
+  if (factura.tipoDocumento === "nota_credito" || factura.esCompraPersonal || factura.compraId || factura.moneda !== "DOP") {
     return factura.compraId;
   }
   if (!factura.proveedor) {
@@ -206,6 +247,55 @@ async function abrirCuentaPorPagar(factura: FacturaDetalle): Promise<string | nu
   }
 }
 
+/**
+ * Cuenta por pagar de la factura original a la que se descuenta la nota de crédito.
+ * Null si no es nota, si ya se aplicó o si la original no lleva cuenta por pagar (personal o en dólares).
+ */
+async function compraParaNota(nota: FacturaDetalle): Promise<string | null> {
+  if (nota.tipoDocumento !== "nota_credito" || nota.compraId) {
+    return null;
+  }
+  if (!nota.facturaOrigenId) {
+    throw new Error("La nota de crédito no tiene factura original. Manda facturaOrigen con el id o la clave de la factura");
+  }
+  const origen = await requireFactura(nota.facturaOrigenId);
+  if (origen.esCompraPersonal || origen.moneda !== "DOP") {
+    return null;
+  }
+  if (!origen.compraId) {
+    throw new Error("La factura original todavía no está verificada. Boris tiene que verificarla antes que la nota de crédito");
+  }
+  if (nota.total == null || nota.total <= 0) {
+    throw new Error("La nota de crédito no tiene total para descontar");
+  }
+  return origen.compraId;
+}
+
+/** Descuenta la nota de la cuenta por pagar. Si el saldo llega a cero, la cuenta queda pagada. */
+async function aplicarNotaCredito(nota: FacturaDetalle, compraId: string): Promise<string> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.from("compras").select("monto, notas_credito, pagado").eq("id", compraId).maybeSingle();
+  if (error) {
+    throw error;
+  }
+  if (!data) {
+    throw new Error("No encontramos la cuenta por pagar de la factura original");
+  }
+  const notasCredito = toMoney(toMoney(data.notas_credito ?? 0) + (nota.total ?? 0));
+  const saldado = notasCredito >= toMoney(data.monto);
+  const { error: updateError } = await supabase
+    .from("compras")
+    .update({
+      notas_credito: notasCredito,
+      ...(saldado && !data.pagado ? { pagado: true, pagado_en: todayDayKey() } : {}),
+    })
+    .eq("id", compraId);
+  if (updateError) {
+    throw updateError;
+  }
+  return compraId;
+}
+
 export async function publicarVerificacion(
   idOrClave: string,
   body: Record<string, unknown>,
@@ -220,6 +310,7 @@ export async function publicarVerificacion(
     throw new Error("El resultado tiene que ser cuadra, falta o diferencia");
   }
   const nota = textOrNull(body.nota, 2000);
+  const aplicarA = resultado === "cuadra" ? await compraParaNota(factura) : null;
   const supabase = getSupabaseAdminClient();
   const { error } = await supabase.from("factura_verificaciones").insert({
     factura_id: factura.id,
@@ -236,7 +327,7 @@ export async function publicarVerificacion(
     throw error;
   }
   if (resultado === "cuadra") {
-    const compraId = await abrirCuentaPorPagar(factura);
+    const compraId = aplicarA ? await aplicarNotaCredito(factura, aplicarA) : await abrirCuentaPorPagar(factura);
     await limpiarProblema(factura.id);
     const { error: updateError } = await supabase
       .from("facturas")
@@ -270,15 +361,26 @@ export async function publicarConciliacion(
     throw new Error("El medio tiene que ser banco, caja o cardnet");
   }
   const nota = textOrNull(body.nota, 2000);
-  const fecha = dayOrNull(body.fecha, "La fecha");
+  const ledgerId = body.ledgerId ?? body.ledger_id;
+  const movimientoId = body.movimientoId ?? body.movimiento_id;
+  const liga = ledgerId != null || movimientoId != null;
+  if (liga && resultado !== "pagada") {
+    throw new Error("Solo se liga un movimiento cuando el resultado es pagada");
+  }
+  const medioLigado: ConciliacionMedio = movimientoId != null ? "banco" : "caja";
+  if (liga && medio && medio !== medioLigado) {
+    throw new Error(`El movimiento es de ${medioLigado}. Manda medio ${medioLigado} o no mandes medio`);
+  }
+  const pago = liga ? await ligarPago(factura.id, { ledgerId, movimientoId }, actor) : null;
+  const fecha = dayOrNull(body.fecha, "La fecha") ?? pago?.fecha ?? null;
   const supabase = getSupabaseAdminClient();
   const { error } = await supabase.from("factura_conciliaciones").insert({
     factura_id: factura.id,
     resultado,
-    medio,
+    medio: medio ?? (pago ? pago.origen : null),
     fecha,
-    referencia: textOrNull(body.referencia, 160),
-    monto: moneyOrNull(body.monto),
+    referencia: textOrNull(body.referencia, 160) ?? pago?.referencia ?? null,
+    monto: moneyOrNull(body.monto) ?? pago?.monto ?? null,
     nota,
   });
   if (error) {
@@ -306,6 +408,25 @@ export async function publicarConciliacion(
       nota ?? (resultado === "vencida_sin_pagar" ? "Vencida sin pagar" : "Pagada sin movimiento")
     );
   }
+  return requireFactura(factura.id);
+}
+
+/** Fred liga una salida de caja o un débito del banco sin cerrar todavía la conciliación. */
+export async function ligarPagoCaja(idOrClave: string, body: Record<string, unknown>, actor: Actor): Promise<FacturaDetalle> {
+  const factura = await requireFactura(idOrClave);
+  if (factura.estado === "conciliada") {
+    throw new Error("La factura ya está conciliada");
+  }
+  await ligarPago(factura.id, { ledgerId: body.ledgerId ?? body.ledger_id, movimientoId: body.movimientoId ?? body.movimiento_id }, actor);
+  return requireFactura(factura.id);
+}
+
+export async function quitarPagoCaja(idOrClave: string, pagoId: string, actor: Actor): Promise<FacturaDetalle> {
+  const factura = await requireFactura(idOrClave);
+  if (factura.estado === "conciliada") {
+    throw new Error("La factura ya está conciliada. Ábrele una excepción si el pago estaba mal");
+  }
+  await quitarPago(factura.id, pagoId, actor);
   return requireFactura(factura.id);
 }
 
@@ -440,6 +561,7 @@ function mapExcepcion(row: Record<string, unknown>, referencia: string | null): 
     autor,
     dueno,
     queFalta,
+    caso: textOrNull(row.caso, 80),
     estado,
     resolucion: textOrNull(row.resolucion, 2000),
     abiertaEn,
