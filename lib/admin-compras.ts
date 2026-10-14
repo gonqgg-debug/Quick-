@@ -9,6 +9,7 @@ import {
   COMPRAS_PAGE_SIZE,
   dueDateFromCredit,
   parseFormaPago,
+  saldoCompra,
   sortProveedores,
   summarizePendientes,
   type Compra,
@@ -24,7 +25,7 @@ const LIST_MAX = 1000;
 
 const PROVEEDOR_SELECT = "id, nombre, rnc, tiene_credito, dias_credito, forma_pago, notas";
 const COMPRA_SELECT =
-  "id, proveedor_id, monto, fecha, due_date, pagado, pagado_en, rnc, ncf, captura_path, proveedores ( id, nombre )";
+  "id, proveedor_id, monto, notas_credito, fecha, due_date, pagado, pagado_en, rnc, ncf, captura_path, proveedores ( id, nombre )";
 
 type ProveedorRow = {
   id: unknown;
@@ -42,6 +43,7 @@ type CompraRow = {
   id: unknown;
   proveedor_id: unknown;
   monto: unknown;
+  notas_credito?: unknown;
   fecha: unknown;
   due_date: unknown;
   pagado: unknown;
@@ -119,11 +121,15 @@ function mapCompra(row: CompraRow): CompraStored | null {
   }
   const pagadoEn = row.pagado_en ? String(row.pagado_en) : null;
   const capturaPath = fiscalText(row.captura_path);
+  const monto = toMoney(row.monto);
+  const notasCredito = row.notas_credito == null ? 0 : toMoney(row.notas_credito);
   return {
     id,
     proveedorId,
     proveedorNombre: proveedorNombre(row.proveedores, proveedorId),
-    monto: toMoney(row.monto),
+    monto,
+    notasCredito,
+    saldo: saldoCompra(monto, notasCredito),
     fecha,
     dueDate,
     pagado: Boolean(row.pagado),
@@ -141,6 +147,8 @@ function publicCompra(compra: CompraStored): Compra {
     proveedorId: compra.proveedorId,
     proveedorNombre: compra.proveedorNombre,
     monto: compra.monto,
+    notasCredito: compra.notasCredito,
+    saldo: compra.saldo,
     fecha: compra.fecha,
     dueDate: compra.dueDate,
     pagado: compra.pagado,
@@ -369,7 +377,7 @@ async function loadComprasSummary() {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("compras")
-    .select("monto, due_date, pagado")
+    .select("monto, notas_credito, due_date, pagado")
     .eq("pagado", false)
     .limit(LIST_MAX);
   if (error) {
@@ -381,9 +389,9 @@ async function loadComprasSummary() {
       if (!isDayKey(dueDate)) {
         return null;
       }
-      return { pagado: false as const, monto: toMoney(row.monto), dueDate };
+      return { pagado: false as const, monto: toMoney(row.monto), notasCredito: toMoney(row.notas_credito ?? 0), dueDate };
     })
-    .filter((row): row is { pagado: false; monto: number; dueDate: string } => Boolean(row));
+    .filter((row): row is { pagado: false; monto: number; notasCredito: number; dueDate: string } => Boolean(row));
   return summarizePendientes(rows, todayDayKey());
 }
 

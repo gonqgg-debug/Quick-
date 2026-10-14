@@ -2,7 +2,8 @@
 
 import { useState, type ReactNode } from "react";
 import { AdminInput, AdminTextarea } from "@/components/admin/AdminField";
-import { formatMonto, type FacturaDetalle } from "@/lib/facturas-shared";
+import { formatMonto, resumenRecepcion, type FacturaDetalle } from "@/lib/facturas-shared";
+import { bloqueoRegistro } from "@/components/admin/facturas/falta";
 import { brand } from "@/lib/theme";
 import { mensajeDe, type EnviarFactura } from "@/components/admin/facturas/useFactura";
 import { Aviso, BotonPrincipal, BotonSecundario, Pill, Seccion, TONO, fechaCorta, fechaHora, pasoDeEtapa } from "@/components/admin/facturas/ui";
@@ -11,7 +12,9 @@ type Estado = "hecho" | "pendiente" | "problema";
 
 export function Equipo({ factura, enviar }: { factura: FacturaDetalle; enviar: EnviarFactura }) {
   const paso = pasoDeEtapa(factura.estado);
-  const rodrigo: Estado = factura.confirmacionEn || factura.esCompraPersonal ? "hecho" : "pendiente";
+  const recepcion = resumenRecepcion(factura.lineas);
+  const rodrigo: Estado = factura.esCompraPersonal || (recepcion.lineas > 0 && recepcion.sinConfirmar === 0) ? (recepcion.faltantes ? "problema" : "hecho") : "pendiente";
+  const bloqueo = bloqueoRegistro(factura);
   const phillip: Estado = paso >= 1 ? "hecho" : "pendiente";
   const boris: Estado = factura.verificacion
     ? factura.verificacion.resultado === "cuadra"
@@ -39,16 +42,16 @@ export function Equipo({ factura, enviar }: { factura: FacturaDetalle; enviar: E
         </div>
       ) : null}
       <ol className="relative space-y-5 border-l-2 border-[#E7EBE4] pl-5">
-        <Paso nombre="Rodrigo" rol="Respuesta de la tienda y compra personal" estado={rodrigo}>
+        <Paso nombre="Rodrigo" rol="Recepción, respuesta de la tienda y compra personal" estado={rodrigo}>
           <Rodrigo factura={factura} enviar={enviar} />
         </Paso>
         <Paso nombre="Phillip" rol="Registra los renglones" estado={phillip}>
           <p className="text-sm text-brand-muted">
             {phillip === "hecho"
               ? `Renglones listos: ${factura.numeroProductos} producto${factura.numeroProductos === 1 ? "" : "s"}.`
-              : factura.esCompraPersonal || factura.confirmacionEn
+              : bloqueo === null
                 ? "Puede dejarla registrada cuando termine los renglones."
-                : "Espera la respuesta de Ramón para dejarla registrada."}
+                : `${bloqueo}.`}
           </p>
         </Paso>
         <Paso nombre="Boris" rol="Verifica RNC, NCF y montos" estado={boris}>
@@ -70,18 +73,7 @@ export function Equipo({ factura, enviar }: { factura: FacturaDetalle; enviar: E
           )}
         </Paso>
         <Paso nombre="Fred" rol="Concilia el pago" estado={fred}>
-          {factura.conciliacion ? (
-            <p className="text-sm">
-              <span className="font-semibold">
-                {factura.conciliacion.resultadoLabel}
-                {factura.conciliacion.medioLabel ? ` por ${factura.conciliacion.medioLabel}` : ""}
-                {factura.conciliacion.fecha ? ` el ${fechaCorta(factura.conciliacion.fecha)}` : ""}
-              </span>
-              {factura.conciliacion.nota ? <span className="mt-1 block text-brand-muted">{factura.conciliacion.nota}</span> : null}
-            </p>
-          ) : (
-            <p className="text-sm text-brand-muted">Todavía no publica la conciliación.</p>
-          )}
+          <Fred factura={factura} enviar={enviar} />
         </Paso>
       </ol>
     </Seccion>
@@ -133,9 +125,48 @@ function Rodrigo({ factura, enviar }: { factura: FacturaDetalle; enviar: EnviarF
     }
   }
 
+  const recepcion = resumenRecepcion(factura.lineas);
+  const confirmadas = recepcion.lineas - recepcion.sinConfirmar;
+
   return (
     <div className="space-y-3 text-sm">
       {error ? <Aviso>{error}</Aviso> : null}
+      <div className="rounded-xl border border-[#E7EBE4] p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-semibold">Recepción</p>
+          {recepcion.lineas ? (
+            <span className="text-xs text-brand-muted">
+              {confirmadas} de {recepcion.lineas} líneas confirmadas
+            </span>
+          ) : null}
+        </div>
+        {!recepcion.lineas ? (
+          <p className="mt-1 text-brand-muted">Se confirma cuando Phillip extraiga los productos.</p>
+        ) : (
+          <>
+            <p className="mt-1 text-brand-muted">
+              {recepcion.sinConfirmar
+                ? "Marca cada línea en Productos como completa, faltante o regalo. Phillip no puede registrarla hasta que todas estén confirmadas."
+                : "Todas las líneas están confirmadas."}
+              {recepcion.faltantes ? ` ${recepcion.faltantes === 1 ? "Una llegó incompleta" : `${recepcion.faltantes} llegaron incompletas`}: faltan ${formatMonto(recepcion.diferencia, factura.moneda)}.` : ""}
+              {recepcion.regalos ? ` ${recepcion.regalos === 1 ? "Una vino de regalo" : `${recepcion.regalos} vinieron de regalo`}.` : ""}
+            </p>
+            {recepcion.sinConfirmar ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <BotonPrincipal
+                  disabled={saving}
+                  onClick={() => void correr(() => enviar("/recepcion", "POST", { todas: "completa" }), "No pudimos guardar la recepción")}
+                >
+                  Llegó todo completo
+                </BotonPrincipal>
+                <a href="#productos" className="self-center text-xs font-bold" style={{ color: brand.blue }}>
+                  Marcar por línea
+                </a>
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
       <div className="rounded-xl border border-[#E7EBE4] p-3">
         <p className="font-semibold">Respuesta de la tienda</p>
         {factura.confirmacionEn && !editando ? (
@@ -150,7 +181,7 @@ function Rodrigo({ factura, enviar }: { factura: FacturaDetalle; enviar: EnviarF
           </>
         ) : (
           <>
-            <p className="mt-1 text-brand-muted">Sin esta respuesta Phillip no puede dejarla registrada, salvo que sea compra personal.</p>
+            <p className="mt-1 text-brand-muted">Queda en la ficha como evidencia de lo que contestó la tienda.</p>
             <AdminTextarea value={texto} onChange={(event) => setTexto(event.target.value)} rows={3} className="mt-2" placeholder="Lo que contestó la tienda sobre las cantidades" aria-label="Respuesta de la tienda" />
             <AdminInput value={por} onChange={(event) => setPor(event.target.value)} className="mt-2" aria-label="Quién respondió" />
             <div className="mt-2 flex flex-wrap gap-2">
@@ -190,6 +221,119 @@ function Rodrigo({ factura, enviar }: { factura: FacturaDetalle; enviar: EnviarF
           </BotonSecundario>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Fred({ factura, enviar }: { factura: FacturaDetalle; enviar: EnviarFactura }) {
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
+  const abierta = factura.estado !== "conciliada";
+
+  async function correr(clave: string, accion: () => Promise<void>, fallback: string) {
+    setSaving(clave);
+    setError(null);
+    try {
+      await accion();
+    } catch (reason) {
+      setError(mensajeDe(reason, fallback));
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  return (
+    <div className="space-y-3 text-sm">
+      {error ? <Aviso>{error}</Aviso> : null}
+      {factura.conciliacion ? (
+        <p>
+          <span className="font-semibold">
+            {factura.conciliacion.resultadoLabel}
+            {factura.conciliacion.medioLabel ? ` por ${factura.conciliacion.medioLabel}` : ""}
+            {factura.conciliacion.fecha ? ` el ${fechaCorta(factura.conciliacion.fecha)}` : ""}
+          </span>
+          {factura.conciliacion.nota ? <span className="mt-1 block text-brand-muted">{factura.conciliacion.nota}</span> : null}
+        </p>
+      ) : (
+        <p className="text-brand-muted">Todavía no publica la conciliación.</p>
+      )}
+      {factura.pagos.length ? (
+        <div className="rounded-xl border border-[#E7EBE4] p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-semibold">Pagos ligados</p>
+            {factura.pagosDiferencia != null ? (
+              factura.pagosDiferencia === 0 ? (
+                <Pill label="Cuadra con el total" tone={TONO.verde} />
+              ) : (
+                <Pill
+                  label={factura.pagosDiferencia > 0 ? `Faltan ${formatMonto(factura.pagosDiferencia, factura.moneda)}` : `Sobran ${formatMonto(-factura.pagosDiferencia, factura.moneda)}`}
+                  tone={TONO.naranja}
+                />
+              )
+            ) : null}
+          </div>
+          <ul className="mt-2 divide-y divide-[#F0F2EE]">
+            {factura.pagos.map((pago) => (
+              <li key={pago.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <div>
+                  <p className="font-semibold tabular-nums">{formatMonto(pago.monto, "DOP")}</p>
+                  <p className="text-xs text-brand-muted">
+                    {[pago.origen === "banco" ? "Banco" : "Caja", fechaCorta(pago.fecha), pago.caja, pago.concepto].filter(Boolean).join(" · ")} · ligado por {pago.confirmadoPor}
+                  </p>
+                </div>
+                {abierta ? (
+                  <button
+                    type="button"
+                    disabled={saving !== null}
+                    className="text-xs font-bold disabled:opacity-40"
+                    style={{ color: brand.error }}
+                    onClick={() => void correr(pago.id, () => enviar(`/pagos/${pago.id}`, "DELETE"), "No pudimos quitar el pago")}
+                  >
+                    {saving === pago.id ? "..." : "Quitar"}
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {abierta && factura.pagosCandidatos.length ? (
+        <div className="rounded-xl border border-[#E7EBE4] p-3">
+          <p className="font-semibold">Posibles pagos</p>
+          <p className="mt-1 text-brand-muted">
+            Salidas de caja del día de la factura (un día antes o después) y débitos del banco hasta una semana después del vencimiento, por el mismo monto. Nada se liga solo: confírmalo tú o Fred.
+          </p>
+          <ul className="mt-2 divide-y divide-[#F0F2EE]">
+            {factura.pagosCandidatos.map((candidato) => {
+              const clave = candidato.ledgerId ?? candidato.movimientoId ?? "";
+              return (
+                <li key={clave} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <div>
+                    <p className="font-semibold tabular-nums">
+                      {formatMonto(candidato.monto, "DOP")} <span className="text-xs font-medium text-brand-muted">· {candidato.confianza}% seguro</span>
+                    </p>
+                    <p className="text-xs text-brand-muted">
+                      {[candidato.origen === "banco" ? "Banco" : "Caja", fechaCorta(candidato.fecha), candidato.caja, candidato.concepto, candidato.referencia].filter(Boolean).join(" · ")}
+                    </p>
+                  </div>
+                  <BotonSecundario
+                    disabled={saving !== null}
+                    onClick={() =>
+                      void correr(
+                        clave,
+                        () => enviar("/pagos", "POST", candidato.origen === "banco" ? { movimientoId: candidato.movimientoId } : { ledgerId: candidato.ledgerId }),
+                        "No pudimos ligar el pago"
+                      )
+                    }
+                  >
+                    {saving === clave ? "..." : "Ligar"}
+                  </BotonSecundario>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }

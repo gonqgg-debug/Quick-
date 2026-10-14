@@ -1,5 +1,7 @@
-import { dueDateFromCredit, parseFormaPago } from "../lib/admin-compras-shared";
+import { dueDateFromCredit, parseFormaPago, saldoCompra, summarizePendientes } from "../lib/admin-compras-shared";
+import { casosRecordatorio, diferenciaMontos, pendientesDe, type PendientesInput } from "../lib/facturas-pendientes";
 import { documentosDesdeValor } from "../lib/factura-documentos";
+import { distanciaVentana, leerEstadoCuenta, leerFechaBanco, leerMontoBanco, llavesMovimientos, ventanaBanco } from "../lib/banco-shared";
 import { revisarNcf } from "../lib/ncf";
 import {
   FACTURA_ESTADOS,
@@ -12,6 +14,21 @@ import {
   referenciaFactura,
   resolverUnidades,
   validacionesFiscales,
+  PROPUESTA_ACEPTAR_TODAS,
+  PROPUESTA_CONFIANZA,
+  PROPUESTA_UMBRAL,
+  cantidadRecibidaDe,
+  ALERTA_MIN_COMPRAS,
+  alertasLinea,
+  confianzaPago,
+  confianzaTexto,
+  mediana,
+  medidaLinea,
+  diferenciaPagos,
+  diferenciaRecepcion,
+  leerRecepcion,
+  normalizarDescripcion,
+  resumenRecepcion,
 } from "../lib/facturas-shared";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -87,7 +104,7 @@ assert(leida.campos.estado === "registrada", "completa cuenta como registrada");
 assert(leida.campos.moneda === "DOP", "RD$ es DOP");
 assert(leida.campos.tipoDocumento === "nota_credito", "acepta nota de crédito");
 assert(leida.campos.total === 1234.5, "lee el monto con separador local");
-assert(FACTURA_ESTADOS.find((item) => item.id === "registrada")?.ayuda.includes("Ramón"), "registrada pide la respuesta de Ramón");
+assert(FACTURA_ESTADOS.find((item) => item.id === "registrada")?.ayuda.includes("Rodrigo"), "registrada pide la recepción de Rodrigo");
 
 const duplicado = buscarDuplicado(
   { proveedor: "Sol", ncf: "b0100000001", numeroFactura: "100", fechaEmision: "2026-09-20" },
@@ -180,7 +197,193 @@ assert(parseFormaPago("Transferencia") === "transferencia" && parseFormaPago("ch
 assert(dueDateFromCredit("2026-10-14", { tieneCredito: true, diasCredito: 30 }) === "2026-11-13", "30 días de crédito desde el 14 de octubre vencen el 13 de noviembre");
 assert(FACTURAS_AGENT_USO.includes("rnc_proveedor") && FACTURAS_AGENT_USO.includes("ticket"), "el texto de uso explica las validaciones automáticas y el ticket");
 
-assert(FACTURAS_AGENT_ENDPOINTS.length === 10, "el directorio del agente lista las rutas de facturas");
+assert(normalizarDescripcion("  CAFÉ Santo Domingo 1lb. ") === "cafe santo domingo 1lb", "la descripción se normaliza para el alias");
+assert(normalizarDescripcion("x") === null, "una descripción de una letra no sirve de alias");
+assert(confianzaTexto(0.62) === 74 && confianzaTexto(0.95) === 85, "la confianza por nombre se escala y nunca pasa de 85");
+assert(confianzaTexto(1) < PROPUESTA_ACEPTAR_TODAS && PROPUESTA_CONFIANZA.odoo >= PROPUESTA_ACEPTAR_TODAS, "aceptar todas toma Odoo, barras y alias, pero no texto");
+assert(PROPUESTA_UMBRAL === 70, "bajo 70 la línea queda para revisión");
+
+const faltante = { recepcion: "faltante" as const, cantidadComprada: 10, cantidadRecibida: 7, costoPorPresentacion: 120, totalLinea: 1200 };
+assert(diferenciaRecepcion(faltante) === 360, "3 cajas faltantes de 120 son 360");
+assert(diferenciaRecepcion({ ...faltante, costoPorPresentacion: null }) === 360, "sin costo por presentación usa el total de la línea");
+assert(diferenciaRecepcion({ ...faltante, recepcion: "regalo" }) === 0, "un regalo no suma diferencia");
+assert(diferenciaRecepcion({ ...faltante, recepcion: "pendiente" }) === null, "sin confirmar no hay diferencia todavía");
+const resumen = resumenRecepcion([
+  { recepcion: "completa", diferenciaRecepcion: 0 },
+  { recepcion: "faltante", diferenciaRecepcion: 360 },
+  { recepcion: "pendiente", diferenciaRecepcion: null },
+]);
+assert(resumen.sinConfirmar === 1 && resumen.faltantes === 1 && resumen.diferencia === 360, "el resumen cuenta pendientes, faltantes y la diferencia");
+
+const recibida = leerRecepcion({ lineas: [{ numeroLinea: 1, recepcion: "llegó" }, { numeroLinea: 2, recepcion: "faltante", cantidadRecibida: "3" }] });
+assert(recibida.lineas[0]?.recepcion === "completa" && recibida.lineas[1]?.cantidadRecibida === 3, "lee la recepción por línea");
+assert(leerRecepcion({ todas: "completa" }).todas === "completa", "todas: completa marca todo");
+let faltaSinCantidad = false;
+try {
+  cantidadRecibidaDe({ numeroLinea: 2, recepcion: "faltante", cantidadRecibida: null }, 10);
+} catch (error) {
+  faltaSinCantidad = error instanceof Error && error.message.includes("cantidadRecibida");
+}
+assert(faltaSinCantidad, "un faltante necesita cuántas llegaron");
+let faltaCompleta = false;
+try {
+  cantidadRecibidaDe({ numeroLinea: 2, recepcion: "faltante", cantidadRecibida: 10 }, 10);
+} catch {
+  faltaCompleta = true;
+}
+assert(faltaCompleta, "si llegaron todas no es faltante");
+assert(cantidadRecibidaDe({ numeroLinea: 1, recepcion: "completa", cantidadRecibida: null }, 10) === 10, "completa guarda la cantidad comprada");
+let todasFaltante = false;
+try {
+  leerRecepcion({ todas: "faltante" });
+} catch {
+  todasFaltante = true;
+}
+assert(todasFaltante, "los faltantes van por línea");
+assert(FACTURAS_AGENT_USO.includes("/recepcion") && FACTURAS_AGENT_USO.includes("propuesta"), "el texto de uso explica recepción y propuestas");
+
+const pagoBase = { total: 1500, monto: 1500, diasDeDiferencia: 0, proveedor: "Distribuidora Rica SRL", concepto: "FACTURA RICA", referencia: null };
+assert(confianzaPago(pagoBase) === 100, "mismo monto, mismo día y el concepto nombra al proveedor");
+assert(confianzaPago({ ...pagoBase, concepto: "PAGO VARIOS" }) === 85, "sin el nombre del proveedor baja a 85");
+assert(confianzaPago({ ...pagoBase, concepto: "PAGO VARIOS", monto: 1504, diasDeDiferencia: 1 }) === 70, "a RD$ 4 y un día queda en 70");
+assert(confianzaPago({ ...pagoBase, monto: 1506 }) === null, "a más de RD$ 5 no es el pago");
+assert(confianzaPago({ ...pagoBase, diasDeDiferencia: 2 }) === null, "a dos días no es el pago");
+assert(confianzaPago({ ...pagoBase, concepto: "SRL DISTRIBUIDORA", monto: 1500 }) === 85, "palabras genéricas del nombre no cuentan");
+assert(diferenciaPagos(1500, []) === null, "sin pagos no hay diferencia");
+assert(diferenciaPagos(1500, [{ monto: 1000 }, { monto: 500 }]) === 0, "dos pagos pueden sumar el total");
+assert(diferenciaPagos(1500, [{ monto: 1000 }]) === 500, "falta lo que no se ligó");
+
+assert(leerCamposFactura({ tipoDocumento: "nota_credito", facturaOrigen: "ABC-1" }, "create").campos.facturaOrigen === "ABC-1", "la nota manda facturaOrigen");
+assert(leerCamposFactura({ factura_origen_id: null }, "patch").campos.facturaOrigen === null, "facturaOrigen null la desliga");
+assert(saldoCompra(1500, 500) === 1000, "la nota se resta del saldo");
+assert(saldoCompra(1500, 2000) === 0, "el saldo nunca queda negativo");
+const resumenCompras = summarizePendientes([{ pagado: false, monto: 1500, notasCredito: 500, dueDate: "2026-01-01" }], "2026-02-01");
+assert(resumenCompras.totalPendiente === 1000 && resumenCompras.vencidas === 1000, "cuentas por pagar usan el saldo");
+
+const pendienteBase: PendientesInput = {
+  problema: false,
+  problemaDueno: null,
+  problemaDesde: null,
+  problemaFalta: null,
+  posibleDuplicado: false,
+  duplicadoReferencia: null,
+  preguntasAbiertas: 0,
+  estado: "verificada",
+  esCompraPersonal: false,
+  moneda: "DOP",
+  tieneFoto: true,
+  tipoDocumento: "factura",
+  facturaOrigenId: null,
+  fechaVencimiento: null,
+  subtotal: 1000,
+  descuentoTotal: 0,
+  itbisTotal: 180,
+  otrosCargos: 0,
+  total: 1180,
+  recepcion: { lineas: 2, sinConfirmar: 0, faltantes: 0, diferencia: 0 },
+  lineasSinCatalogo: 0,
+  validacionesConDiferencia: 0,
+  pagosCandidatos: 0,
+  lineasConAlerta: 0,
+  pagosDiferencia: null,
+};
+const opciones = { hoy: "2026-10-14", formatDesde: (value: string | null) => value ?? "" };
+assert(diferenciaMontos(pendienteBase) === 0, "subtotal más ITBIS da el total");
+assert(pendientesDe(pendienteBase, opciones).length === 0, "una factura completa no tiene pendientes");
+const vence = pendientesDe({ ...pendienteBase, fechaVencimiento: "2026-10-16" }, opciones);
+assert(vence.length === 1 && vence[0].id === "vencimiento" && vence[0].dueno === "fred" && !vence[0].grave, "vence en 2 días le toca a Fred");
+assert(pendientesDe({ ...pendienteBase, fechaVencimiento: "2026-10-20" }, opciones).length === 0, "a 6 días todavía no avisa");
+assert(pendientesDe({ ...pendienteBase, fechaVencimiento: "2026-10-10" }, opciones)[0]?.grave === true, "vencida es grave");
+assert(pendientesDe({ ...pendienteBase, fechaVencimiento: "2026-10-10", estado: "conciliada" }, opciones).length === 0, "conciliada no avisa");
+assert(pendientesDe({ ...pendienteBase, fechaVencimiento: "2026-10-10", pagosDiferencia: 0 }, opciones).length === 0, "pagada en caja no avisa el vencimiento");
+assert(pendientesDe({ ...pendienteBase, pagosCandidatos: 2 }, opciones)[0]?.id === "pago_candidato", "avisa a Fred de pagos para ligar");
+assert(pendientesDe({ ...pendienteBase, pagosDiferencia: 80 }, opciones)[0]?.id === "pago_diferencia", "avisa si lo ligado no cuadra");
+assert(pendientesDe({ ...pendienteBase, tipoDocumento: "nota_credito" }, opciones)[0]?.id === "nota_origen", "la nota sin original es pendiente");
+assert(pendientesDe({ ...pendienteBase, lineasSinCatalogo: 1 }, opciones)[0]?.dueno === "phillip", "el catálogo le toca a Phillip");
+assert(pendientesDe({ ...pendienteBase, estado: "recibida", recepcion: { lineas: 2, sinConfirmar: 2, faltantes: 0, diferencia: 0 } }, opciones)[0]?.dueno === "rodrigo", "la recepción le toca a Rodrigo");
+
+const ahora = { hoy: "2026-10-14", ms: Date.parse("2026-10-14T12:00:00.000Z") };
+const recordatorioBase = {
+  estado: "recibida" as const,
+  esCompraPersonal: false,
+  tipoDocumento: "factura" as const,
+  recibidoEn: "2026-10-13T11:00:00.000Z",
+  lineasSinRecepcion: 3,
+  venceSinPagar: null,
+};
+assert(casosRecordatorio(recordatorioBase, ahora)[0]?.caso === "sin_recepcion", "más de 24 horas sin recepción abre caso");
+assert(casosRecordatorio({ ...recordatorioBase, recibidoEn: "2026-10-13T13:00:00.000Z" }, ahora).length === 0, "menos de 24 horas espera");
+assert(casosRecordatorio({ ...recordatorioBase, esCompraPersonal: true }, ahora).length === 0, "la compra personal no necesita recepción");
+const venceCaso = casosRecordatorio({ ...recordatorioBase, lineasSinRecepcion: 0, estado: "verificada", venceSinPagar: "2026-10-17" }, ahora);
+assert(venceCaso.length === 1 && venceCaso[0].caso === "vence:2026-10-17" && venceCaso[0].dueno === "fred", "vence en 3 días abre caso de Fred");
+assert(casosRecordatorio({ ...recordatorioBase, lineasSinRecepcion: 0, venceSinPagar: "2026-10-18" }, ahora).length === 0, "a 4 días todavía no");
+
+assert(leerFechaBanco("05/10/2026") === "2026-10-05", "el banco pone el día primero");
+assert(leerFechaBanco("2026-10-05") === "2026-10-05", "también lee ISO");
+assert(leerFechaBanco("05-Oct-26") === "2026-10-05", "lee el mes en letras");
+assert(leerFechaBanco("5 ago. 2026") === "2026-08-05", "lee el mes en español");
+assert(leerFechaBanco("31/02/2026") === null, "una fecha imposible no pasa");
+assert(leerFechaBanco("46300") === "2026-10-05", "lee el número de serie de Excel");
+assert(leerMontoBanco("-1.234,56") === -1234.56, "negativo con coma decimal");
+assert(leerMontoBanco("(1,234.56)") === -1234.56, "paréntesis es negativo");
+assert(leerMontoBanco("1,234.56-") === -1234.56, "signo al final es negativo");
+assert(leerMontoBanco("RD$ 2,500.00") === 2500, "quita RD$");
+assert(leerMontoBanco("") === null, "vacío no es monto");
+
+const popular = leerEstadoCuenta([
+  ["Banco Popular Dominicano"],
+  ["Cuenta", "****1234"],
+  ["Fecha Posteo", "Descripción", "No. Referencia", "Débito", "Crédito", "Balance"],
+  ["05/10/2026", "TRANSF A DISTRIBUIDORA RICA", "778812", "1,500.00", "", "98,500.00"],
+  ["06/10/2026", "DEPOSITO", "", "", "20,000.00", "118,500.00"],
+  ["", "Saldo final", "", "", "", "118,500.00"],
+]);
+assert(popular.movimientos.length === 2 && popular.descartadas === 1, "salta el saldo final");
+assert(popular.movimientos[0].tipo === "debito" && popular.movimientos[0].monto === 1500 && popular.movimientos[0].referencia === "778812", "débito con referencia");
+assert(popular.movimientos[1].tipo === "credito" && popular.movimientos[1].monto === 20000, "crédito");
+const firmado = leerEstadoCuenta([
+  ["Fecha", "Concepto", "Monto"],
+  ["2026-10-05", "PAGO KOLA REAL", "-3,200.50"],
+  ["2026-10-05", "PAGO KOLA REAL", "-3,200.50"],
+  ["2026-10-06", "INTERESES", "12.00"],
+]);
+assert(firmado.movimientos[0].tipo === "debito" && firmado.movimientos[2].tipo === "credito", "el signo decide débito o crédito");
+const llaves = llavesMovimientos("Popular", null, firmado.movimientos);
+assert(llaves[0] !== llaves[1] && new Set(llaves).size === 3, "dos filas iguales en el mismo archivo no se juntan");
+assert(llavesMovimientos("Popular", null, firmado.movimientos).join() === llaves.join(), "reimportar da las mismas llaves");
+let sinEncabezado = false;
+try {
+  leerEstadoCuenta([["a", "b"], ["1", "2"]]);
+} catch (error) {
+  sinEncabezado = error instanceof Error && error.message.startsWith("El archivo");
+}
+assert(sinEncabezado, "sin encabezado explica qué falta");
+const ventana = ventanaBanco({ fechaEmision: "2026-10-01", fechaVencimiento: "2026-10-31", recibidaDia: "2026-10-02" });
+assert(ventana.desde === "2026-09-30" && ventana.hasta === "2026-10-31", "la ventana del banco va de la emisión al vencimiento");
+assert(distanciaVentana("2026-10-15", ventana.desde, ventana.hasta) === 0, "dentro de la ventana es cero");
+assert(distanciaVentana("2026-11-03", ventana.desde, ventana.hasta) === 3, "tres días después del vencimiento");
+assert(confianzaPago({ ...pagoBase, diasDeDiferencia: 5, maxDias: 7 }) === 95, "el banco acepta hasta 7 días después");
+assert(confianzaPago({ ...pagoBase, diasDeDiferencia: 8, maxDias: 7 }) === null, "a 8 días ya no");
+
+assert(mediana([3, 1, 2]) === 2 && mediana([1, 2, 3, 4]) === 2.5 && mediana([]) === null, "mediana");
+const enUnidades = (costo: number, cantidad = 24) =>
+  medidaLinea({ costoUnitario: costo, unidadesTotales: cantidad, costoPorPresentacion: costo * 24, cantidadComprada: 1, presentacion: "caja", unidadesPorPresentacion: 24 });
+const historial = [enUnidades(50), enUnidades(52), enUnidades(48), enUnidades(51)];
+const umbral = { precio: 0.15, cantidad: 0.5 };
+assert(alertasLinea(enUnidades(55), historial, umbral).length === 0, "10% más no avisa");
+const caro = alertasLinea(enUnidades(62), historial, umbral);
+assert(caro.length === 1 && caro[0].tipo === "precio" && caro[0].mediana === 50.5 && caro[0].variacion > 0.2, "23% más caro avisa");
+assert(alertasLinea(enUnidades(40), historial, umbral)[0]?.variacion < 0, "mucho más barato también avisa");
+assert(alertasLinea(enUnidades(50, 72), historial, umbral)[0]?.tipo === "cantidad", "el triple de unidades avisa");
+assert(alertasLinea(enUnidades(62), historial.slice(0, ALERTA_MIN_COMPRAS - 1), umbral).length === 0, "sin historial suficiente no avisa");
+const porCaja = medidaLinea({ costoUnitario: null, unidadesTotales: null, costoPorPresentacion: 1500, cantidadComprada: 2, presentacion: "fardo", unidadesPorPresentacion: null });
+assert(alertasLinea(porCaja, historial, umbral).length === 0, "no compara un fardo contra precios por unidad");
+assert(pendientesDe({ ...pendienteBase, lineasConAlerta: 2 }, opciones)[0]?.dueno === "boris", "las alertas de precio le tocan a Boris");
+
+assert(FACTURAS_AGENT_USO.includes("movimientoId") && FACTURAS_AGENT_USO.includes("alertas"), "el texto de uso explica banco y alertas");
+assert(FACTURAS_AGENT_USO.includes("facturaOrigen") && FACTURAS_AGENT_USO.includes("/api/agent/pendientes"), "el texto de uso explica notas y pendientes");
+assert(FACTURAS_AGENT_ENDPOINTS.length === 13, "el directorio del agente lista las rutas de facturas");
+assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path === "/api/agent/presentaciones"), "hay una ruta para guardar presentaciones");
 assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path.includes("documentos")), "hay una ruta para subir la foto");
 
 console.log("facturas ok");

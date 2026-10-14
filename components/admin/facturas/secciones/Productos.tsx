@@ -1,21 +1,80 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AdminInput } from "@/components/admin/AdminField";
-import { formatMonto, type FacturaDetalle, type FacturaLinea } from "@/lib/facturas-shared";
+import { AdminInput, AdminSelect } from "@/components/admin/AdminField";
+import {
+  FACTURA_RECEPCIONES,
+  PROPUESTA_ACEPTAR_TODAS,
+  PROPUESTA_UMBRAL,
+  formatMonto,
+  resumenRecepcion,
+  type FacturaDetalle,
+  type FacturaLinea,
+  type FacturaRecepcion,
+} from "@/lib/facturas-shared";
 import { brand } from "@/lib/theme";
 import { mensajeDe, type EnviarFactura } from "@/components/admin/facturas/useFactura";
-import { Dato, Seccion, TONO, Pill } from "@/components/admin/facturas/ui";
+import { Dato, Seccion, TONO, Pill, type PillTone } from "@/components/admin/facturas/ui";
+
+const RECEPCION_TONO: Record<FacturaRecepcion, PillTone> = {
+  pendiente: TONO.gris,
+  completa: TONO.verde,
+  faltante: TONO.rojo,
+  regalo: TONO.azul,
+};
 
 export function Productos({ factura, enviar }: { factura: FacturaDetalle; enviar: EnviarFactura }) {
   const [abierta, setAbierta] = useState<string | null>(null);
+  const [aceptando, setAceptando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const sinCatalogo = factura.lineas.filter((linea) => !linea.productoCatalogo).length;
+  const aceptables = factura.lineas.filter((linea) => !linea.productoId && (linea.propuesta?.confianza ?? 0) >= PROPUESTA_ACEPTAR_TODAS).length;
+  const recepcion = resumenRecepcion(factura.lineas);
+
+  async function aceptarTodas() {
+    setAceptando(true);
+    setError(null);
+    try {
+      await enviar("/lineas/aceptar", "POST", {});
+    } catch (reason) {
+      setError(mensajeDe(reason, "No pudimos aceptar las propuestas"));
+    } finally {
+      setAceptando(false);
+    }
+  }
+
   return (
     <Seccion
       id="productos"
       titulo={`Productos (${factura.lineas.length})`}
-      extra={sinCatalogo > 0 ? <Pill label={`${sinCatalogo} sin catálogo`} tone={TONO.naranja} /> : null}
+      extra={
+        <div className="flex flex-wrap items-center gap-1">
+          {sinCatalogo > 0 ? <Pill label={`${sinCatalogo} sin catálogo`} tone={TONO.naranja} /> : null}
+          {recepcion.sinConfirmar > 0 && !factura.esCompraPersonal ? <Pill label={`${recepcion.sinConfirmar} sin recepción`} tone={TONO.gris} /> : null}
+        </div>
+      }
     >
+      {aceptables > 0 ? (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm" style={{ backgroundColor: brand.paleBlue }}>
+          <span>
+            {aceptables === 1 ? "Una línea tiene" : `${aceptables} líneas tienen`} propuesta de {PROPUESTA_ACEPTAR_TODAS}% o más por alias, código de barras o Odoo.
+          </span>
+          <button
+            type="button"
+            disabled={aceptando}
+            onClick={() => void aceptarTodas()}
+            className="rounded-full px-3 text-xs font-bold text-white disabled:opacity-50"
+            style={{ minHeight: 32, backgroundColor: brand.navy }}
+          >
+            {aceptando ? "Aceptando…" : `Aceptar ${aceptables === 1 ? "la propuesta" : `las ${aceptables}`}`}
+          </button>
+        </div>
+      ) : null}
+      {error ? (
+        <p className="mb-2 text-xs" style={{ color: brand.error }}>
+          {error}
+        </p>
+      ) : null}
       {!factura.lineas.length ? (
         <p className="text-sm text-brand-muted">Phillip todavía no extrajo productos.</p>
       ) : (
@@ -65,9 +124,24 @@ function Linea({
           <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-brand-muted">
             <span>{linea.cantidadComprada == null ? "—" : linea.cantidadComprada} {linea.presentacionLabel ?? ""}</span>
             <span style={{ color: linea.productoCatalogo ? "#3F6212" : "#9A3412" }}>
-              {linea.productoCatalogo ? linea.productoCatalogo.nombre : "Sin catálogo"}
+              {linea.productoCatalogo
+                ? linea.productoCatalogo.nombre
+                : linea.propuesta?.producto
+                  ? `¿${linea.propuesta.producto.nombre}? ${linea.propuesta.confianza}%`
+                  : "Sin catálogo"}
             </span>
             {dudosa ? <span style={{ color: "#9A3412" }}>{linea.estadoLabel}</span> : null}
+            {linea.alertas.map((alerta) => (
+              <span key={alerta.tipo} className="font-semibold" style={{ color: "#9A3412" }}>
+                {alerta.tipo === "precio" ? "Precio" : "Cantidad"} {alerta.variacion > 0 ? "+" : "−"}
+                {Math.round(Math.abs(alerta.variacion) * 100)}%
+              </span>
+            ))}
+            {linea.recepcion === "faltante" || linea.recepcion === "regalo" ? (
+              <span style={{ color: RECEPCION_TONO[linea.recepcion].color }}>
+                {linea.recepcion === "faltante" ? `Llegaron ${linea.cantidadRecibida ?? 0}` : "Regalo"}
+              </span>
+            ) : null}
           </span>
         </span>
         <span className="whitespace-nowrap font-semibold tabular-nums">{monto(linea.totalLinea)}</span>
@@ -90,7 +164,16 @@ function Linea({
             <Dato label="Estado" value={linea.estadoLabel} />
           </dl>
           {linea.observacion ? <p className="mt-2 text-xs leading-relaxed" style={{ color: "#9A3412" }}>{linea.observacion}</p> : null}
+          {linea.alertas.length ? (
+            <ul className="mt-2 space-y-1 rounded-xl px-3 py-2 text-xs leading-relaxed" style={{ backgroundColor: "#FDF1DE", color: "#9A3412" }}>
+              {linea.alertas.map((alerta) => (
+                <li key={alerta.tipo}>{alerta.texto}</li>
+              ))}
+            </ul>
+          ) : null}
+          <RecepcionLinea factura={factura} linea={linea} enviar={enviar} />
           <CatalogoLinea linea={linea} enviar={enviar} />
+          <PresentacionLinea factura={factura} linea={linea} enviar={enviar} />
         </div>
       ) : null}
     </li>
@@ -112,6 +195,7 @@ function CatalogoLinea({ linea, enviar }: { linea: FacturaLinea; enviar: EnviarF
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const vinculado = linea.productoCatalogo;
+  const propuesta = linea.propuesta;
 
   useEffect(() => {
     if (!open) {
@@ -154,11 +238,11 @@ function CatalogoLinea({ linea, enviar }: { linea: FacturaLinea; enviar: EnviarF
     };
   }, [open, q]);
 
-  async function elegir(productoId: string | null) {
+  async function elegir(productoId: string | null, aceptarPropuesta = false) {
     setGuardando(true);
     setError(null);
     try {
-      await enviar(`/lineas/${linea.id}`, "PATCH", { productoId });
+      await enviar(`/lineas/${linea.id}`, "PATCH", aceptarPropuesta ? { aceptarPropuesta: true } : { productoId });
       setOpen(false);
     } catch (reason) {
       setError(mensajeDe(reason, "No pudimos enlazar el producto"));
@@ -175,10 +259,29 @@ function CatalogoLinea({ linea, enviar }: { linea: FacturaLinea; enviar: EnviarF
             {vinculado.nombre}
             {vinculado.codigoOdoo ? <span className="mt-0.5 block text-xs font-medium text-brand-muted">{vinculado.codigoOdoo}</span> : null}
           </p>
+        ) : propuesta ? (
+          <p className="min-w-0 text-sm leading-snug">
+            <span className="font-semibold">{propuesta.producto?.nombre ?? "Producto propuesto"}</span>
+            <span className="mt-0.5 block text-xs" style={{ color: propuesta.confianza >= PROPUESTA_UMBRAL ? brand.navy : "#9A3412" }}>
+              Propuesta {propuesta.confianza}% · {propuesta.origenLabel}
+              {propuesta.confianza < PROPUESTA_UMBRAL ? " · revisar" : ""}
+            </span>
+          </p>
         ) : (
           <p className="text-sm text-brand-muted">Sin producto del catálogo</p>
         )}
         <div className="flex shrink-0 gap-2">
+          {!vinculado && propuesta ? (
+            <button
+              type="button"
+              className="rounded-full px-3 text-xs font-bold text-white disabled:opacity-50"
+              style={{ minHeight: 32, backgroundColor: brand.green }}
+              disabled={guardando}
+              onClick={() => void elegir(null, true)}
+            >
+              Aceptar
+            </button>
+          ) : null}
           <button
             type="button"
             className="rounded-full px-3 text-xs font-bold"
@@ -224,6 +327,149 @@ function CatalogoLinea({ linea, enviar }: { linea: FacturaLinea; enviar: EnviarF
         </div>
       ) : error ? (
         <p className="mt-1 text-xs" style={{ color: brand.error }}>{error}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function RecepcionLinea({ factura, linea, enviar }: { factura: FacturaDetalle; linea: FacturaLinea; enviar: EnviarFactura }) {
+  const [recepcion, setRecepcion] = useState<FacturaRecepcion>(linea.recepcion);
+  const [cantidad, setCantidad] = useState(linea.cantidadRecibida == null ? "" : String(linea.cantidadRecibida));
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRecepcion(linea.recepcion);
+    setCantidad(linea.cantidadRecibida == null ? "" : String(linea.cantidadRecibida));
+  }, [linea.recepcion, linea.cantidadRecibida]);
+
+  const cambiado = recepcion !== linea.recepcion || (recepcion !== "completa" && cantidad !== (linea.cantidadRecibida == null ? "" : String(linea.cantidadRecibida)));
+
+  async function guardar() {
+    setGuardando(true);
+    setError(null);
+    try {
+      await enviar("/recepcion", "POST", {
+        lineas: [{ numeroLinea: linea.numeroLinea, recepcion, cantidadRecibida: recepcion === "completa" || cantidad.trim() === "" ? null : Number(cantidad) }],
+      });
+    } catch (reason) {
+      setError(mensajeDe(reason, "No pudimos guardar la recepción"));
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="mt-3 border-t border-[#E7EBE4] pt-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="min-w-[140px] text-xs font-semibold text-brand-muted">
+          Recepción
+          <AdminSelect value={recepcion} onChange={(event) => setRecepcion(event.target.value as FacturaRecepcion)} className="mt-1">
+            {FACTURA_RECEPCIONES.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </AdminSelect>
+        </label>
+        {recepcion === "faltante" || recepcion === "regalo" ? (
+          <label className="w-32 text-xs font-semibold text-brand-muted">
+            Llegaron
+            <AdminInput
+              type="number"
+              min={0}
+              step="any"
+              inputMode="decimal"
+              value={cantidad}
+              onChange={(event) => setCantidad(event.target.value)}
+              placeholder={linea.cantidadComprada == null ? "0" : `de ${linea.cantidadComprada}`}
+              className="mt-1"
+            />
+          </label>
+        ) : null}
+        {cambiado ? (
+          <button
+            type="button"
+            disabled={guardando}
+            onClick={() => void guardar()}
+            className="rounded-full px-3 text-xs font-bold text-white disabled:opacity-50"
+            style={{ minHeight: 36, backgroundColor: brand.green }}
+          >
+            {guardando ? "Guardando…" : "Guardar"}
+          </button>
+        ) : null}
+      </div>
+      {linea.recepcionEn && !cambiado ? (
+        <p className="mt-1 text-xs text-brand-muted">
+          {linea.recepcionPor ?? "Rodrigo"} · {new Date(linea.recepcionEn).toLocaleDateString("es-DO")}
+          {linea.diferenciaRecepcion ? ` · faltan ${formatMonto(linea.diferenciaRecepcion, factura.moneda)}` : ""}
+        </p>
+      ) : null}
+      {error ? (
+        <p className="mt-1 text-xs" style={{ color: brand.error }}>
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function PresentacionLinea({ factura, linea, enviar }: { factura: FacturaDetalle; linea: FacturaLinea; enviar: EnviarFactura }) {
+  const [unidades, setUnidades] = useState("");
+  const [soloProveedor, setSoloProveedor] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!linea.productoCatalogo || !linea.presentacion || linea.presentacion === "unidad" || linea.unidadesPorPresentacion != null) {
+    return null;
+  }
+  const productoId = linea.productoCatalogo.id;
+  const presentacion = linea.presentacion;
+
+  async function guardar() {
+    setGuardando(true);
+    setError(null);
+    try {
+      await enviar("/api/admin/presentaciones", "POST", {
+        productoId,
+        presentacion,
+        unidades: Number(unidades),
+        proveedorId: soloProveedor ? factura.proveedorId : null,
+      });
+    } catch (reason) {
+      setError(mensajeDe(reason, "No pudimos guardar la presentación"));
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="mt-3 border-t border-[#E7EBE4] pt-3 text-sm">
+      <p className="font-semibold">¿Cuántas unidades trae {linea.presentacionLabel?.toLowerCase() === "otra" ? "esta presentación" : `un ${linea.presentacionLabel?.toLowerCase() ?? "empaque"}`}?</p>
+      <p className="mt-0.5 text-xs text-brand-muted">Queda guardado en el catálogo y completa unidades y costo unitario de esta y las próximas facturas.</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="w-28">
+          <AdminInput type="number" min={1} step="any" inputMode="decimal" value={unidades} onChange={(event) => setUnidades(event.target.value)} aria-label="Unidades por presentación" />
+        </div>
+        {factura.proveedorId ? (
+          <label className="flex items-center gap-1.5 text-xs font-semibold">
+            <input type="checkbox" checked={soloProveedor} onChange={(event) => setSoloProveedor(event.target.checked)} className="h-4 w-4 accent-[#7EB341]" />
+            Solo de este proveedor
+          </label>
+        ) : null}
+        <button
+          type="button"
+          disabled={guardando || !(Number(unidades) > 0)}
+          onClick={() => void guardar()}
+          className="rounded-full px-3 text-xs font-bold text-white disabled:opacity-50"
+          style={{ minHeight: 32, backgroundColor: brand.green }}
+        >
+          {guardando ? "Guardando…" : "Guardar"}
+        </button>
+      </div>
+      {error ? (
+        <p className="mt-1 text-xs" style={{ color: brand.error }}>
+          {error}
+        </p>
       ) : null}
     </div>
   );

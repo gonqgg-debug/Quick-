@@ -1,3 +1,5 @@
+import { AGENT_EVENT_TYPES } from "../lib/agent-events";
+import { parseParametrosPatch } from "../lib/admin-parametros";
 import { parseVentaInput } from "../lib/admin-ventas";
 import { leerCamposFactura } from "../lib/facturas-shared";
 import {
@@ -7,6 +9,7 @@ import {
   puedeCambiarEtapa,
   puedeRegistrar,
   validarCambioEstado,
+  OPERACION_AGENT_ENDPOINTS,
 } from "../lib/operacion-shared";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -24,17 +27,19 @@ assert(puedeCambiarEtapa("fred", "conciliada"), "Fred marca conciliada");
 assert(!puedeCambiarEtapa("boris", "conciliada"), "Boris no marca conciliada");
 assert(puedeCambiarEtapa("phillip", "registrada"), "Phillip marca registrada");
 assert(puedeCambiarEtapa("fred", "falta_factura"), "Fred deja falta factura");
-assert(!puedeRegistrar({ esCompraPersonal: false, confirmacionEn: null }), "sin Ramón no se registra");
-assert(puedeRegistrar({ esCompraPersonal: false, confirmacionEn: "2026-10-01T12:00:00.000Z" }), "con Ramón sí se registra");
-assert(puedeRegistrar({ esCompraPersonal: true, confirmacionEn: null }), "la compra personal no espera a la tienda");
+assert(!puedeRegistrar({ esCompraPersonal: false, lineas: 3, lineasSinRecepcion: 1 }), "con una línea sin recepción no se registra");
+assert(puedeRegistrar({ esCompraPersonal: false, lineas: 3, lineasSinRecepcion: 0 }), "con todas las líneas confirmadas sí se registra");
+assert(!puedeRegistrar({ esCompraPersonal: false, lineas: 0, lineasSinRecepcion: 0 }), "sin productos no se registra");
+assert(puedeRegistrar({ esCompraPersonal: true, lineas: 0, lineasSinRecepcion: 0 }), "la compra personal no espera a la tienda");
 
 let bloqueada = false;
 try {
-  validarCambioEstado({ actor: "phillip", estado: "registrada", esCompraPersonal: false, confirmacionEn: null });
+  validarCambioEstado({ actor: "phillip", estado: "registrada", esCompraPersonal: false, lineas: 2, lineasSinRecepcion: 2 });
 } catch (error) {
-  bloqueada = error instanceof Error && error.message.includes("Ramón");
+  bloqueada = error instanceof Error && error.message.includes("Rodrigo todavía no confirma la recepción de 2 líneas");
 }
-assert(bloqueada, "Phillip no cierra registrada sin la respuesta");
+assert(bloqueada, "Phillip no cierra registrada sin la recepción");
+assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.path.endsWith("/recepcion")), "el directorio lista la recepción de Rodrigo");
 
 let aprobada = false;
 try {
@@ -66,5 +71,20 @@ try {
   ventaFutura = error instanceof Error && error.message === "La fecha no es válida";
 }
 assert(ventaFutura, "una venta futura no se guarda");
+
+assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.method === "POST" && item.path.endsWith("/pagos")), "el directorio lista cómo Fred liga pagos");
+assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.method === "DELETE" && item.path.includes("/pagos/")), "el directorio lista cómo Fred quita un pago");
+assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.path.startsWith("/api/agent/pendientes")), "el directorio lista los pendientes");
+assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.path.endsWith("/conciliacion") && item.describe.includes("ledgerId")), "la conciliación explica ledgerId");
+assert((AGENT_EVENT_TYPES as readonly string[]).includes("factura.recordatorio"), "el recordatorio se publica como evento");
+
+assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.method === "POST" && item.path === "/api/agent/banco"), "el directorio lista la importación del banco");
+assert(OPERACION_AGENT_ENDPOINTS.some((item) => item.method === "GET" && item.path.startsWith("/api/agent/banco")), "el directorio lista los movimientos del banco");
+const parametrosBase = { mesActivo: "2026-10", ratioRecompra: 1.5, umbralCuidado: 80, umbralStop: 95, pesoReciente: 50, pesoIntermedio: 30, pesoAntiguo: 20 };
+const sinAlertas = parseParametrosPatch(parametrosBase);
+assert(sinAlertas.ok && sinAlertas.data.alertaPrecio === undefined, "si no mandas alertas quedan como estaban");
+const conAlertas = parseParametrosPatch({ ...parametrosBase, alertaPrecio: 20, alertaCantidad: "60%" });
+assert(conAlertas.ok && conAlertas.data.alertaPrecio === 0.2 && conAlertas.data.alertaCantidad === 0.6, "las alertas aceptan porcentaje");
+assert(!parseParametrosPatch({ ...parametrosBase, alertaPrecio: 0 }).ok, "una alerta en 0% no se guarda");
 
 console.log("operacion ok");

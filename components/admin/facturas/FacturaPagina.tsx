@@ -117,6 +117,7 @@ export function FacturaPagina({ id }: { id: string }) {
                 <a href={`#${item.seccion}`} className="hover:underline">
                   {item.texto}
                 </a>
+                {item.dueno ? <span className="shrink-0 text-xs capitalize text-brand-muted">{item.dueno}</span> : null}
               </li>
             ))}
           </ul>

@@ -22,6 +22,7 @@ export function Datos({ factura }: { factura: FacturaDetalle }) {
           <Dato label="Tienda" value={factura.tienda} />
         </Grupo>
         <FichaProveedor factura={factura} />
+        <NotasCredito factura={factura} />
         <Grupo titulo="Fechas y pago">
           <Dato label="Emisión" value={fechaCorta(factura.fechaEmision)} />
           <Dato label="Vencimiento" value={fechaCorta(factura.fechaVencimiento)} />
@@ -78,6 +79,47 @@ function FichaProveedor({ factura }: { factura: FacturaDetalle }) {
           {formaPago ? ` · ${formaPago}` : ""}
         </span>
       </p>
+    </div>
+  );
+}
+
+function NotasCredito({ factura }: { factura: FacturaDetalle }) {
+  if (factura.tipoDocumento === "nota_credito") {
+    return (
+      <p className="rounded-xl border border-[#E7EBE4] px-3 py-2 text-sm">
+        {factura.facturaOrigen ? (
+          <>
+            <span className="text-brand-muted">Descuenta de </span>
+            <Link href={`/admin/facturas/${factura.facturaOrigen.id}`} className="font-semibold underline">
+              {factura.facturaOrigen.referencia}
+            </Link>
+            <span className="text-brand-muted">. Cuando Boris la verifique, se resta de la cuenta por pagar de esa factura.</span>
+          </>
+        ) : (
+          <span style={{ color: "#991B1B" }}>Esta nota de crédito no está ligada a su factura original. Boris no puede verificarla hasta que Rodrigo o Phillip manden facturaOrigen.</span>
+        )}
+      </p>
+    );
+  }
+  if (!factura.notasCredito.length) {
+    return null;
+  }
+  return (
+    <div className="rounded-xl border border-[#E7EBE4] px-3 py-2 text-sm">
+      <p className="text-brand-muted">Notas de crédito</p>
+      <ul className="mt-1 space-y-1">
+        {factura.notasCredito.map((nota) => (
+          <li key={nota.id}>
+            <Link href={`/admin/facturas/${nota.id}`} className="font-semibold underline">
+              {nota.referencia}
+            </Link>
+            <span className="text-brand-muted">
+              {" "}
+              · {formatMonto(nota.total, factura.moneda)} · {nota.estadoLabel}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

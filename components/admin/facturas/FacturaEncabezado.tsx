@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import { FACTURA_ESTADOS, formatMonto, type FacturaDetalle, type FacturaEstado } from "@/lib/facturas-shared";
-import { puedeRegistrar } from "@/lib/operacion-shared";
 import { brand } from "@/lib/theme";
+import { bloqueoRegistro } from "@/components/admin/facturas/falta";
 import { mensajeDe, type EnviarFactura } from "@/components/admin/facturas/useFactura";
 import { Aviso, BotonPrincipal, ETAPAS_CAMINO, Pill, TONO, estadoCorto, estadoTono, pasoDeEtapa } from "@/components/admin/facturas/ui";
 
@@ -13,7 +13,8 @@ type Navegacion = { anterior: string | null; siguiente: string | null; posicion:
 export function FacturaEncabezado({ factura, enviar, nav }: { factura: FacturaDetalle; enviar: EnviarFactura; nav: Navegacion }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const registrable = puedeRegistrar({ esCompraPersonal: factura.esCompraPersonal, confirmacionEn: factura.confirmacionEn });
+  const bloqueo = bloqueoRegistro(factura);
+  const registrable = bloqueo === null;
 
   async function cambiarEtapa(estado: FacturaEstado) {
     setSaving(true);
@@ -63,7 +64,7 @@ export function FacturaEncabezado({ factura, enviar, nav }: { factura: FacturaDe
       <Etapas estado={factura.estado} />
 
       <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl px-3 py-3" style={{ backgroundColor: "#F7F8F6" }}>
-        <SiguientePaso factura={factura} registrable={registrable} saving={saving} onRegistrar={() => void cambiarEtapa("registrada")} />
+        <SiguientePaso factura={factura} bloqueo={bloqueo} saving={saving} onRegistrar={() => void cambiarEtapa("registrada")} />
       </div>
 
       {error ? (
@@ -86,7 +87,7 @@ export function FacturaEncabezado({ factura, enviar, nav }: { factura: FacturaDe
                 type="button"
                 disabled={saving || bloqueada}
                 onClick={() => void cambiarEtapa(item.id)}
-                title={bloqueada ? "Falta la respuesta de Ramón" : item.ayuda}
+                title={bloqueada ? bloqueo ?? item.ayuda : item.ayuda}
                 className="rounded-full border border-[#E5E7EB] bg-white px-3 py-1.5 font-semibold disabled:opacity-50"
               >
                 {item.label}
@@ -144,15 +145,16 @@ function Etapas({ estado }: { estado: FacturaEstado }) {
 
 function SiguientePaso({
   factura,
-  registrable,
+  bloqueo,
   saving,
   onRegistrar,
 }: {
   factura: FacturaDetalle;
-  registrable: boolean;
+  bloqueo: string | null;
   saving: boolean;
   onRegistrar: () => void;
 }) {
+  const registrable = bloqueo === null;
   if (factura.estado === "falta_factura") {
     return <Texto titulo="Siguiente paso" texto="Falta el comprobante. Cuando llegue la foto, Rodrigo la sube y pasa a recibida." />;
   }
@@ -161,12 +163,12 @@ function SiguientePaso({
       <>
         <Texto
           titulo="Siguiente paso"
-          texto={registrable ? "Phillip la deja registrada cuando termina los renglones." : "Falta la respuesta de Ramón para poder registrarla."}
+          texto={registrable ? "Phillip la deja registrada cuando termina los renglones." : `${bloqueo}.`}
         />
         <div className="ml-auto flex items-center gap-2">
-          {!registrable ? (
-            <a href="#equipo" className="text-sm font-bold" style={{ color: brand.blue }}>
-              Guardar la respuesta
+          {!registrable && factura.lineas.length ? (
+            <a href="#productos" className="text-sm font-bold" style={{ color: brand.blue }}>
+              Confirmar recepción
             </a>
           ) : null}
           <BotonPrincipal disabled={saving || !registrable} onClick={onRegistrar}>
