@@ -19,6 +19,7 @@ import {
   completarValidaciones,
   diferenciaPagos,
   diferenciaRecepcion,
+  resumenRecepcion,
   explicacionDuplicado,
   facturaTieneIdentidad,
   isUuid,
@@ -59,7 +60,8 @@ import {
   type FacturaVerificacion,
   type FacturasResumen,
 } from "@/lib/facturas-shared";
-import { validarCambioEstado, type Actor } from "@/lib/operacion-shared";
+import { validarCambioEstado, type Actor, type OperacionBot } from "@/lib/operacion-shared";
+import { lineasSinCatalogo, pendientesDe, type Pendiente } from "@/lib/facturas-pendientes";
 import { isDayKey } from "@/lib/local-day";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
@@ -871,6 +873,89 @@ export async function resumenFacturas(): Promise<FacturasResumen> {
         int(row.numero_documentos) === 0
     ).length,
   };
+}
+
+export type FacturaConPendientes = Pick<FacturaResumen, "id" | "referencia" | "proveedor" | "estado" | "estadoLabel" | "total" | "moneda" | "fechaVencimiento"> & {
+  pendientes: Pendiente[];
+};
+
+async function porFactura<T>(tabla: string, columnas: string, ids: string[], filtro?: { columna: string; valor: string }): Promise<Map<string, T[]>> {
+  const supabase = getSupabaseAdminClient();
+  const grupos = new Map<string, T[]>();
+  for (let inicio = 0; inicio < ids.length; inicio += 100) {
+    let query = supabase.from(tabla).select(columnas).in("factura_id", ids.slice(inicio, inicio + 100));
+    if (filtro) {
+      query = query.eq(filtro.columna, filtro.valor);
+    }
+    const { data, error } = await query;
+    if (error) {
+      throw error;
+    }
+    for (const row of (data ?? []) as unknown as Array<Record<string, unknown>>) {
+      const facturaId = String(row.factura_id ?? "");
+      const lista = grupos.get(facturaId) ?? [];
+      lista.push(row as T);
+      grupos.set(facturaId, lista);
+    }
+  }
+  return grupos;
+}
+
+/**
+ * Lo que falta en cada factura que no está conciliada, con cinco consultas en total.
+ * No busca pagos candidatos en caja (eso sale al abrir la ficha).
+ */
+export async function listarPendientes(opciones: { hoy: string; dueno?: OperacionBot | null }): Promise<FacturaConPendientes[]> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("facturas")
+    .select(FACTURA_SELECT)
+    .neq("estado", "conciliada")
+    .order("recibido_en", { ascending: true })
+    .limit(LIST_MAX);
+  if (error) {
+    throw error;
+  }
+  const facturas = (data ?? []).map((row) => mapResumen(row as Record<string, unknown>)).filter((row): row is FacturaResumen => Boolean(row));
+  const ids = facturas.map((factura) => factura.id);
+  if (!ids.length) {
+    return [];
+  }
+  const [lineas, diferencias, pagos] = await Promise.all([
+    porFactura<Record<string, unknown>>("factura_lineas", "*", ids),
+    porFactura<Record<string, unknown>>("factura_validaciones", "factura_id", ids, { columna: "resultado", valor: "diferencia" }),
+    porFactura<{ monto: unknown }>("factura_pagos", "factura_id, monto", ids),
+  ]);
+  const resultado: FacturaConPendientes[] = [];
+  for (const factura of facturas) {
+    const susLineas = (lineas.get(factura.id) ?? []).map((row) => mapLinea(row)).filter((row): row is FacturaLinea => Boolean(row));
+    const susPagos = (pagos.get(factura.id) ?? []).map((row) => ({ monto: num(row.monto) ?? 0 }));
+    const pendientes = pendientesDe(
+      {
+        ...factura,
+        recepcion: resumenRecepcion(susLineas),
+        lineasSinCatalogo: lineasSinCatalogo(susLineas),
+        validacionesConDiferencia: diferencias.get(factura.id)?.length ?? 0,
+        pagosCandidatos: null,
+        pagosDiferencia: diferenciaPagos(factura.total, susPagos),
+      },
+      { hoy: opciones.hoy, formatDesde: (value) => value ?? "sin fecha" }
+    ).filter((item) => !opciones.dueno || item.dueno === opciones.dueno);
+    if (pendientes.length) {
+      resultado.push({
+        id: factura.id,
+        referencia: factura.referencia,
+        proveedor: factura.proveedor,
+        estado: factura.estado,
+        estadoLabel: factura.estadoLabel,
+        total: factura.total,
+        moneda: factura.moneda,
+        fechaVencimiento: factura.fechaVencimiento,
+        pendientes,
+      });
+    }
+  }
+  return resultado;
 }
 
 async function adjuntarCatalogo(lineas: FacturaLinea[]): Promise<FacturaLinea[]> {
