@@ -25,8 +25,16 @@ import {
   resolverUnidades,
   validacionesFiscales,
   PROPUESTA_ACEPTAR_TODAS,
+  PROPUESTA_BANDA_PERSONA,
   PROPUESTA_CONFIANZA,
   PROPUESTA_UMBRAL,
+  clavesAlias,
+  esCampoProducto,
+  esCampoUnidades,
+  estadoTrasLigue,
+  leerRangoPropuestas,
+  propuestasEnBanda,
+  textoConfirmacionUi,
   cantidadRecibidaDe,
   ALERTA_MIN_COMPRAS,
   alertasLinea,
@@ -344,6 +352,11 @@ function pendienteLinea(): FacturaLinea {
     observacion: null,
     productoId: null,
     productoCatalogo: null,
+    productoConfirmadoPor: null,
+    productoConfirmadoEn: null,
+    origenLigue: null,
+    unidadesConfirmadoPor: null,
+    unidadesConfirmadoEn: null,
     propuesta: null,
     recepcion: "completa",
     recepcionLabel: "",
@@ -455,6 +468,35 @@ assert(FACTURAS_AGENT_ENDPOINTS.length === 15, "el directorio del agente lista l
 assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path.endsWith("/lineas/propuestas")), "Phillip tiene ruta para proponer");
 assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path.endsWith("/lineas/candidatos")), "Phillip tiene ruta de candidatos");
 assert(FACTURAS_AGENT_USO.includes("razon") && !FACTURAS_AGENT_USO.includes("texto hasta 85"), "el texto de uso dice que Phillip propone");
+assert(FACTURAS_AGENT_USO.includes("productoConfirmadoPor") && FACTURAS_AGENT_USO.includes("origenLigue") && FACTURAS_AGENT_USO.includes("linea.confirmada"), "el texto de uso explica la confirmación humana");
+assert(textoConfirmacionUi("Gonzalo") === "Confirmado por Gonzalo en UI", "la respuesta de la UI nombra a quien confirmó");
+assert(esCampoProducto("productoId") && esCampoProducto("producto_id") && !esCampoProducto("unidadesPorPresentacion"), "la pregunta de producto se reconoce por el campo");
+assert(esCampoUnidades("unidadesPorPresentacion") && esCampoUnidades("unidades") && !esCampoUnidades("productoId"), "la pregunta de unidades se reconoce por el campo");
+assert(estadoTrasLigue("ambigua") === "completa" && estadoTrasLigue("ilegible") === "ilegible", "ligar saca la línea de ambigua y no toca una ilegible");
+assert(clavesAlias("Leche entera 1L", "SKU-12").join("|") === "leche entera 1l sku 12|leche entera 1l", "el alias junta descripción del proveedor y SKU, y conserva la descripción sola");
+assert(clavesAlias("Café", null).join("|") === "cafe", "sin SKU el alias es la descripción");
+const sigma = [0, 1, 2, 3].map((index) => ({
+  ...lineaBase,
+  id: `l${index}`,
+  numeroLinea: index + 1,
+  estado: "completa" as const,
+  productoId: `p${index}`,
+  productoConfirmadoPor: "Gonzalo",
+  origenLigue: "humano" as const,
+}));
+assert(
+  sigma.length === 4 && sigma.every((linea) => linea.productoId != null && linea.productoConfirmadoPor === "Gonzalo" && linea.origenLigue === "humano" && estadoTrasLigue(linea.estado) === "completa"),
+  "las 4 líneas de Sigma quedan ligadas por Gonzalo"
+);
+assert(propuestasEnBanda([{ ...lineaBase, propuesta: propuestaAgente(80) }, { ...lineaBase, propuesta: propuestaAgente(95) }, { ...lineaBase, propuesta: propuestaAgente(60) }], PROPUESTA_BANDA_PERSONA.minimo, PROPUESTA_BANDA_PERSONA.maximo).length === 1, "la bandeja confirma solo de 70 a 89");
+assert(leerRangoPropuestas({}, "phillip").minimo === 90 && leerRangoPropuestas({ minimo: 70, maximo: 89 }, "admin").maximo === 89, "Phillip no baja de 90 y una persona sí confirma la bandeja");
+let phillipBajo = false;
+try {
+  leerRangoPropuestas({ minimo: 70 }, "phillip");
+} catch (error) {
+  phillipBajo = error instanceof Error && error.message.includes("Solo una persona");
+}
+assert(phillipBajo, "Phillip no confirma la banda de 70 a 89");
 assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path === "/api/agent/presentaciones"), "hay una ruta para guardar presentaciones");
 assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path.includes("documentos")), "hay una ruta para subir la foto");
 

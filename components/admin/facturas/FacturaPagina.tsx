@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { PROPUESTA_BANDA_PERSONA, propuestasEnBanda } from "@/lib/facturas-shared";
 import { brand } from "@/lib/theme";
 import { DocumentoVisor } from "@/components/admin/facturas/DocumentoVisor";
 import { FacturaEncabezado } from "@/components/admin/facturas/FacturaEncabezado";
@@ -29,6 +30,8 @@ export function FacturaPagina({ id }: { id: string }) {
   const router = useRouter();
   const { factura, error, loading, enviar } = useFactura(id);
   const [lista, setLista] = useState<ListaGuardada | null>(null);
+  const [confirmandoBandeja, setConfirmandoBandeja] = useState(false);
+  const [errorBandeja, setErrorBandeja] = useState<string | null>(null);
 
   useEffect(() => {
     setLista(leerLista());
@@ -100,6 +103,19 @@ export function FacturaPagina({ id }: { id: string }) {
   }
 
   const pendientes = pendientesDe(factura, fechaHora);
+  const enBandeja = propuestasEnBanda(factura.lineas, PROPUESTA_BANDA_PERSONA.minimo, PROPUESTA_BANDA_PERSONA.maximo).length;
+
+  async function confirmarBandeja() {
+    setConfirmandoBandeja(true);
+    setErrorBandeja(null);
+    try {
+      await enviar("/lineas/aceptar", "POST", { minimo: PROPUESTA_BANDA_PERSONA.minimo, maximo: PROPUESTA_BANDA_PERSONA.maximo });
+    } catch (reason) {
+      setErrorBandeja(reason instanceof Error ? reason.message : "No pudimos confirmar las propuestas");
+    } finally {
+      setConfirmandoBandeja(false);
+    }
+  }
 
   return (
     <div key={factura.id} className="space-y-4">
@@ -118,9 +134,25 @@ export function FacturaPagina({ id }: { id: string }) {
                   {item.texto}
                 </a>
                 {item.dueno ? <span className="shrink-0 text-xs capitalize text-brand-muted">{item.dueno}</span> : null}
+                {item.id === "propuestas" && enBandeja > 0 ? (
+                  <button
+                    type="button"
+                    disabled={confirmandoBandeja}
+                    onClick={() => void confirmarBandeja()}
+                    className="shrink-0 rounded-full px-2.5 text-xs font-bold text-white disabled:opacity-50"
+                    style={{ minHeight: 28, backgroundColor: "#9A3412" }}
+                  >
+                    {confirmandoBandeja ? "Confirmando…" : `Confirmar ${enBandeja} de ${PROPUESTA_BANDA_PERSONA.minimo} a ${PROPUESTA_BANDA_PERSONA.maximo}%`}
+                  </button>
+                ) : null}
               </li>
             ))}
           </ul>
+          {errorBandeja ? (
+            <p className="mt-2 text-xs" style={{ color: brand.error }}>
+              {errorBandeja}
+            </p>
+          ) : null}
         </section>
       ) : null}
 

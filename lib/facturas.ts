@@ -1,3 +1,4 @@
+import { publishAgentEvent } from "@/lib/agent-events";
 import { dueDateFromCredit, type Proveedor } from "@/lib/admin-compras-shared";
 import { findProveedorParaFactura, getProveedorById } from "@/lib/admin-compras";
 import { getParametrosConfig } from "@/lib/admin-parametros";
@@ -38,18 +39,25 @@ import {
   explicacionDuplicado,
   facturaTieneIdentidad,
   isUuid,
+  esCampoProducto,
+  esCampoUnidades,
+  estadoTrasLigue,
   labelOf,
   leerCamposFactura,
   leerLineas,
   leerPreguntas,
+  leerRangoPropuestas,
   leerRespuestaPregunta,
   leerValidaciones,
   mensajeEstadoInvalido,
   normalizeToken,
   parseClave,
+  ORIGENES_LIGUE,
   PROPUESTA_ACEPTAR_TODAS,
   parseEstado,
   referenciaFactura,
+  resolverUnidades,
+  textoConfirmacionUi,
   validacionesFiscales,
   type DuplicadoCandidato,
   type FacturaCampos,
@@ -58,6 +66,7 @@ import {
   type FacturaDetalle,
   type FacturaDocumento,
   type FacturaEstadoLinea,
+  type OrigenLigue,
   type FacturaItbisLinea,
   type FacturaLinea,
   type FacturaLineaCandidatos,
@@ -253,6 +262,11 @@ function mapLinea(row: Record<string, unknown>): FacturaLinea | null {
     observacion: textOrNull(row.observacion, 1000),
     productoId: typeof row.producto_id === "string" && isUuid(row.producto_id) ? row.producto_id : null,
     productoCatalogo: null,
+    productoConfirmadoPor: textOrNull(row.producto_confirmado_por, 160),
+    productoConfirmadoEn: iso(row.producto_confirmado_en),
+    origenLigue: origenLigueDe(row.origen_ligue),
+    unidadesConfirmadoPor: textOrNull(row.unidades_confirmado_por, 160),
+    unidadesConfirmadoEn: iso(row.unidades_confirmado_en),
     propuesta: propuestaDe(row),
     recepcion,
     recepcionLabel: labelOf(FACTURA_RECEPCIONES, recepcion),
@@ -268,6 +282,10 @@ function mapLinea(row: Record<string, unknown>): FacturaLinea | null {
       totalLinea: num(row.total_linea),
     }),
   };
+}
+
+function origenLigueDe(value: unknown): OrigenLigue | null {
+  return ORIGENES_LIGUE.some((item) => item.id === value) ? (value as OrigenLigue) : null;
 }
 
 function propuestaDe(row: Record<string, unknown>): FacturaLinea["propuesta"] {
@@ -1433,11 +1451,100 @@ export async function updateFactura(
   return factura;
 }
 
+type LigueAplicado = {
+  id: string;
+  productoId: string;
+  descripcion: string | null;
+  codigoSku: string | null;
+  numeroLinea: number;
+  estado: string | null;
+  origen: OrigenLigue;
+  por: string | null;
+};
+
+async function cerrarPreguntasDeLinea(facturaId: string, numeroLinea: number, tipo: "producto" | "unidades", por: string, ahora: string): Promise<void> {
+  if (numeroLinea < 1) {
+    return;
+  }
+  const coincide = tipo === "producto" ? esCampoProducto : esCampoUnidades;
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("factura_preguntas")
+    .select("id, campo")
+    .eq("factura_id", facturaId)
+    .eq("estado", "abierta")
+    .eq("linea_numero", numeroLinea);
+  if (error) {
+    throw error;
+  }
+  const texto = textoConfirmacionUi(por);
+  for (const row of data ?? []) {
+    if (!coincide(typeof row.campo === "string" ? row.campo : null)) {
+      continue;
+    }
+    const { error: updateError } = await supabase
+      .from("factura_preguntas")
+      .update({
+        respuesta: texto,
+        evidencia: texto,
+        respondido_por: por,
+        respondido_en: ahora,
+        estado: "resuelta",
+      })
+      .eq("id", row.id);
+    if (updateError) {
+      throw updateError;
+    }
+  }
+}
+
+/** Liga productos y, si lo hizo una persona, cierra las preguntas, aprende el alias y avisa al bot. */
+async function aplicarLigues(facturaId: string, ligues: LigueAplicado[], proveedorId: string | null, aliasPor: string): Promise<void> {
+  if (!ligues.length) {
+    return;
+  }
+  const supabase = getSupabaseAdminClient();
+  const ahora = new Date().toISOString();
+  let humanas = 0;
+  for (const ligue of ligues) {
+    const estado = FACTURA_ESTADOS_LINEA.some((item) => item.id === ligue.estado) ? (ligue.estado as FacturaEstadoLinea) : null;
+    const row: Record<string, unknown> = {
+      producto_id: ligue.productoId,
+      ...SIN_PROPUESTA,
+      origen_ligue: ligue.origen,
+      producto_confirmado_por: ligue.origen === "humano" ? ligue.por : null,
+      producto_confirmado_en: ligue.origen === "humano" ? ahora : null,
+    };
+    if (estado && estadoTrasLigue(estado) !== estado) {
+      row.estado = estadoTrasLigue(estado);
+    }
+    const { error } = await supabase.from("factura_lineas").update(row).eq("id", ligue.id).eq("factura_id", facturaId);
+    if (error) {
+      throw error;
+    }
+    await aprenderAlias(proveedorId, ligue.descripcion, ligue.productoId, ligue.por ?? aliasPor, ligue.codigoSku);
+    if (ligue.origen === "humano" && ligue.por) {
+      humanas += 1;
+      await cerrarPreguntasDeLinea(facturaId, ligue.numeroLinea, "producto", ligue.por, ahora);
+      await publishAgentEvent("linea.confirmada", {
+        facturaId,
+        numeroLinea: ligue.numeroLinea,
+        productoId: ligue.productoId,
+        por: ligue.por,
+      });
+    }
+  }
+  if (humanas) {
+    await syncCounters(facturaId);
+  }
+}
+
 export async function asignarProductoLinea(
   idOrClave: string,
   lineaId: string,
   body: Record<string, unknown>,
-  actor: Actor = "admin"
+  actor: Actor = "admin",
+  confirmadoPor: string | null = null
 ): Promise<FacturaDetalle> {
   if (!isUuid(lineaId)) {
     throw new Error("No encontramos esa línea");
@@ -1446,7 +1553,7 @@ export async function asignarProductoLinea(
   const supabase = getSupabaseAdminClient();
   const { data: linea, error: lineaError } = await supabase
     .from("factura_lineas")
-    .select("id, descripcion_original, producto_normalizado, propuesta_producto_id")
+    .select("id, numero_linea, estado, descripcion_original, producto_normalizado, codigo_sku, propuesta_producto_id")
     .eq("id", lineaId)
     .eq("factura_id", facturaId)
     .maybeSingle();
@@ -1468,20 +1575,30 @@ export async function asignarProductoLinea(
     }
     next = await buscarProductoCatalogo({ accion: "id", id: productoId.trim() });
   }
-  const { error } = await supabase
-    .from("factura_lineas")
-    .update(next ? { producto_id: next, ...SIN_PROPUESTA } : { producto_id: null })
-    .eq("id", lineaId)
-    .eq("factura_id", facturaId);
-  if (error) {
-    throw error;
-  }
   const descripcion = textOrNull(linea.descripcion_original, 500) ?? textOrNull(linea.producto_normalizado, 200);
+  const codigoSku = textOrNull(linea.codigo_sku, 80);
+  const numeroLinea = int(linea.numero_linea);
+  const estado = textOrNull(linea.estado, 40);
   if (next) {
+    const persona = confirmadoPor?.trim() || null;
+    const origen: OrigenLigue = persona ? "humano" : "propuesta_auto";
     const proveedor = await loadResumen(facturaId);
-    await aprenderAlias(proveedor?.proveedorId ?? null, descripcion, next, actor);
+    await aplicarLigues(
+      facturaId,
+      [{ id: lineaId, productoId: next, descripcion, codigoSku, numeroLinea, estado, origen, por: persona }],
+      proveedor?.proveedorId ?? null,
+      persona ?? actor
+    );
     await completarUnidades(facturaId);
   } else {
+    const { error } = await supabase
+      .from("factura_lineas")
+      .update({ producto_id: null, producto_confirmado_por: null, producto_confirmado_en: null, origen_ligue: null })
+      .eq("id", lineaId)
+      .eq("factura_id", facturaId);
+    if (error) {
+      throw error;
+    }
     await proponerCatalogo(facturaId);
   }
   await supabase.from("facturas").update({ updated_at: new Date().toISOString() }).eq("id", facturaId);
@@ -1492,25 +1609,86 @@ export async function asignarProductoLinea(
   return factura;
 }
 
-/** Acepta de una vez las propuestas de 90 o más: alias, código de barras y código de Odoo. */
-export async function aceptarPropuestas(idOrClave: string, body: Record<string, unknown>, actor: Actor): Promise<{ aceptadas: number; factura: FacturaDetalle }> {
+/** La persona editó las unidades por presentación de una línea: queda su nombre y se cierra la pregunta. */
+export async function confirmarUnidadesEnLinea(facturaId: string, numeroLineaRaw: unknown, unidades: number, por: string): Promise<void> {
+  const numeroLinea = int(numeroLineaRaw);
+  const nombre = por.trim();
+  if (!isUuid(facturaId) || numeroLinea < 1 || !nombre) {
+    throw new Error("No encontramos esa línea");
+  }
+  const supabase = getSupabaseAdminClient();
+  const { data: linea, error } = await supabase
+    .from("factura_lineas")
+    .select("id, presentacion, cantidad_comprada, costo_por_presentacion")
+    .eq("factura_id", facturaId)
+    .eq("numero_linea", numeroLinea)
+    .maybeSingle();
+  if (error) {
+    throw error;
+  }
+  if (!linea) {
+    throw new Error("No encontramos esa línea");
+  }
+  const presentacion = FACTURA_PRESENTACIONES.some((item) => item.id === linea.presentacion) ? (linea.presentacion as FacturaPresentacion) : null;
+  const resuelto = resolverUnidades({
+    presentacion,
+    cantidadComprada: num(linea.cantidad_comprada),
+    unidadesPorPresentacion: unidades,
+    unidadesTotales: null,
+    costoPorPresentacion: num(linea.costo_por_presentacion),
+    costoUnitario: null,
+  });
+  const ahora = new Date().toISOString();
+  const { error: updateError } = await supabase
+    .from("factura_lineas")
+    .update({
+      unidades_por_presentacion: resuelto.unidadesPorPresentacion,
+      unidades_totales: resuelto.unidadesTotales,
+      costo_unitario: resuelto.costoUnitario,
+      unidades_confirmado_por: nombre,
+      unidades_confirmado_en: ahora,
+    })
+    .eq("id", linea.id);
+  if (updateError) {
+    throw updateError;
+  }
+  await cerrarPreguntasDeLinea(facturaId, numeroLinea, "unidades", nombre, ahora);
+  await syncCounters(facturaId);
+}
+
+/** Acepta propuestas de una vez. Phillip desde 90 (propuesta_auto). Una persona también las de 70 a 89 (humano). */
+export async function aceptarPropuestas(
+  idOrClave: string,
+  body: Record<string, unknown>,
+  actor: Actor,
+  confirmadoPor: string | null = null
+): Promise<{ aceptadas: number; factura: FacturaDetalle }> {
   if (actor !== "phillip" && actor !== "admin") {
     throw new Error("Solo Phillip acepta las propuestas del catálogo");
   }
   const facturaId = await requireFacturaId(idOrClave);
-  const minimo = num(body.minimo) ?? 90;
-  const lineas = await lineasParaAceptar(facturaId, minimo);
-  const supabase = getSupabaseAdminClient();
+  const rango = leerRangoPropuestas(body, actor);
+  const lineas = await lineasParaAceptar(facturaId, rango.minimo, rango.maximo);
+  const persona = actor === "admin" ? confirmadoPor?.trim() || "Admin" : null;
   const proveedorId = (await loadResumen(facturaId))?.proveedorId ?? null;
-  for (const linea of lineas) {
-    const { error } = await supabase.from("factura_lineas").update({ producto_id: linea.productoId, ...SIN_PROPUESTA }).eq("id", linea.id);
-    if (error) {
-      throw error;
-    }
-    await aprenderAlias(proveedorId, linea.descripcion, linea.productoId, actor);
-  }
+  await aplicarLigues(
+    facturaId,
+    lineas.map((linea) => ({
+      id: linea.id,
+      productoId: linea.productoId,
+      descripcion: linea.descripcion,
+      codigoSku: linea.codigoSku,
+      numeroLinea: linea.numeroLinea,
+      estado: linea.estado,
+      origen: persona ? "humano" : "propuesta_auto",
+      por: persona,
+    })),
+    proveedorId,
+    persona ?? actor
+  );
   if (lineas.length) {
     await completarUnidades(facturaId);
+    const supabase = getSupabaseAdminClient();
     await supabase.from("facturas").update({ updated_at: new Date().toISOString() }).eq("id", facturaId);
   }
   const factura = await getFactura(facturaId);
@@ -1642,17 +1820,23 @@ export async function proponerLineas(
   if (aceptar) {
     const proveedorId = (await loadResumen(facturaId))?.proveedorId ?? null;
     const enviadas = new Set(propuestas.map((propuesta) => propuesta.lineaId));
-    for (const linea of await lineasParaAceptar(facturaId, PROPUESTA_ACEPTAR_TODAS)) {
-      if (!enviadas.has(linea.id)) {
-        continue;
-      }
-      const { error } = await supabase.from("factura_lineas").update({ producto_id: linea.productoId, ...SIN_PROPUESTA }).eq("id", linea.id);
-      if (error) {
-        throw error;
-      }
-      await aprenderAlias(proveedorId, linea.descripcion, linea.productoId, actor);
-      ligadas += 1;
-    }
+    const paraLigar = (await lineasParaAceptar(facturaId, PROPUESTA_ACEPTAR_TODAS)).filter((linea) => enviadas.has(linea.id));
+    await aplicarLigues(
+      facturaId,
+      paraLigar.map((linea) => ({
+        id: linea.id,
+        productoId: linea.productoId,
+        descripcion: linea.descripcion,
+        codigoSku: linea.codigoSku,
+        numeroLinea: linea.numeroLinea,
+        estado: linea.estado,
+        origen: "propuesta_auto" as const,
+        por: null,
+      })),
+      proveedorId,
+      actor
+    );
+    ligadas = paraLigar.length;
     if (ligadas) {
       await completarUnidades(facturaId);
     }

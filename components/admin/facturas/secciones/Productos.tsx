@@ -5,8 +5,10 @@ import { AdminInput, AdminSelect } from "@/components/admin/AdminField";
 import {
   FACTURA_RECEPCIONES,
   PROPUESTA_ACEPTAR_TODAS,
+  PROPUESTA_BANDA_PERSONA,
   PROPUESTA_UMBRAL,
   formatMonto,
+  propuestasEnBanda,
   resumenRecepcion,
   type FacturaDetalle,
   type FacturaLinea,
@@ -25,22 +27,27 @@ const RECEPCION_TONO: Record<FacturaRecepcion, PillTone> = {
 
 export function Productos({ factura, enviar }: { factura: FacturaDetalle; enviar: EnviarFactura }) {
   const [abierta, setAbierta] = useState<string | null>(null);
-  const [aceptando, setAceptando] = useState(false);
+  const [aceptando, setAceptando] = useState<"altas" | "bandeja" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const sinCatalogo = factura.lineas.filter((linea) => !linea.productoCatalogo).length;
-  const aceptables = factura.lineas.filter((linea) => !linea.productoId && (linea.propuesta?.confianza ?? 0) >= PROPUESTA_ACEPTAR_TODAS).length;
+  const aceptables = propuestasEnBanda(factura.lineas, PROPUESTA_ACEPTAR_TODAS, 100).length;
+  const enBandeja = propuestasEnBanda(factura.lineas, PROPUESTA_BANDA_PERSONA.minimo, PROPUESTA_BANDA_PERSONA.maximo).length;
   const deAgente = factura.lineas.filter((linea) => !linea.productoId && linea.propuesta?.origen === "agente").length;
   const recepcion = resumenRecepcion(factura.lineas);
 
-  async function aceptarTodas() {
-    setAceptando(true);
+  async function aceptar(modo: "altas" | "bandeja") {
+    setAceptando(modo);
     setError(null);
     try {
-      await enviar("/lineas/aceptar", "POST", {});
+      await enviar(
+        "/lineas/aceptar",
+        "POST",
+        modo === "bandeja" ? { minimo: PROPUESTA_BANDA_PERSONA.minimo, maximo: PROPUESTA_BANDA_PERSONA.maximo } : {}
+      );
     } catch (reason) {
       setError(mensajeDe(reason, "No pudimos aceptar las propuestas"));
     } finally {
-      setAceptando(false);
+      setAceptando(null);
     }
   }
 
@@ -63,12 +70,30 @@ export function Productos({ factura, enviar }: { factura: FacturaDetalle; enviar
           </span>
           <button
             type="button"
-            disabled={aceptando}
-            onClick={() => void aceptarTodas()}
+            disabled={aceptando != null}
+            onClick={() => void aceptar("altas")}
             className="rounded-full px-3 text-xs font-bold text-white disabled:opacity-50"
             style={{ minHeight: 32, backgroundColor: brand.navy }}
           >
-            {aceptando ? "Aceptando…" : `Aceptar ${aceptables === 1 ? "la propuesta" : `las ${aceptables}`}`}
+            {aceptando === "altas" ? "Aceptando…" : `Aceptar ${aceptables === 1 ? "la propuesta" : `las ${aceptables}`}`}
+          </button>
+        </div>
+      ) : null}
+      {enBandeja > 0 ? (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm" style={{ backgroundColor: "#FDF1DE" }}>
+          <span>
+            {enBandeja === 1
+              ? `Una propuesta de ${PROPUESTA_BANDA_PERSONA.minimo} a ${PROPUESTA_BANDA_PERSONA.maximo}% espera confirmación.`
+              : `${enBandeja} propuestas de ${PROPUESTA_BANDA_PERSONA.minimo} a ${PROPUESTA_BANDA_PERSONA.maximo}% esperan confirmación.`}
+          </span>
+          <button
+            type="button"
+            disabled={aceptando != null}
+            onClick={() => void aceptar("bandeja")}
+            className="rounded-full px-3 text-xs font-bold text-white disabled:opacity-50"
+            style={{ minHeight: 32, backgroundColor: "#9A3412" }}
+          >
+            {aceptando === "bandeja" ? "Confirmando…" : `Confirmar ${enBandeja === 1 ? "esa propuesta" : `las ${enBandeja}`}`}
           </button>
         </div>
       ) : null}
@@ -260,6 +285,12 @@ function CatalogoLinea({ linea, enviar }: { linea: FacturaLinea; enviar: EnviarF
           <p className="min-w-0 text-sm font-semibold leading-snug" style={{ color: "#3F6212" }}>
             {vinculado.nombre}
             {vinculado.codigoOdoo ? <span className="mt-0.5 block text-xs font-medium text-brand-muted">{vinculado.codigoOdoo}</span> : null}
+            {linea.productoConfirmadoPor ? (
+              <span className="mt-0.5 block text-xs font-medium text-brand-muted">
+                Confirmado por {linea.productoConfirmadoPor}
+                {linea.productoConfirmadoEn ? ` · ${new Date(linea.productoConfirmadoEn).toLocaleString("es-DO")}` : ""}
+              </span>
+            ) : null}
           </p>
         ) : propuesta ? (
           <p className="min-w-0 text-sm leading-snug">
@@ -419,15 +450,20 @@ function RecepcionLinea({ factura, linea, enviar }: { factura: FacturaDetalle; l
 }
 
 function PresentacionLinea({ factura, linea, enviar }: { factura: FacturaDetalle; linea: FacturaLinea; enviar: EnviarFactura }) {
-  const [unidades, setUnidades] = useState("");
+  const [unidades, setUnidades] = useState(linea.unidadesPorPresentacion == null ? "" : String(linea.unidadesPorPresentacion));
   const [soloProveedor, setSoloProveedor] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!linea.productoCatalogo || !linea.presentacion || linea.presentacion === "unidad" || linea.unidadesPorPresentacion != null) {
+  useEffect(() => {
+    setUnidades(linea.unidadesPorPresentacion == null ? "" : String(linea.unidadesPorPresentacion));
+  }, [linea.unidadesPorPresentacion]);
+  if (!linea.productoCatalogo || !linea.presentacion || linea.presentacion === "unidad") {
     return null;
   }
   const productoId = linea.productoCatalogo.id;
   const presentacion = linea.presentacion;
+  const yaTenia = linea.unidadesPorPresentacion != null;
+  const cambiado = unidades.trim() !== (linea.unidadesPorPresentacion == null ? "" : String(linea.unidadesPorPresentacion));
 
   async function guardar() {
     setGuardando(true);
@@ -438,6 +474,8 @@ function PresentacionLinea({ factura, linea, enviar }: { factura: FacturaDetalle
         presentacion,
         unidades: Number(unidades),
         proveedorId: soloProveedor ? factura.proveedorId : null,
+        facturaId: factura.id,
+        numeroLinea: linea.numeroLinea,
       });
     } catch (reason) {
       setError(mensajeDe(reason, "No pudimos guardar la presentación"));
@@ -448,27 +486,37 @@ function PresentacionLinea({ factura, linea, enviar }: { factura: FacturaDetalle
 
   return (
     <div className="mt-3 border-t border-[#E7EBE4] pt-3 text-sm">
-      <p className="font-semibold">¿Cuántas unidades trae {linea.presentacionLabel?.toLowerCase() === "otra" ? "esta presentación" : `un ${linea.presentacionLabel?.toLowerCase() ?? "empaque"}`}?</p>
-      <p className="mt-0.5 text-xs text-brand-muted">Queda guardado en el catálogo y completa unidades y costo unitario de esta y las próximas facturas.</p>
+      <p className="font-semibold">
+        {yaTenia
+          ? `Unidades por ${linea.presentacionLabel?.toLowerCase() ?? "presentación"}`
+          : `¿Cuántas unidades trae ${linea.presentacionLabel?.toLowerCase() === "otra" ? "esta presentación" : `un ${linea.presentacionLabel?.toLowerCase() ?? "empaque"}`}?`}
+      </p>
+      <p className="mt-0.5 text-xs text-brand-muted">
+        {linea.unidadesConfirmadoPor
+          ? `Confirmado por ${linea.unidadesConfirmadoPor}${linea.unidadesConfirmadoEn ? ` · ${new Date(linea.unidadesConfirmadoEn).toLocaleString("es-DO")}` : ""}.`
+          : "Queda guardado en el catálogo y completa unidades y costo unitario de esta y las próximas facturas."}
+      </p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <div className="w-28">
           <AdminInput type="number" min={1} step="any" inputMode="decimal" value={unidades} onChange={(event) => setUnidades(event.target.value)} aria-label="Unidades por presentación" />
         </div>
-        {factura.proveedorId ? (
+        {factura.proveedorId && !yaTenia ? (
           <label className="flex items-center gap-1.5 text-xs font-semibold">
             <input type="checkbox" checked={soloProveedor} onChange={(event) => setSoloProveedor(event.target.checked)} className="h-4 w-4 accent-[#7EB341]" />
             Solo de este proveedor
           </label>
         ) : null}
-        <button
-          type="button"
-          disabled={guardando || !(Number(unidades) > 0)}
-          onClick={() => void guardar()}
-          className="rounded-full px-3 text-xs font-bold text-white disabled:opacity-50"
-          style={{ minHeight: 32, backgroundColor: brand.green }}
-        >
-          {guardando ? "Guardando…" : "Guardar"}
-        </button>
+        {!yaTenia || cambiado || !linea.unidadesConfirmadoPor ? (
+          <button
+            type="button"
+            disabled={guardando || !(Number(unidades) > 0)}
+            onClick={() => void guardar()}
+            className="rounded-full px-3 text-xs font-bold text-white disabled:opacity-50"
+            style={{ minHeight: 32, backgroundColor: brand.green }}
+          >
+            {guardando ? "Guardando…" : yaTenia ? "Confirmar" : "Guardar"}
+          </button>
+        ) : null}
       </div>
       {error ? (
         <p className="mt-1 text-xs" style={{ color: brand.error }}>

@@ -1,8 +1,8 @@
 import {
   CANDIDATOS_POR_LINEA,
   FACTURA_PRESENTACIONES,
-  PROPUESTA_ACEPTAR_TODAS,
   PROPUESTA_CONFIANZA,
+  clavesAlias,
   isUuid,
   normalizarDescripcion,
   resolverUnidades,
@@ -39,6 +39,7 @@ type LineaCatalogo = {
   costoPorPresentacion: number | null;
   numeroLinea: number;
   propuestaOrigen: string | null;
+  estado: string | null;
 };
 
 export type Vinculo = { descripcion: string | null; productoId: string };
@@ -68,6 +69,7 @@ function mapLinea(row: Record<string, unknown>): LineaCatalogo {
     costoPorPresentacion: num(row.costo_por_presentacion),
     numeroLinea: num(row.numero_linea) ?? 0,
     propuestaOrigen: text(row.propuesta_origen),
+    estado: text(row.estado),
   };
 }
 
@@ -76,7 +78,7 @@ async function lineasDe(facturaId: string): Promise<LineaCatalogo[]> {
   const { data, error } = await supabase
     .from("factura_lineas")
     .select(
-      "id, numero_linea, descripcion_original, producto_normalizado, codigo_sku, codigo_barras, producto_id, presentacion, cantidad_comprada, unidades_por_presentacion, costo_por_presentacion, propuesta_origen"
+      "id, numero_linea, estado, descripcion_original, producto_normalizado, codigo_sku, codigo_barras, producto_id, presentacion, cantidad_comprada, unidades_por_presentacion, costo_por_presentacion, propuesta_origen"
     )
     .eq("factura_id", facturaId)
     .order("numero_linea", { ascending: true });
@@ -120,10 +122,19 @@ async function aliasDe(proveedorId: string, descripcionNorm: string): Promise<st
 
 type Propuesta = { productoId: string; confianza: number; origen: FacturaPropuestaOrigen };
 
+async function aliasAprendido(proveedorId: string, descripcion: string | null, codigoSku: string | null): Promise<string | null> {
+  for (const clave of clavesAlias(descripcion, codigoSku)) {
+    const productoId = await aliasDe(proveedorId, clave);
+    if (productoId) {
+      return productoId;
+    }
+  }
+  return null;
+}
+
 async function proponer(linea: LineaCatalogo, proveedorId: string | null): Promise<Propuesta | null> {
-  const norm = normalizarDescripcion(linea.descripcion);
-  if (proveedorId && norm) {
-    const productoId = await aliasDe(proveedorId, norm);
+  if (proveedorId) {
+    const productoId = await aliasAprendido(proveedorId, linea.descripcion, linea.codigoSku);
     if (productoId) {
       return { productoId, confianza: PROPUESTA_CONFIANZA.alias, origen: "alias" };
     }
@@ -160,7 +171,14 @@ export async function proponerCatalogo(facturaId: string): Promise<void> {
     }
     const update =
       propuesta?.origen === "alias"
-        ? { producto_id: propuesta.productoId, ...SIN_PROPUESTA }
+        ? {
+            producto_id: propuesta.productoId,
+            ...SIN_PROPUESTA,
+            origen_ligue: "alias",
+            producto_confirmado_por: null,
+            producto_confirmado_en: null,
+            ...(linea.estado === "ambigua" ? { estado: "completa" } : {}),
+          }
         : {
             propuesta_producto_id: propuesta?.productoId ?? null,
             propuesta_confianza: propuesta?.confianza ?? null,
@@ -168,6 +186,9 @@ export async function proponerCatalogo(facturaId: string): Promise<void> {
             propuesta_razon: null,
             propuesta_por: null,
             propuesta_en: null,
+            origen_ligue: null,
+            producto_confirmado_por: null,
+            producto_confirmado_en: null,
           };
     const { error } = await supabase.from("factura_lineas").update(update).eq("id", linea.id);
     if (error) {
@@ -176,9 +197,20 @@ export async function proponerCatalogo(facturaId: string): Promise<void> {
   }
 }
 
-/** Guarda o refuerza el vínculo descripción → producto para ese proveedor. */
-export async function aprenderAlias(proveedorId: string | null, descripcion: string | null, productoId: string, actor: Actor): Promise<void> {
-  const norm = normalizarDescripcion(descripcion);
+/** Guarda o refuerza el vínculo descripción (y código SKU, si viene) → producto para ese proveedor. */
+export async function aprenderAlias(
+  proveedorId: string | null,
+  descripcion: string | null,
+  productoId: string,
+  confirmadoPor: string,
+  codigoSku: string | null = null
+): Promise<void> {
+  for (const norm of clavesAlias(descripcion, codigoSku)) {
+    await guardarAlias(proveedorId, norm, productoId, confirmadoPor);
+  }
+}
+
+async function guardarAlias(proveedorId: string | null, norm: string, productoId: string, confirmadoPor: string): Promise<void> {
   if (!proveedorId || !norm) {
     return;
   }
@@ -197,7 +229,7 @@ export async function aprenderAlias(proveedorId: string | null, descripcion: str
     const mismo = data.producto_id === productoId;
     const { error: updateError } = await supabase
       .from("catalogo_alias")
-      .update({ producto_id: productoId, confirmado_por: actor, veces: mismo ? (num(data.veces) ?? 0) + 1 : 1, updated_at: ahora })
+      .update({ producto_id: productoId, confirmado_por: confirmadoPor, veces: mismo ? (num(data.veces) ?? 0) + 1 : 1, updated_at: ahora })
       .eq("id", data.id);
     if (updateError) {
       throw updateError;
@@ -206,7 +238,7 @@ export async function aprenderAlias(proveedorId: string | null, descripcion: str
   }
   const { error: insertError } = await supabase
     .from("catalogo_alias")
-    .insert({ proveedor_id: proveedorId, descripcion_norm: norm, producto_id: productoId, confirmado_por: actor });
+    .insert({ proveedor_id: proveedorId, descripcion_norm: norm, producto_id: productoId, confirmado_por: confirmadoPor });
   if (insertError && insertError.code !== "23505") {
     throw insertError;
   }
@@ -318,7 +350,8 @@ export async function guardarPresentacion(body: Record<string, unknown>, actor: 
   if (filaError) {
     throw filaError;
   }
-  const row = { producto_id: productoId, proveedor_id: proveedorId, presentacion, unidades, confirmado_por: actor, updated_at: new Date().toISOString() };
+  const quien = typeof body.confirmadoPor === "string" && body.confirmadoPor.trim() ? body.confirmadoPor.trim() : actor;
+  const row = { producto_id: productoId, proveedor_id: proveedorId, presentacion, unidades, confirmado_por: quien, updated_at: new Date().toISOString() };
   const { error } = fila?.id
     ? await supabase.from("producto_presentaciones").update(row).eq("id", fila.id)
     : await supabase.from("producto_presentaciones").insert(row);
@@ -352,14 +385,19 @@ export async function guardarPresentacion(body: Record<string, unknown>, actor: 
   return { productoId, proveedorId, presentacion, unidades, lineasCompletadas };
 }
 
-export async function lineasParaAceptar(facturaId: string, minimo: number): Promise<Array<{ id: string; productoId: string; descripcion: string | null }>> {
+export async function lineasParaAceptar(
+  facturaId: string,
+  minimo: number,
+  maximo = 100
+): Promise<Array<{ id: string; productoId: string; descripcion: string | null; codigoSku: string | null; numeroLinea: number; estado: string | null }>> {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("factura_lineas")
-    .select("id, propuesta_producto_id, descripcion_original, producto_normalizado")
+    .select("id, numero_linea, estado, propuesta_producto_id, descripcion_original, producto_normalizado, codigo_sku")
     .eq("factura_id", facturaId)
     .is("producto_id", null)
-    .gte("propuesta_confianza", Math.max(PROPUESTA_ACEPTAR_TODAS, minimo));
+    .gte("propuesta_confianza", minimo)
+    .lte("propuesta_confianza", maximo);
   if (error) {
     throw error;
   }
@@ -369,6 +407,9 @@ export async function lineasParaAceptar(facturaId: string, minimo: number): Prom
       id: String(row.id),
       productoId: String(row.propuesta_producto_id),
       descripcion: text(row.descripcion_original) ?? text(row.producto_normalizado),
+      codigoSku: text(row.codigo_sku),
+      numeroLinea: num(row.numero_linea) ?? 0,
+      estado: text(row.estado),
     }));
 }
 
