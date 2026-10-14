@@ -163,6 +163,21 @@ export type FacturaLinea = {
   recepcionEn: string | null;
   /** Monto que no llegó: costo por presentación × (comprada − recibida). Cero si llegó completa o es regalo. */
   diferenciaRecepcion: number | null;
+  /** Precio o cantidad fuera de lo normal contra las últimas compras del mismo producto al mismo proveedor. */
+  alertas: FacturaLineaAlerta[];
+};
+
+export type FacturaLineaAlerta = {
+  tipo: "precio" | "cantidad";
+  valor: number;
+  mediana: number;
+  /** (valor − mediana) / mediana. 0.2 es 20% más. */
+  variacion: number;
+  /** Compras anteriores que entraron en la mediana. */
+  compras: number;
+  /** precio por unidad, o por presentación cuando la línea no tiene unidades. */
+  medida: "unidad" | "presentacion";
+  texto: string;
 };
 
 export type FacturaProductoCatalogo = {
@@ -268,8 +283,40 @@ export type FacturaResumen = {
   problemaFalta: string | null;
   ledgerId: string | null;
   compraId: string | null;
+  facturaOrigenId: string | null;
   actualizadoEn: string;
 };
+
+export type FacturaPagoOrigen = "caja" | "banco";
+
+export type FacturaPago = {
+  id: string;
+  origen: FacturaPagoOrigen;
+  ledgerId: string | null;
+  movimientoId: string | null;
+  fecha: string | null;
+  /** Caja del movimiento, o el banco si vino del estado de cuenta. */
+  caja: string | null;
+  concepto: string | null;
+  referencia: string | null;
+  monto: number;
+  confirmadoPor: string;
+  confirmadoEn: string;
+};
+
+export type FacturaPagoCandidato = {
+  origen: FacturaPagoOrigen;
+  ledgerId: string | null;
+  movimientoId: string | null;
+  fecha: string;
+  caja: string | null;
+  concepto: string | null;
+  referencia: string | null;
+  monto: number;
+  confianza: number;
+};
+
+export type FacturaNotaRef = { id: string; referencia: string; total: number | null; estado: FacturaEstado; estadoLabel: string };
 
 export type FacturaVerificacion = {
   id: string;
@@ -304,6 +351,13 @@ export type FacturaDetalle = FacturaResumen & {
   preguntas: FacturaPregunta[];
   documentos: FacturaDocumento[];
   proveedorFicha: FacturaProveedorFicha | null;
+  pagos: FacturaPago[];
+  /** Salidas de caja que podrían ser el pago. Vacío si ya está conciliada. */
+  pagosCandidatos: FacturaPagoCandidato[];
+  /** Total menos lo ligado en caja. Null sin total o sin pagos. */
+  pagosDiferencia: number | null;
+  facturaOrigen: { id: string; referencia: string } | null;
+  notasCredito: FacturaNotaRef[];
   verificacion: FacturaVerificacion | null;
   conciliacion: FacturaConciliacion | null;
 };
@@ -340,6 +394,8 @@ export type FacturaCampos = {
   total?: number | null;
   estado?: FacturaEstado;
   observaciones?: string | null;
+  /** Id o clave de la factura original. Solo para notas de crédito. */
+  facturaOrigen?: string | null;
 };
 
 export type FacturaLineaInput = {
@@ -399,7 +455,7 @@ export type DuplicadoCandidato = {
 };
 
 export const FACTURAS_AGENT_USO =
-  "Guarda cada factura en la misma ficha, con la foto original. POST /api/agent/facturas manda proveedor, tienda, fechas, montos, lineas (o productos), validaciones, preguntas y la foto: en JSON usa fotoBase64 o documentos[{ pagina, base64 }]; en multipart adjunta el archivo en el campo foto (también vale captura o documento). JPG, PNG, WebP o PDF, hasta 4 MB por archivo. Si hay varias páginas, mándalas todas. Identifica la factura con referencia (proveedor, fecha, monto y tienda): el id es interno y no se menciona en la conversación. Si no sabes cuántas unidades trae la caja, el paquete o el fardo, no mandes unidadesPorPresentacion ni calcules unidadesTotales o costoUnitario. Para cruzar una línea con el catálogo manda productoId o codigoOdoo; si no lo mandas, el producto ya elegido se conserva. Repetir el POST con la misma clave no pisa la factura y responde creado: false; una foto nueva de esa clave sí se guarda. Para corregir usa PATCH. Las etapas son falta_factura, recibida, registrada, verificada y conciliada. Completa cuenta como registrada. Phillip solo puede pasar a registrada cuando Rodrigo confirmó la recepción de todas las líneas (POST /recepcion: completa, faltante o regalo), salvo que sea compra personal. La respuesta de Ramón en texto se guarda igual, como evidencia. Cada línea sin catálogo trae propuesta { productoId, confianza, origen }: alias 100 (ya confirmado antes para ese proveedor, se liga solo), barras 95, odoo 90 y texto hasta 85. Bajo 70 hay que revisarla. Phillip la acepta con PATCH /lineas/{lineaId} y productoId, o todas las de 90 o más con POST /lineas/aceptar. Cuando un producto tiene las unidades por presentación guardadas (POST /api/agent/presentaciones), la plataforma completa unidades y costo unitario. La plataforma liga la factura a la ficha del proveedor (primero por RNC, después por nombre), calcula fecha_vencimiento con sus días de crédito si no la mandas, y revisa sola ncf_formato, ncf_unico y rnc_proveedor: no mandes esas tres validaciones, se reemplazan. El ticket de pago se adjunta a la misma ficha con tipo ticket. Cada bot escribe con su propio token.";
+  "Guarda cada factura en la misma ficha, con la foto original. POST /api/agent/facturas manda proveedor, tienda, fechas, montos, lineas (o productos), validaciones, preguntas y la foto: en JSON usa fotoBase64 o documentos[{ pagina, base64 }]; en multipart adjunta el archivo en el campo foto (también vale captura o documento). JPG, PNG, WebP o PDF, hasta 4 MB por archivo. Si hay varias páginas, mándalas todas. Identifica la factura con referencia (proveedor, fecha, monto y tienda): el id es interno y no se menciona en la conversación. Si no sabes cuántas unidades trae la caja, el paquete o el fardo, no mandes unidadesPorPresentacion ni calcules unidadesTotales o costoUnitario. Para cruzar una línea con el catálogo manda productoId o codigoOdoo; si no lo mandas, el producto ya elegido se conserva. Repetir el POST con la misma clave no pisa la factura y responde creado: false; una foto nueva de esa clave sí se guarda. Para corregir usa PATCH. Las etapas son falta_factura, recibida, registrada, verificada y conciliada. Completa cuenta como registrada. Phillip solo puede pasar a registrada cuando Rodrigo confirmó la recepción de todas las líneas (POST /recepcion: completa, faltante o regalo), salvo que sea compra personal. La respuesta de Ramón en texto se guarda igual, como evidencia. Cada línea sin catálogo trae propuesta { productoId, confianza, origen }: alias 100 (ya confirmado antes para ese proveedor, se liga solo), barras 95, odoo 90 y texto hasta 85. Bajo 70 hay que revisarla. Phillip la acepta con PATCH /lineas/{lineaId} y productoId, o todas las de 90 o más con POST /lineas/aceptar. Cuando un producto tiene las unidades por presentación guardadas (POST /api/agent/presentaciones), la plataforma completa unidades y costo unitario. La plataforma liga la factura a la ficha del proveedor (primero por RNC, después por nombre), calcula fecha_vencimiento con sus días de crédito si no la mandas, y revisa sola ncf_formato, ncf_unico y rnc_proveedor: no mandes esas tres validaciones, se reemplazan. El ticket de pago se adjunta a la misma ficha con tipo ticket. Una nota de crédito (tipoDocumento nota_credito) manda facturaOrigen con el id o la clave de la factura que corrige; Boris la verifica después de la original y la plataforma la descuenta de la cuenta por pagar. Fred liga los pagos con POST /pagos: ledgerId para caja o movimientoId para un débito del banco ya importado (POST /api/agent/banco). Cada línea ligada al catálogo trae alertas cuando su precio o su cantidad se sale de la mediana de las últimas 6 compras del mismo producto al mismo proveedor (15% en precio y 50% en cantidad, se cambian en Parámetros; necesita al menos 3 compras). GET /api/agent/pendientes dice qué le falta a cada factura y a quién le toca. Cada bot escribe con su propio token.";
 
 export const FACTURAS_AGENT_ENDPOINTS = [
   {
@@ -413,7 +469,12 @@ export const FACTURAS_AGENT_ENDPOINTS = [
     describe:
       "Crea la factura y sube la foto. JSON: fotoBase64 o documentos[{ nombre, pagina, base64 }]. Multipart: archivo en foto, captura o documento, y el resto de los campos como texto (lineas y validaciones van en JSON dentro del campo). JPG, PNG, WebP o PDF, hasta 4 MB. clave es opcional. Si ya existe, responde 200 con creado: false, no pisa los datos y sí guarda una foto nueva.",
   },
-  { method: "GET", path: "/api/agent/facturas/{id-o-clave}", describe: "La factura completa: cabecera, productos, validaciones, preguntas y documentos." },
+  {
+    method: "GET",
+    path: "/api/agent/facturas/{id-o-clave}",
+    describe:
+      "La factura completa: cabecera, productos (con alertas de precio y cantidad), validaciones, preguntas, documentos, pagos ligados de caja y banco, pagosCandidatos, pagosDiferencia, facturaOrigen (si es nota de crédito) y notasCredito (si es la original).",
+  },
   {
     method: "PATCH",
     path: "/api/agent/facturas/{id-o-clave}",
@@ -855,6 +916,52 @@ export function resolverUnidades(input: {
   };
 }
 
+/** Una salida de caja cuenta como el pago si cae a ±1 día y a ±RD$ 5 del total. */
+export const PAGO_DIAS = 1;
+export const PAGO_TOLERANCIA = 5;
+
+function palabrasProveedor(proveedor: string | null): string[] {
+  const norm = normalizarDescripcion(proveedor);
+  if (!norm) {
+    return [];
+  }
+  const vacias = new Set(["srl", "sas", "sa", "eirl", "distribuidora", "comercial", "industrias", "grupo", "dominicana", "del", "las", "los"]);
+  return norm.split(" ").filter((palabra) => palabra.length >= 4 && !vacias.has(palabra));
+}
+
+/** Null si el movimiento no puede ser el pago. Si no, 70 a 100 según monto, fecha y si el concepto nombra al proveedor. */
+export function confianzaPago(input: {
+  total: number;
+  monto: number;
+  diasDeDiferencia: number;
+  proveedor: string | null;
+  concepto: string | null;
+  referencia: string | null;
+  /** Por defecto PAGO_DIAS (caja). El banco pasa la distancia a su ventana y BANCO_DIAS_DESPUES. */
+  maxDias?: number;
+}): number | null {
+  const diferencia = Math.abs(input.monto - input.total);
+  if (diferencia > PAGO_TOLERANCIA || Math.abs(input.diasDeDiferencia) > (input.maxDias ?? PAGO_DIAS)) {
+    return null;
+  }
+  let confianza = diferencia <= 1 ? 80 : 70;
+  if (input.diasDeDiferencia === 0) {
+    confianza += 5;
+  }
+  const texto = normalizarDescripcion([input.concepto, input.referencia].filter(Boolean).join(" ")) ?? "";
+  if (palabrasProveedor(input.proveedor).some((palabra) => texto.split(" ").includes(palabra))) {
+    confianza += 15;
+  }
+  return Math.min(100, confianza);
+}
+
+export function diferenciaPagos(total: number | null, pagos: Array<{ monto: number }>): number | null {
+  if (total == null || !pagos.length) {
+    return null;
+  }
+  return roundTo(total - pagos.reduce((sum, pago) => sum + pago.monto, 0), 2);
+}
+
 /** Confianza de una coincidencia por nombre. Nunca llega a 90, así «aceptar todas» no toma coincidencias de texto. */
 export function confianzaTexto(similitud: number): number {
   if (!Number.isFinite(similitud)) {
@@ -1243,6 +1350,9 @@ export function leerCamposFactura(body: Record<string, unknown>, mode: "create" 
   take(["observaciones"], (value) => {
     campos.observaciones = textOrNull(value, 4000);
   });
+  take(["facturaOrigenId", "facturaOrigen", "factura_origen_id"], (value) => {
+    campos.facturaOrigen = textOrNull(value, 80);
+  });
 
   if (mode === "create") {
     campos.tipoDocumento = campos.tipoDocumento ?? "factura";
@@ -1509,4 +1619,99 @@ export function leerRespuestaPregunta(body: Record<string, unknown>): FacturaRes
     estado,
     respondidoEn,
   };
+}
+
+/** Hace falta este historial mínimo para avisar. */
+export const ALERTA_MIN_COMPRAS = 3;
+/** Cuántas compras anteriores entran en la mediana. */
+export const ALERTA_HISTORIAL = 6;
+export const ALERTA_PRECIO_DEFECTO = 0.15;
+export const ALERTA_CANTIDAD_DEFECTO = 0.5;
+
+export function mediana(valores: number[]): number | null {
+  const ordenados = valores.filter((valor) => Number.isFinite(valor)).sort((a, b) => a - b);
+  if (!ordenados.length) {
+    return null;
+  }
+  const medio = Math.floor(ordenados.length / 2);
+  return ordenados.length % 2 ? ordenados[medio] : (ordenados[medio - 1] + ordenados[medio]) / 2;
+}
+
+export type MedidaLinea = { clave: string; medida: "unidad" | "presentacion"; costo: number | null; cantidad: number | null };
+
+/** Qué se compara: costo por unidad si se conoce; si no, costo por presentación de la misma presentación y tamaño. */
+export function medidaLinea(linea: {
+  costoUnitario: number | null;
+  unidadesTotales: number | null;
+  costoPorPresentacion: number | null;
+  cantidadComprada: number | null;
+  presentacion: string | null;
+  unidadesPorPresentacion: number | null;
+}): MedidaLinea | null {
+  if (linea.costoUnitario != null && linea.costoUnitario > 0) {
+    return { clave: "unidad", medida: "unidad", costo: linea.costoUnitario, cantidad: linea.unidadesTotales };
+  }
+  if (linea.costoPorPresentacion != null && linea.costoPorPresentacion > 0) {
+    return {
+      clave: `presentacion:${linea.presentacion ?? "?"}:${linea.unidadesPorPresentacion ?? "?"}`,
+      medida: "presentacion",
+      costo: linea.costoPorPresentacion,
+      cantidad: linea.cantidadComprada,
+    };
+  }
+  return null;
+}
+
+function porcentaje(variacion: number): string {
+  return `${Math.round(Math.abs(variacion) * 100)}%`;
+}
+
+/**
+ * Compara la línea con la mediana de las últimas compras (historial ya filtrado al mismo producto y proveedor,
+ * la más reciente primero). Avisa si se sale más que el umbral, hacia arriba o hacia abajo.
+ */
+export function alertasLinea(
+  actual: MedidaLinea | null,
+  historial: Array<MedidaLinea | null>,
+  umbral: { precio: number; cantidad: number },
+  moneda: FacturaMoneda = "DOP"
+): FacturaLineaAlerta[] {
+  if (!actual) {
+    return [];
+  }
+  const previas = historial.filter((item): item is MedidaLinea => Boolean(item && item.clave === actual.clave)).slice(0, ALERTA_HISTORIAL);
+  const alertas: FacturaLineaAlerta[] = [];
+  const costos = previas.map((item) => item.costo).filter((valor): valor is number => valor != null && valor > 0);
+  const medianaCosto = costos.length >= ALERTA_MIN_COMPRAS ? mediana(costos) : null;
+  if (actual.costo != null && medianaCosto) {
+    const variacion = roundTo((actual.costo - medianaCosto) / medianaCosto, 4);
+    if (Math.abs(variacion) > umbral.precio) {
+      alertas.push({
+        tipo: "precio",
+        valor: actual.costo,
+        mediana: roundTo(medianaCosto, 2),
+        variacion,
+        compras: costos.length,
+        medida: actual.medida,
+        texto: `Precio ${porcentaje(variacion)} ${variacion > 0 ? "más alto" : "más bajo"} que lo normal: ${formatMonto(medianaCosto, moneda)} ${actual.medida === "unidad" ? "por unidad" : "por presentación"} en las últimas ${costos.length} compras.`,
+      });
+    }
+  }
+  const cantidades = previas.map((item) => item.cantidad).filter((valor): valor is number => valor != null && valor > 0);
+  const medianaCantidad = cantidades.length >= ALERTA_MIN_COMPRAS ? mediana(cantidades) : null;
+  if (actual.cantidad != null && actual.cantidad > 0 && medianaCantidad) {
+    const variacion = roundTo((actual.cantidad - medianaCantidad) / medianaCantidad, 4);
+    if (Math.abs(variacion) > umbral.cantidad) {
+      alertas.push({
+        tipo: "cantidad",
+        valor: actual.cantidad,
+        mediana: roundTo(medianaCantidad, 2),
+        variacion,
+        compras: cantidades.length,
+        medida: actual.medida,
+        texto: `Cantidad ${porcentaje(variacion)} ${variacion > 0 ? "mayor" : "menor"} que lo normal: ${medianaCantidad} ${actual.medida === "unidad" ? "unidades" : "presentaciones"} en las últimas ${cantidades.length} compras.`,
+      });
+    }
+  }
+  return alertas;
 }

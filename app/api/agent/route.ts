@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
         "catalogo.importado",
         "meta.guardada",
         "parametros.actualizados",
+        "factura.recordatorio",
       ],
     },
     nota: "Ventas, compras, caja, catálogo y contable no incluyen teléfonos, direcciones ni chats de clientes. Expansión sí incluye teléfono y correo de brokers y desarrolladores: ese directorio es el CRM. El catálogo no tiene existencias. POST de compras registra una factura con RNC, NCF y captura. POST de facturas guarda lo que Phillip lee, incluida la foto original. Cada bot escribe con su token: Boris solo verifica, Fred solo concilia, Hans publica asientos, Robert los estados y Troy aprueba el cierre. AGENT_API_TOKEN sigue pudiendo leer. POST y PATCH de expansión crean y mueven el pipeline.",

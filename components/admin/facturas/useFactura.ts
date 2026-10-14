@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FacturaDetalle } from "@/lib/facturas-shared";
 
-export type EnviarFactura = (path: string, method: "POST" | "PATCH", body: unknown) => Promise<void>;
+export type EnviarFactura = (path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) => Promise<void>;
 
 export function useFactura(id: string) {
   const [factura, setFactura] = useState<FacturaDetalle | null>(null);
@@ -47,7 +47,7 @@ export function useFactura(id: string) {
         method,
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: body === undefined ? undefined : JSON.stringify(body),
       });
       const parsed = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {

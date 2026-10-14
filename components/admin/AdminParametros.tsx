@@ -30,6 +30,8 @@ type Draft = {
   pesoReciente: string;
   pesoIntermedio: string;
   pesoAntiguo: string;
+  alertaPrecio: string;
+  alertaCantidad: string;
 };
 
 function pad2(value: number): string {
@@ -45,6 +47,8 @@ function draftFrom(config: ParametrosConfig): Draft {
     pesoReciente: String(ratioToPercent(config.pesoReciente)),
     pesoIntermedio: String(ratioToPercent(config.pesoIntermedio)),
     pesoAntiguo: String(ratioToPercent(config.pesoAntiguo)),
+    alertaPrecio: String(ratioToPercent(config.alertaPrecio)),
+    alertaCantidad: String(ratioToPercent(config.alertaCantidad)),
   };
 }
 
@@ -187,6 +191,8 @@ export function AdminParametros() {
           pesoReciente: pesos.reciente,
           pesoIntermedio: pesos.intermedio,
           pesoAntiguo: pesos.antiguo,
+          alertaPrecio: parsePercentField(draft.alertaPrecio),
+          alertaCantidad: parsePercentField(draft.alertaCantidad),
         }),
       });
       const body = (await response.json().catch(() => null)) as { parametros?: ParametrosConfig; error?: string } | null;
@@ -349,6 +355,28 @@ export function AdminParametros() {
               </p>
             </div>
 
+            <div className="mt-6">
+              <p className={labelClass}>Alertas en facturas</p>
+              <p className={hintClass}>
+                Cada línea ligada al catálogo se compara con la mediana de las últimas 6 compras del mismo producto al mismo
+                proveedor. Avisa si se sale más que este %, hacia arriba o hacia abajo. Necesita al menos 3 compras.
+              </p>
+              <div className="mt-3 grid gap-4 sm:grid-cols-3">
+                <PesoField
+                  label="Precio"
+                  hint="Arranca en 15%"
+                  value={draft.alertaPrecio}
+                  onChange={(value) => setDraft((current) => (current ? { ...current, alertaPrecio: value } : current))}
+                />
+                <PesoField
+                  label="Cantidad"
+                  hint="Arranca en 50%"
+                  value={draft.alertaCantidad}
+                  onChange={(value) => setDraft((current) => (current ? { ...current, alertaCantidad: value } : current))}
+                />
+              </div>
+            </div>
+
             {saveError ? (
               <p className="mt-4 rounded-2xl px-4 py-3 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
                 {saveError}
@@ -369,7 +397,9 @@ export function AdminParametros() {
                 !monthStartFromInput(draft.mesActivo) ||
                 parseRatioField(draft.ratioRecompra) == null ||
                 parsePercentField(draft.umbralCuidado) == null ||
-                parsePercentField(draft.umbralStop) == null
+                parsePercentField(draft.umbralStop) == null ||
+                !(Number(parsePercentField(draft.alertaPrecio)) > 0) ||
+                !(Number(parsePercentField(draft.alertaCantidad)) > 0)
               }
               className="mt-5 rounded-full px-5 text-sm font-bold text-white disabled:opacity-40"
               style={{ minHeight: 44, backgroundColor: brand.green }}

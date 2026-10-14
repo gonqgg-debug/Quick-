@@ -28,6 +28,10 @@ export type Compra = {
   proveedorId: string;
   proveedorNombre: string;
   monto: number;
+  /** Suma de las notas de crédito ya aplicadas. */
+  notasCredito: number;
+  /** Monto menos notas de crédito. Es lo que queda por pagar. */
+  saldo: number;
   fecha: string;
   dueDate: string;
   pagado: boolean;
@@ -71,17 +75,25 @@ export function dueDateFromCredit(fecha: string, proveedor: Pick<Proveedor, "tie
   return addDaysToDayKey(fecha, days);
 }
 
-export function summarizePendientes(compras: Array<Pick<Compra, "pagado" | "monto" | "dueDate">>, today = todayDayKey()): ComprasSummary {
+export function saldoCompra(monto: number, notasCredito: number | null | undefined): number {
+  return Math.max(0, Math.round((monto - (notasCredito ?? 0)) * 100) / 100);
+}
+
+export function summarizePendientes(
+  compras: Array<Pick<Compra, "pagado" | "monto" | "dueDate"> & { notasCredito?: number }>,
+  today = todayDayKey()
+): ComprasSummary {
   const weekEnd = addDaysToDayKey(today, COMPRAS_WEEK_DAYS);
   return compras.reduce((summary, compra) => {
     if (compra.pagado) {
       return summary;
     }
-    summary.totalPendiente += compra.monto;
+    const saldo = saldoCompra(compra.monto, compra.notasCredito);
+    summary.totalPendiente += saldo;
     if (compra.dueDate < today) {
-      summary.vencidas += compra.monto;
+      summary.vencidas += saldo;
     } else if (compra.dueDate <= weekEnd) {
-      summary.venceEstaSemana += compra.monto;
+      summary.venceEstaSemana += saldo;
     }
     return summary;
   }, emptyComprasSummary());
