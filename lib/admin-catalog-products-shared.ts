@@ -1,21 +1,67 @@
 export const CATALOG_PRODUCTS_PAGE_SIZE = 50;
 
+/** Margen por debajo de este valor se marca para verlo al pasar la vista. */
+export const MARGEN_BAJO = 0.15;
+
+export const DESCRIPCION_LISTA = 280;
+
+export type CatalogoEstado = "todos" | "activo" | "inactivo" | "sin_costo";
+
+export type AdminCatalogProveedor = {
+  id: string;
+  nombre: string;
+  ultimaCompra: string | null;
+};
+
 export type AdminCatalogProduct = {
   id: string;
   nombre: string;
+  descripcion: string | null;
   marca: string | null;
   categoria: string;
   precio: number;
+  costo: number | null;
+  costoEn: string | null;
+  margen: number | null;
+  proveedores: AdminCatalogProveedor[];
   codigoOdoo: string | null;
   codigoBarras: string | null;
   fotoUrl: string | null;
   activo: boolean;
 };
 
+export type AdminCatalogCompra = {
+  facturaId: string;
+  fecha: string | null;
+  proveedor: string | null;
+  costo: number;
+};
+
+export type AdminCatalogPresentacion = {
+  presentacion: string;
+  etiqueta: string;
+  unidades: number;
+  proveedor: string | null;
+};
+
+export type AdminCatalogProductDetalle = {
+  product: AdminCatalogProduct;
+  compra: AdminCatalogCompra | null;
+  presentaciones: AdminCatalogPresentacion[];
+  categories: string[];
+};
+
+export type AdminCatalogConteos = {
+  activos: number;
+  inactivos: number;
+  sinCosto: number;
+  todos: number;
+};
+
 export type AdminCatalogProductFilters = {
   q: string;
   categoria: string;
-  estado: "todos" | "activo" | "inactivo";
+  estado: CatalogoEstado;
   page: number;
 };
 
@@ -25,6 +71,7 @@ export type AdminCatalogProductList = {
   page: number;
   pageSize: number;
   categories: string[];
+  conteos: AdminCatalogConteos;
 };
 
 export function catalogProductsQueryString(filters: AdminCatalogProductFilters): string {
@@ -54,4 +101,40 @@ export function shortOdooCode(value: string): string {
     return trimmed;
   }
   return `…${trimmed.slice(-8)}`;
+}
+
+/** (precio − costo) / precio. Null si no hay costo o el precio no alcanza para un margen. */
+export function margenDe(precio: number, costo: number | null): number | null {
+  if (costo == null || !(precio > 0)) {
+    return null;
+  }
+  return Math.round(((precio - costo) / precio) * 1000) / 1000;
+}
+
+export function formatoMargen(margen: number | null): string {
+  if (margen == null) {
+    return "—";
+  }
+  const pct = Math.round(margen * 1000) / 10;
+  const text = Number.isInteger(pct) ? String(pct) : pct.toFixed(1);
+  return `${text}%`;
+}
+
+export function margenBajo(margen: number | null): boolean {
+  return margen != null && margen < MARGEN_BAJO;
+}
+
+/** Recorte para la lista y los bloques. Conserva los saltos de línea. */
+export function recorteDescripcion(value: string | null | undefined, max = DESCRIPCION_LISTA): string | null {
+  if (!value) {
+    return null;
+  }
+  const limpio = value.replace(/\r\n/g, "\n").trim();
+  if (!limpio) {
+    return null;
+  }
+  if (limpio.length <= max) {
+    return limpio;
+  }
+  return `${limpio.slice(0, max - 1).trimEnd()}…`;
 }

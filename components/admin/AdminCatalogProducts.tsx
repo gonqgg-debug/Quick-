@@ -1,42 +1,87 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
 import { formatPrice } from "@/lib/money";
 import { brand } from "@/lib/theme";
+import { AdminInput, AdminSelect } from "@/components/admin/AdminField";
+import { DataTable, DataTableCell, DataTableHead, DataTableRow, DataTableTh } from "@/components/admin/DataTable";
+import { guardarListaProductos } from "@/components/admin/catalogo/lista-guardada";
+import {
+  BrandCheckbox,
+  EstadoProducto,
+  FotoProducto,
+  MargenProducto,
+  ProveedoresProducto,
+  lineaSecundaria,
+  textoCosto,
+} from "@/components/admin/catalogo/producto-ui";
+import { Aviso, TONO } from "@/components/admin/facturas/ui";
 import {
   CATALOG_PRODUCTS_PAGE_SIZE,
   catalogProductsQueryString,
   isUncategorized,
-  shortOdooCode,
+  type AdminCatalogConteos,
   type AdminCatalogProduct,
   type AdminCatalogProductList,
+  type CatalogoEstado,
 } from "@/lib/admin-catalog-products-shared";
 
-const ESTADO_FILTERS: Array<{ id: "todos" | "activo" | "inactivo"; label: string }> = [
-  { id: "todos", label: "Todos" },
+type Presentacion = "lista" | "bloques";
+
+const ESTADOS: Array<{ id: CatalogoEstado; label: string }> = [
   { id: "activo", label: "Activos" },
   { id: "inactivo", label: "Inactivos" },
+  { id: "sin_costo", label: "Sin costo" },
+  { id: "todos", label: "Todos" },
 ];
 
 const BATCH_CONFIRM = 20;
 
-type PatchPayload = {
-  nombre?: string;
-  marca?: string | null;
-  categoria?: string;
-  precio?: number;
-  activo?: boolean;
-};
+function estadoDesde(value: string | null): CatalogoEstado {
+  return ESTADOS.some((item) => item.id === value) ? (value as CatalogoEstado) : "activo";
+}
+
+function presentacionDesde(value: string | null): Presentacion {
+  return value === "bloques" ? "bloques" : "lista";
+}
+
+function conteoDe(estado: CatalogoEstado, conteos: AdminCatalogConteos | null): number | null {
+  if (!conteos) {
+    return null;
+  }
+  if (estado === "activo") {
+    return conteos.activos;
+  }
+  if (estado === "inactivo") {
+    return conteos.inactivos;
+  }
+  if (estado === "sin_costo") {
+    return conteos.sinCosto;
+  }
+  return conteos.todos;
+}
 
 export function AdminCatalogProducts() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const presentacion = presentacionDesde(searchParams.get("presentacion"));
+  const estado = estadoDesde(searchParams.get("estado"));
+  const qUrl = searchParams.get("q") ?? "";
+  const categoria = searchParams.get("categoria") ?? "";
+  const pageRaw = Number(searchParams.get("page") || "1");
+  const page = Number.isInteger(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+
+  const [q, setQ] = useState(qUrl);
   const [products, setProducts] = useState<AdminCatalogProduct[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
+  const [conteos, setConteos] = useState<AdminCatalogConteos | null>(null);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [booting, setBooting] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [batchBusy, setBatchBusy] = useState(false);
@@ -47,28 +92,71 @@ export function AdminCatalogProducts() {
   const [barOpen, setBarOpen] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
   const lastSelectedCount = useRef(0);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [savedId, setSavedId] = useState<string | null>(null);
-  const dirtyRef = useRef(false);
-  const savedTimer = useRef(0);
-  const editingProductRef = useRef<AdminCatalogProduct | null>(null);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [query, setQuery] = useState("");
-  const [categoria, setCategoria] = useState("");
-  const [estado, setEstado] = useState<"todos" | "activo" | "inactivo">("todos");
+  const listQuery = searchParams.toString();
+  const queryString = useMemo(
+    () => catalogProductsQueryString({ q: qUrl, categoria, estado, page }),
+    [qUrl, categoria, estado, page]
+  );
+  const filterQueryString = useMemo(
+    () => catalogProductsQueryString({ q: qUrl, categoria, estado, page: 1 }),
+    [qUrl, categoria, estado]
+  );
+
+  function setUrl(next: { presentacion?: Presentacion; estado?: CatalogoEstado; q?: string; categoria?: string; page?: number }) {
+    const params = new URLSearchParams(searchParams.toString());
+    const nextPresentacion = next.presentacion ?? presentacion;
+    const nextEstado = next.estado ?? estado;
+    const nextQ = next.q ?? qUrl;
+    const nextCategoria = next.categoria ?? categoria;
+    const nextPage = next.page ?? (next.estado || next.q != null || next.categoria != null ? 1 : page);
+    if (nextPresentacion === "bloques") {
+      params.set("presentacion", "bloques");
+    } else {
+      params.delete("presentacion");
+    }
+    if (nextEstado === "activo") {
+      params.delete("estado");
+    } else {
+      params.set("estado", nextEstado);
+    }
+    if (nextQ.trim()) {
+      params.set("q", nextQ.trim());
+    } else {
+      params.delete("q");
+    }
+    if (nextCategoria) {
+      params.set("categoria", nextCategoria);
+    } else {
+      params.delete("categoria");
+    }
+    if (nextPage > 1) {
+      params.set("page", String(nextPage));
+    } else {
+      params.delete("page");
+    }
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
+
+  const setUrlRef = useRef(setUrl);
+  setUrlRef.current = setUrl;
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setQuery(searchInput.trim());
-      setPage(1);
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [searchInput]);
+    setQ(qUrl);
+  }, [qUrl]);
+
+  useEffect(() => {
+    if (q.trim() === qUrl.trim()) {
+      return;
+    }
+    const handle = window.setTimeout(() => setUrlRef.current({ q, page: 1 }), 300);
+    return () => window.clearTimeout(handle);
+  }, [q, qUrl]);
 
   useEffect(() => {
     setSelected([]);
-  }, [query, categoria, estado]);
+  }, [qUrl, categoria, estado]);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,15 +185,6 @@ export function AdminCatalogProducts() {
     };
   }, [selected.length]);
 
-  const queryString = useMemo(
-    () => catalogProductsQueryString({ q: query, categoria, estado, page }),
-    [query, categoria, estado, page]
-  );
-  const filterQueryString = useMemo(
-    () => catalogProductsQueryString({ q: query, categoria, estado, page: 1 }),
-    [query, categoria, estado]
-  );
-
   const load = useCallback(async () => {
     const response = await fetch(`/api/admin/catalogo/productos?${queryString}`, { credentials: "include" });
     if (response.status === 401) {
@@ -116,15 +195,24 @@ export function AdminCatalogProducts() {
     if (!response.ok) {
       throw new Error(body?.error || "No pudimos cargar los productos");
     }
-    setProducts(body?.products ?? []);
+    const rows = body?.products ?? [];
+    setProducts(rows);
     setTotal(body?.total ?? 0);
     setCategories(body?.categories ?? []);
+    setConteos(body?.conteos ?? null);
   }, [queryString, router]);
 
   useEffect(() => {
+    if (booting) {
+      return;
+    }
+    guardarListaProductos({ ids: products.map((row) => row.id), query: listQuery });
+  }, [products, listQuery, booting]);
+
+  useEffect(() => {
     let cancelled = false;
+    setRefreshing(true);
     (async () => {
-      setLoading(true);
       try {
         await load();
         if (!cancelled) {
@@ -136,7 +224,8 @@ export function AdminCatalogProducts() {
         }
       } finally {
         if (!cancelled) {
-          setLoading(false);
+          setBooting(false);
+          setRefreshing(false);
         }
       }
     })();
@@ -155,46 +244,13 @@ export function AdminCatalogProducts() {
     );
   }
 
-  async function patchProduct(id: string, payload: PatchPayload) {
-    const response = await fetch("/api/admin/catalogo/productos", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, ...payload }),
-    });
-    if (response.status === 401) {
-      router.replace("/admin/login");
-      throw new Error("Sesión expirada");
-    }
-    const body = (await response.json().catch(() => null)) as { product?: AdminCatalogProduct; error?: string } | null;
-    if (!response.ok || !body?.product) {
-      throw new Error(body?.error || "No pudimos guardar");
-    }
-    if (payload.categoria) {
-      rememberCategory(payload.categoria);
-    }
-    setProducts((current) => {
-      const next = current.map((item) => (item.id === id ? body.product! : item));
-      if (estado === "activo" && !body.product!.activo) {
-        return next.filter((item) => item.id !== id);
-      }
-      if (estado === "inactivo" && body.product!.activo) {
-        return next.filter((item) => item.id !== id);
-      }
-      return next;
-    });
-    return body.product;
-  }
-
   async function runBatch(payload: { activo?: boolean; categoria?: string }) {
     if (selected.length === 0) {
       return;
     }
-    const needsConfirm =
-      selected.length > BATCH_CONFIRM && (payload.activo !== undefined || Boolean(payload.categoria));
+    const needsConfirm = selected.length > BATCH_CONFIRM && (payload.activo !== undefined || Boolean(payload.categoria));
     if (needsConfirm) {
-      const action =
-        payload.activo === true ? "activar" : payload.activo === false ? "desactivar" : "cambiar de categoría";
+      const action = payload.activo === true ? "activar" : payload.activo === false ? "desactivar" : "cambiar de categoría";
       if (!window.confirm(`Vas a ${action} ${selected.length} productos. ¿Continuar?`)) {
         return;
       }
@@ -253,9 +309,8 @@ export function AdminCatalogProducts() {
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const stamp = new Date().toISOString().slice(0, 10);
       link.href = url;
-      link.download = `catalogo-productos-${stamp}.xlsx`;
+      link.download = `catalogo-productos-${new Date().toISOString().slice(0, 10)}.xlsx`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -275,78 +330,26 @@ export function AdminCatalogProducts() {
   const pageCount = Math.max(1, Math.ceil(total / CATALOG_PRODUCTS_PAGE_SIZE));
   const fromRow = total === 0 ? 0 : (page - 1) * CATALOG_PRODUCTS_PAGE_SIZE + 1;
   const toRow = Math.min(page * CATALOG_PRODUCTS_PAGE_SIZE, total);
+  const assignCategory = batchCategory === "__new__" ? batchNewCategory.trim() : batchCategory;
+  const canSelectMatching = allPageSelected && selected.length === pageIds.length && total > pageIds.length;
+  if (selected.length > 0) {
+    lastSelectedCount.current = selected.length;
+  }
+
+  function hrefDe(id: string) {
+    return `/admin/catalogo/productos/${id}${listQuery ? `?${listQuery}` : ""}`;
+  }
+
+  function abrir(id: string) {
+    router.push(hrefDe(id));
+  }
 
   function togglePage(checked: boolean) {
-    setSelected((current) => {
-      if (checked) {
-        return Array.from(new Set([...current, ...pageIds]));
-      }
-      return current.filter((id) => !pageIds.includes(id));
-    });
+    setSelected((current) => (checked ? Array.from(new Set([...current, ...pageIds])) : current.filter((id) => !pageIds.includes(id))));
   }
 
   function toggleRow(id: string, checked: boolean) {
     setSelected((current) => (checked ? Array.from(new Set([...current, id])) : current.filter((item) => item !== id)));
-  }
-
-  function confirmDiscardIfNeeded(): boolean {
-    if (editingId && dirtyRef.current) {
-      return window.confirm("Hay cambios sin guardar. ¿Descartarlos?");
-    }
-    return true;
-  }
-
-  function startEdit(id: string) {
-    if (id === editingId) {
-      return;
-    }
-    if (!confirmDiscardIfNeeded()) {
-      return;
-    }
-    dirtyRef.current = false;
-    setEditingId(id);
-    editingProductRef.current = products.find((item) => item.id === id) ?? null;
-  }
-
-  function cancelEdit() {
-    dirtyRef.current = false;
-    setEditingId(null);
-    editingProductRef.current = null;
-  }
-
-  function finishSave(id: string) {
-    dirtyRef.current = false;
-    setEditingId(null);
-    editingProductRef.current = null;
-    setSavedId(id);
-    window.clearTimeout(savedTimer.current);
-    savedTimer.current = window.setTimeout(() => setSavedId(null), 1400);
-  }
-
-  function applyFotoUrl(id: string, fotoUrl: string) {
-    setProducts((current) => current.map((item) => (item.id === id ? { ...item, fotoUrl } : item)));
-    if (editingProductRef.current?.id === id) {
-      editingProductRef.current = { ...editingProductRef.current, fotoUrl };
-    }
-  }
-
-  function changePage(next: number) {
-    if (!confirmDiscardIfNeeded()) {
-      return;
-    }
-    dirtyRef.current = false;
-    setEditingId(null);
-    editingProductRef.current = null;
-    setPage(next);
-  }
-
-  const assignCategory = batchCategory === "__new__" ? batchNewCategory.trim() : batchCategory;
-  const canSelectMatching = allPageSelected && selected.length === pageIds.length && total > pageIds.length;
-  const editingProduct =
-    products.find((item) => item.id === editingId) ??
-    (editingId && editingProductRef.current?.id === editingId ? editingProductRef.current : null);
-  if (selected.length > 0) {
-    lastSelectedCount.current = selected.length;
   }
 
   async function selectMatchingFilter() {
@@ -372,290 +375,273 @@ export function AdminCatalogProducts() {
   }
 
   return (
-    <div>
-      <style>{`
-        .product-row:hover { background-color: #F9FAFB !important; }
-        .product-row .row-edit-btn { opacity: 0.32; }
-        .product-row:hover .row-edit-btn,
-        .product-row:focus-within .row-edit-btn { opacity: 1; }
-        .product-row[data-selected="true"] { background-color: rgba(126, 179, 65, 0.08) !important; }
-        .product-row[data-selected="true"]:hover { background-color: rgba(126, 179, 65, 0.12) !important; }
-        .catalog-batch-dock {
-          position: fixed;
-          left: 1rem;
-          right: 1rem;
-          bottom: 0;
-          z-index: 40;
-          padding-bottom: 1rem;
-          pointer-events: none;
-        }
-        @media (min-width: 768px) {
-          .catalog-batch-dock {
-            left: calc(232px + 1.5rem);
-            right: 1.5rem;
-          }
-        }
-        .catalog-batch-panel {
-          pointer-events: auto;
-          transform: translateY(120%);
-          opacity: 0;
-          transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease;
-        }
-        .catalog-batch-dock.is-open .catalog-batch-panel {
-          transform: translateY(0);
-          opacity: 1;
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .catalog-batch-panel {
-            transform: none;
-            transition: opacity 160ms ease;
-          }
-        }
-      `}</style>
-      <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Catálogo</p>
-      <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+    <div style={{ paddingBottom: barMounted ? 168 : undefined }}>
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-bold">Productos</h1>
-          <p className="mt-1 max-w-xl text-sm text-brand-muted">
-            Usa el lápiz para abrir la ficha del producto. El catálogo público solo muestra productos activos.
+          <p className="mt-1 max-w-2xl text-sm text-brand-muted">
+            La lista sirve para comparar y actuar en lote. Los bloques muestran foto, descripción, precio, costo y proveedores sin abrir cada producto.
           </p>
         </div>
-        <button
-          type="button"
-          disabled={exporting || loading || total === 0}
-          onClick={() => void exportWorkbook()}
-          className="inline-flex items-center gap-2 rounded-full px-4 text-sm font-bold disabled:opacity-40"
-          style={{ minHeight: 44, backgroundColor: "#F3F4F6", color: brand.ink }}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-full border border-[#E7EBE4] bg-white p-1" role="group" aria-label="Presentación del catálogo">
+            {(
+              [
+                { id: "lista", label: "Lista" },
+                { id: "bloques", label: "Bloques" },
+              ] as const
+            ).map((item) => {
+              const activa = presentacion === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-pressed={activa}
+                  onClick={() => setUrl({ presentacion: item.id })}
+                  className="rounded-full px-3 text-sm font-bold"
+                  style={{
+                    minHeight: 36,
+                    backgroundColor: activa ? brand.paleGreen : "transparent",
+                    color: activa ? brand.ink : brand.muted,
+                  }}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            disabled={exporting || booting || total === 0}
+            onClick={() => void exportWorkbook()}
+            className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
+            style={{ minHeight: 40, backgroundColor: "#F3F4F6", color: brand.ink }}
+          >
+            {exporting ? "Exportando…" : "Exportar"}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-5 flex gap-1 overflow-x-auto border-b border-[#E7EBE4]" role="tablist" aria-label="Estado del catálogo">
+        {ESTADOS.map((item) => {
+          const activa = item.id === estado;
+          const n = conteoDe(item.id, conteos);
+          return (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={activa}
+              onClick={() => setUrl({ estado: item.id, page: 1 })}
+              className="flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-semibold"
+              style={{ borderColor: activa ? brand.green : "transparent", color: activa ? brand.ink : brand.muted }}
+            >
+              {item.label}
+              {n != null ? (
+                <span
+                  className="rounded-full px-1.5 text-[11px] font-bold tabular-nums"
+                  style={item.id === "sin_costo" && n > 0 ? TONO.naranja : { backgroundColor: "#F3F4F6", color: brand.muted }}
+                >
+                  {n}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_16rem]">
+        <AdminInput bare value={q} onChange={(event) => setQ(event.target.value)} placeholder="Nombre, marca, descripción o código" aria-label="Buscar producto" />
+        <AdminSelect
+          bare
+          value={categoria}
+          aria-label="Categoría"
+          onChange={(event) => setUrl({ categoria: event.target.value, page: 1 })}
         >
-          <DownloadIcon />
-          {exporting ? "Exportando..." : "Exportar a Excel"}
-        </button>
+          <option value="">Todas las categorías</option>
+          {categories.map((item) => (
+            <option key={item} value={item}>
+              {isUncategorized(item) ? "Sin categoría" : item}
+            </option>
+          ))}
+        </AdminSelect>
       </div>
 
-      <div className="mt-5 space-y-3">
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="block text-xs font-bold text-brand-muted">
-            Buscar
-            <input
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-              placeholder="Nombre, marca o código"
-              className="mt-1 h-11 w-full rounded-xl border bg-white px-3 text-sm font-semibold outline-none focus:border-[#7EB341]"
-              style={{ borderColor: "#E5E7EB", color: brand.ink }}
-            />
-          </label>
-          <label className="block text-xs font-bold text-brand-muted">
-            Categoría
-            <span className="relative mt-1 block">
-              <select
-                value={categoria}
-                onChange={(event) => {
-                  if (!confirmDiscardIfNeeded()) {
-                    return;
-                  }
-                  dirtyRef.current = false;
-                  setEditingId(null);
-                  editingProductRef.current = null;
-                  setCategoria(event.target.value);
-                  setPage(1);
-                }}
-                className="h-11 w-full appearance-none rounded-xl border bg-white px-3 pr-9 text-sm font-semibold outline-none focus:border-[#7EB341]"
-                style={{ borderColor: "#E5E7EB", color: brand.ink }}
-              >
-                <option value="">Todas</option>
-                {categories.map((item) => (
-                  <option key={item} value={item}>
-                    {isUncategorized(item) ? "Sin categoría (All)" : item}
-                  </option>
-                ))}
-              </select>
-              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-brand-muted">
-                <ChevronIcon />
-              </span>
-            </span>
-          </label>
+      {error ? (
+        <div className="mt-4">
+          <Aviso>{error}</Aviso>
         </div>
-        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Filtrar por estado">
-          {ESTADO_FILTERS.map((filter) => {
-            const active = estado === filter.id;
-            return (
-              <button
-                key={filter.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => {
-                  if (!confirmDiscardIfNeeded()) {
-                    return;
-                  }
-                  dirtyRef.current = false;
-                  setEditingId(null);
-                  editingProductRef.current = null;
-                  setEstado(filter.id);
-                  setPage(1);
-                }}
-                className="rounded-full px-3 text-sm font-bold"
-                style={{
-                  minHeight: 40,
-                  backgroundColor: active ? brand.green : "#F3F4F6",
-                  color: active ? "#FFFFFF" : "#4B5563",
-                }}
-              >
-                {filter.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      ) : null}
 
-      <div className="mt-6" style={{ paddingBottom: barMounted ? 168 : undefined }}>
-        {error ? (
-          <p className="mb-3 rounded-2xl px-3 py-2 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
-            {error}
-          </p>
-        ) : null}
-
-        {loading ? (
-          <div className="h-64 animate-pulse rounded-[24px] bg-gray-100" />
+      <div className="mt-4">
+        {booting ? (
+          <div className="h-64 animate-pulse rounded-2xl bg-[#F3F4F6]" />
         ) : products.length === 0 ? (
-          <div className="rounded-[28px] px-5 py-14 text-center" style={{ backgroundColor: "#F8FAF7" }}>
-            <p className="font-display text-xl font-bold">No hay productos con esos filtros</p>
-            <p className="mt-2 text-sm text-brand-muted">Prueba otro texto, categoría o estado.</p>
+          <div className="rounded-2xl border border-dashed border-[#E7EBE4] px-6 py-16 text-center">
+            <p className="font-display text-lg font-bold">No hay productos con esos filtros</p>
+            <p className="mx-auto mt-2 max-w-md text-sm text-brand-muted">Prueba otro texto, otra categoría o la pestaña Todos.</p>
+          </div>
+        ) : presentacion === "lista" ? (
+          <div className={refreshing ? "opacity-60 transition-opacity" : "transition-opacity"}>
+          <DataTable tableClassName="min-w-[920px]">
+            <DataTableHead>
+              <DataTableTh className="w-10">
+                <BrandCheckbox checked={allPageSelected} indeterminate={somePageSelected} onChange={togglePage} label="Seleccionar los visibles" />
+              </DataTableTh>
+              <DataTableTh>Producto</DataTableTh>
+              <DataTableTh numeric>Precio</DataTableTh>
+              <DataTableTh numeric>Costo</DataTableTh>
+              <DataTableTh>Margen</DataTableTh>
+              <DataTableTh>Proveedores</DataTableTh>
+              <DataTableTh>Estado</DataTableTh>
+            </DataTableHead>
+            <tbody>
+              {products.map((product) => (
+                <DataTableRow
+                  key={product.id}
+                  onClick={() => abrir(product.id)}
+                  className={selected.includes(product.id) ? "bg-[#F1F7EA]" : undefined}
+                >
+                  <DataTableCell onClick={(event) => event.stopPropagation()}>
+                    <BrandCheckbox checked={selected.includes(product.id)} onChange={(checked) => toggleRow(product.id, checked)} label={`Seleccionar ${product.nombre}`} />
+                  </DataTableCell>
+                  <DataTableCell>
+                    <div className="flex items-center gap-3">
+                      <FotoProducto src={product.fotoUrl} size="lista" />
+                      <div className="min-w-0">
+                        <Link href={hrefDe(product.id)} className="font-semibold hover:underline" onClick={(event) => event.stopPropagation()}>
+                          {product.nombre}
+                        </Link>
+                        <p className="mt-0.5 truncate text-xs text-brand-muted">{lineaSecundaria(product) || "Sin marca ni código"}</p>
+                      </div>
+                    </div>
+                  </DataTableCell>
+                  <DataTableCell numeric className="font-semibold">
+                    {formatPrice(product.precio)}
+                  </DataTableCell>
+                  <DataTableCell numeric className={product.costo == null ? "text-brand-muted" : "font-semibold"}>
+                    {textoCosto(product.costo)}
+                  </DataTableCell>
+                  <DataTableCell>
+                    <MargenProducto margen={product.margen} />
+                  </DataTableCell>
+                  <DataTableCell>
+                    <ProveedoresProducto proveedores={product.proveedores} />
+                  </DataTableCell>
+                  <DataTableCell>
+                    <EstadoProducto activo={product.activo} />
+                  </DataTableCell>
+                </DataTableRow>
+              ))}
+            </tbody>
+          </DataTable>
           </div>
         ) : (
-          <div>
-            <div className="overflow-x-auto rounded-[24px] border" style={{ borderColor: "#E5E7EB" }}>
-              <table className="w-full min-w-[1180px] text-left text-sm">
-                <thead>
-                  <tr
-                    className="text-xs font-bold uppercase tracking-wide text-brand-muted"
-                    style={{ backgroundColor: "#F8FAF7" }}
-                  >
-                    <th className="w-10 px-3 py-3">
-                      <BrandCheckbox
-                        checked={allPageSelected}
-                        indeterminate={somePageSelected}
-                        onChange={togglePage}
-                        label="Seleccionar todos los visibles"
-                      />
-                    </th>
-                    <th className="px-3 py-3">Foto</th>
-                    <th className="px-3 py-3">Nombre</th>
-                    <th className="px-3 py-3">Marca</th>
-                    <th className="px-3 py-3">Categoría</th>
-                    <th className="whitespace-nowrap px-3 py-3 text-right">Precio</th>
-                    <th className="whitespace-nowrap px-3 py-3">Cód. Odoo</th>
-                    <th className="whitespace-nowrap px-3 py-3">Barras</th>
-                    <th className="px-3 py-3">Estado</th>
-                    <th className="w-12 px-3 py-3">
-                      <span className="sr-only">Editar</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {products.map((product, index) => (
-                    <ProductRow
-                      key={product.id}
-                      product={product}
-                      zebra={index % 2 === 1}
-                      selected={selected.includes(product.id)}
-                      savedFlash={savedId === product.id}
-                      onToggle={(checked) => toggleRow(product.id, checked)}
-                      onStartEdit={() => startEdit(product.id)}
-                      onPatch={patchProduct}
-                      onError={setError}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-brand-muted">
-                {fromRow}–{toRow} de {total.toLocaleString("es-DO")}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={page <= 1}
-                  onClick={() => changePage(Math.max(1, page - 1))}
-                  className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
-                  style={{ minHeight: 40, backgroundColor: "#F3F4F6" }}
-                >
-                  Anterior
-                </button>
-                <p className="text-sm font-semibold tabular-nums">
-                  {page} / {pageCount}
-                </p>
-                <button
-                  type="button"
-                  disabled={page >= pageCount}
-                  onClick={() => changePage(Math.min(pageCount, page + 1))}
-                  className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
-                  style={{ minHeight: 40, backgroundColor: "#F3F4F6" }}
-                >
-                  Siguiente
-                </button>
-              </div>
-            </div>
+          <div className={refreshing ? "opacity-60 transition-opacity" : "transition-opacity"}>
+          <div className="mb-3 flex items-center gap-2">
+            <BrandCheckbox checked={allPageSelected} indeterminate={somePageSelected} onChange={togglePage} label="Seleccionar los visibles" />
+            <span className="text-sm text-brand-muted">Seleccionar los de esta página</span>
+          </div>
+          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {products.map((product) => (
+              <li key={product.id} className="relative rounded-2xl border border-[#E7EBE4] bg-white p-4">
+                <div className="absolute right-3 top-3 z-10">
+                  <BrandCheckbox checked={selected.includes(product.id)} onChange={(checked) => toggleRow(product.id, checked)} label={`Seleccionar ${product.nombre}`} />
+                </div>
+                <Link href={hrefDe(product.id)} className="block">
+                  <FotoProducto src={product.fotoUrl} size="bloque" />
+                  <div className="mt-3 flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-display text-lg font-bold leading-tight">{product.nombre}</p>
+                      <p className="mt-0.5 truncate text-xs text-brand-muted">{lineaSecundaria(product) || "Sin marca ni código"}</p>
+                    </div>
+                    <EstadoProducto activo={product.activo} />
+                  </div>
+                  <p className="mt-2 line-clamp-2 min-h-10 whitespace-pre-line text-sm text-brand-muted">
+                    {product.descripcion || "Sin descripción"}
+                  </p>
+                  <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-[#E7EBE4] pt-3 text-sm">
+                    <div>
+                      <dt className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted">Precio</dt>
+                      <dd className="mt-0.5 font-bold tabular-nums">{formatPrice(product.precio)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted">Costo</dt>
+                      <dd className={`mt-0.5 tabular-nums ${product.costo == null ? "text-brand-muted" : "font-semibold"}`}>{textoCosto(product.costo)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted">Margen</dt>
+                      <dd className="mt-0.5">
+                        <MargenProducto margen={product.margen} />
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className="mt-3">
+                    <ProveedoresProducto proveedores={product.proveedores} />
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
           </div>
         )}
       </div>
 
+      {products.length > 0 || total > 0 ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-brand-muted">
+            {fromRow}–{toRow} de {total.toLocaleString("es-DO")}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setUrl({ page: Math.max(1, page - 1) })}
+              className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
+              style={{ minHeight: 40, backgroundColor: "#F3F4F6" }}
+            >
+              Anterior
+            </button>
+            <p className="text-sm font-semibold tabular-nums">
+              {page} / {pageCount}
+            </p>
+            <button
+              type="button"
+              disabled={page >= pageCount}
+              onClick={() => setUrl({ page: Math.min(pageCount, page + 1) })}
+              className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
+              style={{ minHeight: 40, backgroundColor: "#F3F4F6" }}
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {barMounted && typeof document !== "undefined"
         ? createPortal(
             <div className={`catalog-batch-dock${barOpen ? " is-open" : ""}`} role="region" aria-label="Acciones de selección">
-              <div
-                className="catalog-batch-panel flex flex-col gap-2 rounded-[24px] border border-t px-4 py-3"
-                style={{
-                  backgroundColor: "#FFFFFF",
-                  borderColor: "#E5E7EB",
-                  boxShadow: "0 -16px 40px rgba(26, 26, 26, 0.16)",
-                  color: brand.ink,
-                }}
-              >
+              <style>{`
+                .catalog-batch-dock { position: fixed; left: 1rem; right: 1rem; bottom: 0; z-index: 40; padding-bottom: 1rem; pointer-events: none; }
+                @media (min-width: 768px) { .catalog-batch-dock { left: calc(232px + 1.5rem); right: 1.5rem; } }
+                .catalog-batch-panel { pointer-events: auto; transform: translateY(120%); opacity: 0; transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease; }
+                .catalog-batch-dock.is-open .catalog-batch-panel { transform: translateY(0); opacity: 1; }
+                @media (prefers-reduced-motion: reduce) { .catalog-batch-panel { transform: none; transition: opacity 160ms ease; } }
+              `}</style>
+              <div className="catalog-batch-panel flex flex-col gap-2 rounded-2xl border border-[#E7EBE4] bg-white px-4 py-3 shadow-[0_-16px_40px_rgba(26,26,26,0.12)]">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="mr-1 text-sm font-bold">
-                    {selected.length || lastSelectedCount.current} seleccionados
-                  </p>
-                  <button
-                    type="button"
-                    disabled={batchBusy}
-                    onClick={() => void runBatch({ activo: true })}
-                    className="rounded-full px-3.5 text-sm font-bold text-white disabled:opacity-40"
-                    style={{ minHeight: 40, backgroundColor: brand.green }}
-                  >
+                  <p className="mr-1 text-sm font-bold">{selected.length || lastSelectedCount.current} seleccionados</p>
+                  <button type="button" disabled={batchBusy} onClick={() => void runBatch({ activo: true })} className="rounded-full px-3.5 text-sm font-bold text-white disabled:opacity-40" style={{ minHeight: 40, backgroundColor: brand.green }}>
                     Activar
                   </button>
-                  <button
-                    type="button"
-                    disabled={batchBusy}
-                    onClick={() => void runBatch({ activo: false })}
-                    className="rounded-full border px-3.5 text-sm font-bold disabled:opacity-40"
-                    style={{ minHeight: 40, borderColor: "#FECACA", backgroundColor: "#FFF7F7", color: "#B42318" }}
-                  >
+                  <button type="button" disabled={batchBusy} onClick={() => void runBatch({ activo: false })} className="rounded-full border px-3.5 text-sm font-bold disabled:opacity-40" style={{ minHeight: 40, borderColor: "#FECACA", backgroundColor: "#FFF7F7", color: "#B42318" }}>
                     Desactivar
                   </button>
-                  <button
-                    type="button"
-                    disabled={exporting || batchBusy}
-                    onClick={() => void exportWorkbook(selected)}
-                    className="inline-flex items-center gap-1.5 rounded-full border px-3.5 text-sm font-bold disabled:opacity-40"
-                    style={{ minHeight: 40, borderColor: "#E5E7EB", backgroundColor: "#FFFFFF", color: brand.ink }}
-                  >
-                    <DownloadIcon />
+                  <button type="button" disabled={exporting || batchBusy} onClick={() => void exportWorkbook(selected)} className="rounded-full border px-3.5 text-sm font-bold disabled:opacity-40" style={{ minHeight: 40, borderColor: "#E5E7EB", backgroundColor: "#FFFFFF" }}>
                     Exportar seleccionados
                   </button>
-                  <div
-                    className="flex min-h-10 items-stretch overflow-hidden rounded-full border"
-                    style={{ borderColor: "#E5E7EB" }}
-                  >
-                    <select
-                      value={batchCategory}
-                      disabled={batchBusy}
-                      onChange={(event) => setBatchCategory(event.target.value)}
-                      className="h-10 min-w-[10rem] border-0 bg-white px-3 text-sm font-semibold outline-none"
-                      style={{ color: brand.ink }}
-                    >
+                  <div className="flex min-h-10 items-stretch overflow-hidden rounded-full border border-[#E5E7EB]">
+                    <select value={batchCategory} disabled={batchBusy} onChange={(event) => setBatchCategory(event.target.value)} className="h-10 min-w-[10rem] border-0 bg-white px-3 text-sm font-semibold outline-none" style={{ color: brand.ink }}>
                       <option value="">Asignar categoría</option>
                       {usableCategories.map((item) => (
                         <option key={item} value={item}>
@@ -665,14 +651,7 @@ export function AdminCatalogProducts() {
                       <option value="__new__">Nueva categoría…</option>
                     </select>
                     {batchCategory === "__new__" ? (
-                      <input
-                        value={batchNewCategory}
-                        disabled={batchBusy}
-                        onChange={(event) => setBatchNewCategory(event.target.value)}
-                        placeholder="Nombre"
-                        className="h-10 w-36 border-l bg-white px-3 text-sm font-semibold outline-none"
-                        style={{ borderColor: "#E5E7EB", color: brand.ink }}
-                      />
+                      <input value={batchNewCategory} disabled={batchBusy} onChange={(event) => setBatchNewCategory(event.target.value)} placeholder="Nombre" className="h-10 w-36 border-l border-[#E5E7EB] bg-white px-3 text-sm font-semibold outline-none" />
                     ) : null}
                     <button
                       type="button"
@@ -691,16 +670,8 @@ export function AdminCatalogProducts() {
                 {canSelectMatching ? (
                   <p className="text-xs text-brand-muted">
                     Seleccionados los {pageIds.length} de esta página ·{" "}
-                    <button
-                      type="button"
-                      disabled={selectingAll || batchBusy}
-                      onClick={() => void selectMatchingFilter()}
-                      className="font-bold underline decoration-transparent hover:decoration-current disabled:opacity-40"
-                      style={{ color: brand.green }}
-                    >
-                      {selectingAll
-                        ? "Seleccionando…"
-                        : `Seleccionar los ${total.toLocaleString("es-DO")} que coinciden con el filtro`}
+                    <button type="button" disabled={selectingAll || batchBusy} onClick={() => void selectMatchingFilter()} className="font-bold underline disabled:opacity-40" style={{ color: brand.green }}>
+                      {selectingAll ? "Seleccionando…" : `Seleccionar los ${total.toLocaleString("es-DO")} que coinciden con el filtro`}
                     </button>
                   </p>
                 ) : null}
@@ -709,673 +680,6 @@ export function AdminCatalogProducts() {
             document.body
           )
         : null}
-
-      {editingProduct && typeof document !== "undefined"
-        ? createPortal(
-            <ProductEditModal
-              key={editingProduct.id}
-              product={editingProduct}
-              categories={usableCategories}
-              onDirtyChange={(dirty) => {
-                dirtyRef.current = dirty;
-              }}
-              onCancel={cancelEdit}
-              onSaved={() => finishSave(editingProduct.id)}
-              onFotoSaved={(fotoUrl) => applyFotoUrl(editingProduct.id, fotoUrl)}
-              onPatch={patchProduct}
-            />,
-            document.body
-          )
-        : null}
     </div>
-  );
-}
-
-function BrandCheckbox({
-  checked,
-  indeterminate = false,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  indeterminate?: boolean;
-  onChange: (checked: boolean) => void;
-  label: string;
-}) {
-  const ref = useRef<HTMLInputElement | null>(null);
-  useEffect(() => {
-    if (ref.current) {
-      ref.current.indeterminate = indeterminate;
-    }
-  }, [indeterminate]);
-  const on = checked || indeterminate;
-  return (
-    <label className="inline-flex cursor-pointer items-center">
-      <input
-        ref={ref}
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        aria-label={label}
-        className="sr-only"
-      />
-      <span
-        className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border"
-        style={{
-          borderColor: on ? brand.green : "#D1D5DB",
-          backgroundColor: on ? brand.green : "#FFFFFF",
-        }}
-      >
-        {checked ? (
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-            <path d="M2 5.2 4.1 7.3 8 2.8" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        ) : indeterminate ? (
-          <span className="block h-0.5 w-2.5 rounded-full bg-white" />
-        ) : null}
-      </span>
-    </label>
-  );
-}
-
-function ProductRow({
-  product,
-  zebra,
-  selected,
-  savedFlash,
-  onToggle,
-  onStartEdit,
-  onPatch,
-  onError,
-}: {
-  product: AdminCatalogProduct;
-  zebra: boolean;
-  selected: boolean;
-  savedFlash: boolean;
-  onToggle: (checked: boolean) => void;
-  onStartEdit: () => void;
-  onPatch: (id: string, payload: PatchPayload) => Promise<AdminCatalogProduct>;
-  onError: (message: string | null) => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const missingCategory = isUncategorized(product.categoria);
-
-  async function toggleActivo() {
-    setBusy(true);
-    try {
-      await onPatch(product.id, { activo: !product.activo });
-      onError(null);
-    } catch (toggleError) {
-      onError(toggleError instanceof Error ? toggleError.message : "No pudimos cambiar el estado");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <tr
-      className="product-row border-t"
-      data-selected={selected ? "true" : "false"}
-      style={{
-        borderColor: "#F3F4F6",
-        backgroundColor: selected ? "rgba(126, 179, 65, 0.08)" : zebra ? "#FAFBFA" : "#FFFFFF",
-        boxShadow: selected ? `inset 3px 0 0 ${brand.green}` : undefined,
-        opacity: product.activo ? 1 : 0.72,
-      }}
-    >
-      <td className="px-3 py-2.5">
-        <BrandCheckbox
-          checked={selected}
-          onChange={onToggle}
-          label={`Seleccionar ${product.nombre}`}
-        />
-      </td>
-      <td className="px-3 py-2.5">
-        <div
-          className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg"
-          style={{ backgroundColor: "#F3F4F6" }}
-        >
-          {product.fotoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={product.fotoUrl} alt="" className="h-full w-full object-contain" />
-          ) : (
-            <span className="text-[10px] text-brand-muted">—</span>
-          )}
-        </div>
-      </td>
-      <td className="max-w-[240px] px-3 py-2.5 font-semibold leading-tight">{product.nombre}</td>
-      <td className="whitespace-nowrap px-3 py-2.5 text-brand-muted">{product.marca || "—"}</td>
-      <td className="whitespace-nowrap px-3 py-2.5">
-        {missingCategory ? (
-          <span
-            className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold"
-            style={{ backgroundColor: "#FEF3C7", color: "#92400E" }}
-          >
-            Sin categoría
-          </span>
-        ) : (
-          <span className="text-brand-muted">{product.categoria}</span>
-        )}
-      </td>
-      <td className="whitespace-nowrap px-3 py-2.5 text-right font-bold tabular-nums">{formatPrice(product.precio)}</td>
-      <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-brand-muted">
-        {product.codigoOdoo ? (
-          <span className="cursor-help underline decoration-dotted decoration-gray-300" title={product.codigoOdoo}>
-            {shortOdooCode(product.codigoOdoo)}
-          </span>
-        ) : (
-          "—"
-        )}
-      </td>
-      <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-brand-muted">{product.codigoBarras || "—"}</td>
-      <td className="px-3 py-2.5">
-        <ActivoSwitch activo={product.activo} disabled={busy} onToggle={() => void toggleActivo()} />
-      </td>
-      <td className="whitespace-nowrap px-3 py-2.5">
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={onStartEdit}
-            className="row-edit-btn inline-flex h-8 w-8 items-center justify-center rounded-full"
-            style={{ color: brand.muted }}
-            aria-label={`Editar ${product.nombre}`}
-            title="Editar"
-          >
-            <PencilIcon />
-          </button>
-          {savedFlash ? (
-            <span className="text-sm font-bold" style={{ color: brand.green }}>
-              ✓
-            </span>
-          ) : null}
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
-const PHOTO_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
-
-function ProductEditModal({
-  product,
-  categories,
-  onDirtyChange,
-  onCancel,
-  onSaved,
-  onFotoSaved,
-  onPatch,
-}: {
-  product: AdminCatalogProduct;
-  categories: string[];
-  onDirtyChange: (dirty: boolean) => void;
-  onCancel: () => void;
-  onSaved: () => void;
-  onFotoSaved: (fotoUrl: string) => void;
-  onPatch: (id: string, payload: PatchPayload) => Promise<AdminCatalogProduct>;
-}) {
-  const [draftNombre, setDraftNombre] = useState(product.nombre);
-  const [draftMarca, setDraftMarca] = useState(product.marca || "");
-  const [draftCategoria, setDraftCategoria] = useState(isUncategorized(product.categoria) ? "" : product.categoria);
-  const [categoryMode, setCategoryMode] = useState<"select" | "new">("select");
-  const [draftNewCategoria, setDraftNewCategoria] = useState("");
-  const [draftPrecio, setDraftPrecio] = useState(String(product.precio));
-  const [draftActivo, setDraftActivo] = useState(product.activo);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement | null>(null);
-  const nombreRef = useRef<HTMLInputElement | null>(null);
-  const previewUrlRef = useRef<string | null>(null);
-
-  const resolvedCategoria = categoryMode === "new" ? draftNewCategoria.trim() : draftCategoria.trim();
-  const originalCategoria = isUncategorized(product.categoria) ? "" : product.categoria;
-  const parsedPrecio = parsePriceDraft(draftPrecio);
-  const dirty =
-    Boolean(imageFile) ||
-    draftNombre.trim() !== product.nombre.trim() ||
-    draftMarca.trim() !== (product.marca || "") ||
-    resolvedCategoria !== originalCategoria ||
-    (parsedPrecio == null ? draftPrecio.trim() !== String(product.precio) : parsedPrecio !== product.precio) ||
-    draftActivo !== product.activo;
-
-  useEffect(() => {
-    onDirtyChange(dirty);
-  }, [dirty, onDirtyChange]);
-
-  useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    window.requestAnimationFrame(() => nombreRef.current?.focus());
-    return () => {
-      document.body.style.overflow = previous;
-      if (previewUrlRef.current) {
-        URL.revokeObjectURL(previewUrlRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        requestClose();
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-
-  function requestClose() {
-    if (dirty && !window.confirm("Hay cambios sin guardar. ¿Descartarlos?")) {
-      return;
-    }
-    onDirtyChange(false);
-    onCancel();
-  }
-
-  function acceptFile(file: File | undefined) {
-    if (!file) {
-      return;
-    }
-    const mime = file.type === "image/jpg" ? "image/jpeg" : file.type;
-    if (!PHOTO_TYPES.has(mime)) {
-      setFormError("Usa JPG, PNG o WebP");
-      return;
-    }
-    if (file.size > PHOTO_MAX_BYTES) {
-      setFormError("La imagen pesa más de 5 MB");
-      return;
-    }
-    setFormError(null);
-    setImagePreview((current) => {
-      if (current) {
-        URL.revokeObjectURL(current);
-      }
-      const next = URL.createObjectURL(file);
-      previewUrlRef.current = next;
-      return next;
-    });
-    setImageFile(file);
-  }
-
-  async function deactivate() {
-    if (!window.confirm("Este producto dejará de verse en el catálogo público. ¿Desactivar?")) {
-      return;
-    }
-    setDraftActivo(false);
-    await save(false);
-  }
-
-  async function save(activoOverride?: boolean) {
-    const nombre = draftNombre.trim();
-    if (!nombre) {
-      setFormError("El nombre no puede quedar vacío");
-      return;
-    }
-    if (!resolvedCategoria) {
-      setFormError("La categoría no puede quedar vacía");
-      return;
-    }
-    if (parsedPrecio == null) {
-      setFormError("Precio inválido");
-      return;
-    }
-    const nextActivo = activoOverride ?? draftActivo;
-    setSaving(true);
-    setFormError(null);
-    try {
-      if (imageFile) {
-        const body = new FormData();
-        body.append("productId", product.id);
-        body.append("file", imageFile);
-        const response = await fetch("/api/admin/catalogo/imagenes/upload", {
-          method: "POST",
-          credentials: "include",
-          body,
-        });
-        const payload = (await response.json().catch(() => null)) as { fotoUrl?: string; error?: string } | null;
-        if (!response.ok || !payload?.fotoUrl) {
-          throw new Error(payload?.error || "No pudimos subir la imagen");
-        }
-        onFotoSaved(payload.fotoUrl);
-      }
-      const patch: PatchPayload = {};
-      if (nombre !== product.nombre.trim()) {
-        patch.nombre = nombre;
-      }
-      if (draftMarca.trim() !== (product.marca || "")) {
-        patch.marca = draftMarca.trim() || null;
-      }
-      if (resolvedCategoria !== originalCategoria) {
-        patch.categoria = resolvedCategoria;
-      }
-      if (parsedPrecio !== product.precio) {
-        patch.precio = parsedPrecio;
-      }
-      if (nextActivo !== product.activo) {
-        patch.activo = nextActivo;
-      }
-      if (Object.keys(patch).length > 0) {
-        await onPatch(product.id, patch);
-      }
-      onDirtyChange(false);
-      onSaved();
-    } catch (saveError) {
-      setFormError(saveError instanceof Error ? saveError.message : "No pudimos guardar");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const previewSrc = imagePreview || product.fotoUrl;
-  const displayName = draftNombre.trim() || product.nombre;
-  const displayMarca = draftMarca.trim() || "Sin marca";
-  const displayCategoria = resolvedCategoria || "Sin categoría";
-  const labelClass = "block text-[13px] font-medium text-brand-muted";
-  const fieldClass =
-    "mt-1.5 h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium outline-none focus:border-[#7EB341]";
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/40"
-        aria-label="Cerrar"
-        onClick={requestClose}
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="product-edit-title"
-        className="relative z-10 flex max-h-[calc(100vh-3rem)] w-full max-w-xl flex-col overflow-hidden rounded-[28px] bg-white"
-        style={{ boxShadow: "0 24px 64px rgba(26, 26, 26, 0.18)", color: brand.ink }}
-      >
-        <div className="overflow-y-auto">
-          <div className="h-[128px] w-full" style={{ backgroundColor: "#F4F5F4" }} />
-          <div className="px-6 pb-8">
-            <div className="-mt-[60px] flex flex-col items-center text-center">
-              <div
-                className="flex items-center justify-center overflow-hidden rounded-2xl bg-white"
-                style={{
-                  width: 120,
-                  height: 120,
-                  border: "4px solid #FFFFFF",
-                  boxShadow: "0 8px 20px rgba(26, 26, 26, 0.10)",
-                  backgroundColor: "#F3F4F6",
-                }}
-              >
-                {previewSrc ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={previewSrc} alt="" className="h-full w-full object-contain" />
-                ) : (
-                  <span className="text-xs text-brand-muted">Sin imagen</span>
-                )}
-              </div>
-              <h2 id="product-edit-title" className="mt-4 max-w-full px-2 font-display text-xl font-bold leading-tight">
-                {displayName}
-              </h2>
-              <p className="mt-1 text-sm text-brand-muted">
-                {displayMarca} · {displayCategoria}
-              </p>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="sr-only"
-                onChange={(event) => {
-                  acceptFile(event.target.files?.[0]);
-                  event.target.value = "";
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  setDragOver(true);
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  setDragOver(false);
-                  acceptFile(event.dataTransfer.files[0]);
-                }}
-                className="mt-4 rounded-full border px-4 text-sm font-semibold"
-                style={{
-                  minHeight: 40,
-                  borderColor: dragOver ? brand.green : "#E5E7EB",
-                  backgroundColor: dragOver ? "rgba(126, 179, 65, 0.08)" : "#FFFFFF",
-                  color: brand.ink,
-                }}
-              >
-                Cambiar imagen
-              </button>
-            </div>
-
-            <div className="mt-8 space-y-6">
-              <label className={labelClass}>
-                Nombre
-                <input
-                  ref={nombreRef}
-                  value={draftNombre}
-                  onChange={(event) => setDraftNombre(event.target.value)}
-                  className={fieldClass}
-                  style={{ borderColor: "#E5E7EB", color: brand.ink }}
-                />
-              </label>
-              <div className="grid gap-6 sm:grid-cols-2">
-                <label className={labelClass}>
-                  Marca
-                  <input
-                    value={draftMarca}
-                    onChange={(event) => setDraftMarca(event.target.value)}
-                    className={fieldClass}
-                    style={{ borderColor: "#E5E7EB", color: brand.ink }}
-                  />
-                </label>
-                <label className={labelClass}>
-                  Categoría
-                  {categoryMode === "new" ? (
-                    <input
-                      value={draftNewCategoria}
-                      placeholder="Nueva categoría"
-                      onChange={(event) => setDraftNewCategoria(event.target.value)}
-                      className={fieldClass}
-                      style={{ borderColor: "#E5E7EB", color: brand.ink }}
-                    />
-                  ) : (
-                    <span className="relative mt-1.5 block">
-                      <select
-                        value={draftCategoria}
-                        onChange={(event) => {
-                          if (event.target.value === "__new__") {
-                            setCategoryMode("new");
-                            setDraftNewCategoria("");
-                            return;
-                          }
-                          setDraftCategoria(event.target.value);
-                        }}
-                        className="h-11 w-full appearance-none rounded-xl border bg-white px-3 pr-9 text-sm font-medium outline-none focus:border-[#7EB341]"
-                        style={{ borderColor: "#E5E7EB", color: brand.ink }}
-                      >
-                        <option value="" disabled>
-                          Elegir…
-                        </option>
-                        {categories.map((item) => (
-                          <option key={item} value={item}>
-                            {item}
-                          </option>
-                        ))}
-                        <option value="__new__">Crear nueva…</option>
-                      </select>
-                      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-brand-muted">
-                        <ChevronIcon />
-                      </span>
-                    </span>
-                  )}
-                </label>
-              </div>
-              <label className={labelClass}>
-                Precio
-                <span className="relative mt-1.5 block">
-                  <span
-                    className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-semibold"
-                    style={{ color: brand.orange }}
-                  >
-                    RD$
-                  </span>
-                  <input
-                    value={draftPrecio}
-                    inputMode="decimal"
-                    onChange={(event) => setDraftPrecio(event.target.value)}
-                    className="h-11 w-full rounded-xl border bg-white pl-12 pr-3 text-sm font-semibold tabular-nums outline-none focus:border-[#7EB341]"
-                    style={{ borderColor: "#E5E7EB", color: brand.ink }}
-                  />
-                </span>
-              </label>
-              <div className="grid gap-4 rounded-2xl px-4 py-3.5 sm:grid-cols-2" style={{ backgroundColor: "#F7F8F7" }}>
-                <div className="min-w-0">
-                  <p className={labelClass}>Código Odoo</p>
-                  <p
-                    className="mt-1.5 truncate font-mono text-sm text-brand-muted"
-                    title={product.codigoOdoo || undefined}
-                  >
-                    {product.codigoOdoo ? shortOdooCode(product.codigoOdoo) : "—"}
-                  </p>
-                </div>
-                <div className="min-w-0">
-                  <p className={labelClass}>Código de barras</p>
-                  <p className="mt-1.5 truncate font-mono text-sm text-brand-muted" title={product.codigoBarras || undefined}>
-                    {product.codigoBarras || "—"}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <p className={labelClass}>Estado</p>
-                <ActivoSwitch activo={draftActivo} onToggle={() => setDraftActivo((current) => !current)} />
-              </div>
-            </div>
-
-            {formError ? (
-              <p className="mt-6 rounded-2xl px-3 py-2 text-sm" style={{ backgroundColor: "#FEE2E2", color: brand.error }}>
-                {formError}
-              </p>
-            ) : null}
-          </div>
-        </div>
-
-        <div
-          className="flex flex-wrap items-center justify-between gap-3 border-t px-6 py-4"
-          style={{ borderColor: "#EFEFEF" }}
-        >
-          {draftActivo ? (
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void deactivate()}
-              className="rounded-full border px-4 text-sm font-semibold disabled:opacity-40"
-              style={{ minHeight: 44, borderColor: "#FECACA", backgroundColor: "#FFFFFF", color: "#B42318" }}
-            >
-              Desactivar producto
-            </button>
-          ) : (
-            <span />
-          )}
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              disabled={saving}
-              onClick={requestClose}
-              className="rounded-full border px-4 text-sm font-semibold disabled:opacity-40"
-              style={{ minHeight: 44, borderColor: "#E5E7EB", backgroundColor: "#FFFFFF", color: brand.ink }}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void save()}
-              className="rounded-full px-5 text-sm font-bold text-white disabled:opacity-40"
-              style={{ minHeight: 44, backgroundColor: brand.green }}
-            >
-              {saving ? "Guardando..." : "Guardar cambios"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ActivoSwitch({
-  activo,
-  disabled = false,
-  onToggle,
-}: {
-  activo: boolean;
-  disabled?: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={activo}
-      disabled={disabled}
-      onClick={onToggle}
-      className="inline-flex items-center gap-2 disabled:opacity-40"
-    >
-      <span
-        className="relative inline-block h-5 w-9 rounded-full"
-        style={{ backgroundColor: activo ? brand.green : "#D1D5DB" }}
-      >
-        <span className="absolute top-0.5 h-4 w-4 rounded-full bg-white" style={{ left: activo ? 16 : 2 }} />
-      </span>
-      <span className="text-xs font-bold" style={{ color: activo ? brand.green : brand.muted }}>
-        {activo ? "Activo" : "Inactivo"}
-      </span>
-    </button>
-  );
-}
-
-function parsePriceDraft(raw: string): number | null {
-  const parsed = Number(raw.replace(",", "."));
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return null;
-  }
-  return Math.round(parsed * 100) / 100;
-}
-
-function PencilIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d="M11.2 2.6a1.3 1.3 0 0 1 1.8 1.8L5.5 12l-2.3.5.5-2.3 7.5-7.6Z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function DownloadIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M8 3v7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <path d="M5.2 7.8 8 10.6l2.8-2.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M3.5 13h9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ChevronIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <path d="M3.5 5.2 7 8.7l3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
   );
 }
