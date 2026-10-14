@@ -80,11 +80,13 @@ import {
   type FacturaPropuestaOrigen,
   type FacturaProveedorFicha,
   type FacturaRecepcion,
+  type FacturaListado,
   type FacturaResumen,
   type FacturaValidacion,
   type FacturaValidacionInput,
   type FacturaVerificacion,
   type FacturasResumen,
+  FACTURAS_PAGE_SIZE,
 } from "@/lib/facturas-shared";
 import { validarCambioEstado, type Actor, type OperacionBot } from "@/lib/operacion-shared";
 import { lineasSinCatalogo, pendientesDe, propuestasPorConfirmar, type Pendiente } from "@/lib/facturas-pendientes";
@@ -92,6 +94,9 @@ import { isDayKey } from "@/lib/local-day";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
 const LIST_MAX = 500;
+
+const LIST_SELECT =
+  "id, clave, recibido_en, enviado_por, tienda, tipo_documento, proveedor, rnc, ncf, numero_factura, fecha_emision, moneda, total, numero_documentos, estado, posible_duplicado, preguntas_abiertas, es_compra_personal, socio, problema, problema_dueno, problema_falta, updated_at";
 
 const FACTURA_SELECT =
   "id, clave, recibido_en, enviado_por, tienda, tipo_documento, proveedor, proveedor_id, rnc, ncf, numero_factura, fecha_emision, fecha_vencimiento, condicion, metodo_pago, moneda, subtotal, descuento_total, itbis_total, otros_cargos, total, numero_productos, numero_documentos, estado, observaciones, posible_duplicado, duplicado_de, preguntas_abiertas, es_compra_personal, socio, confirmacion_texto, confirmacion_por, confirmacion_en, problema, problema_dueno, problema_desde, problema_falta, ledger_id, compra_id, factura_origen_id, updated_at";
@@ -846,76 +851,211 @@ async function savePreguntas(id: string, preguntas: FacturaPreguntaInput[]): Pro
   }
 }
 
-export async function listFacturas(filtro: FacturaFiltro = {}): Promise<FacturaResumen[]> {
-  const supabase = getSupabaseAdminClient();
-  let query = supabase.from("facturas").select(FACTURA_SELECT).order("updated_at", { ascending: false }).limit(LIST_MAX);
+type FacturaQuery = PromiseLike<{ data: unknown[] | null; error: { message?: string } | null; count: number | null }> & {
+  eq: (column: string, value: unknown) => FacturaQuery;
+  gt: (column: string, value: unknown) => FacturaQuery;
+  ilike: (column: string, value: string) => FacturaQuery;
+  or: (filters: string) => FacturaQuery;
+  limit: (count: number) => FacturaQuery;
+  range: (from: number, to: number) => FacturaQuery;
+};
+
+function asFacturaQuery(query: unknown): FacturaQuery {
+  return query as FacturaQuery;
+}
+
+function sanitizeFacturaSearch(raw: string): string {
+  return raw
+    .trim()
+    .replace(/[%_,()]/g, " ")
+    .replace(/\s+/g, " ")
+    .slice(0, 80);
+}
+
+function aplicarFiltroFacturas(query: FacturaQuery, filtro: FacturaFiltro): FacturaQuery {
+  let next = query;
   if (filtro.estado) {
     const estado = parseEstado(filtro.estado);
     if (!estado) {
       throw new Error(mensajeEstadoInvalido());
     }
-    query = query.eq("estado", estado);
+    next = next.eq("estado", estado);
   }
   if (filtro.tienda?.trim()) {
-    query = query.ilike("tienda", `%${filtro.tienda.trim()}%`);
+    next = next.ilike("tienda", `%${filtro.tienda.trim().replace(/[%_]/g, " ")}%`);
   }
   if (filtro.pendientes) {
-    query = query.gt("preguntas_abiertas", 0);
+    next = next.gt("preguntas_abiertas", 0);
   }
   if (filtro.duplicados) {
-    query = query.eq("posible_duplicado", true);
+    next = next.eq("posible_duplicado", true);
   }
   if (filtro.sinFoto) {
-    query = query.eq("numero_documentos", 0);
+    next = next.eq("numero_documentos", 0);
   }
   if (filtro.problema) {
-    query = query.eq("problema", true);
+    next = next.eq("problema", true);
   }
   if (filtro.atencion) {
-    query = query.or(ATENCION_OR);
+    next = next.or(ATENCION_OR);
   }
-  const { data, error } = await query;
-  if (error) {
-    throw error;
+  const q = sanitizeFacturaSearch(filtro.q ?? "");
+  if (q) {
+    next = next.or(
+      `proveedor.ilike.%${q}%,ncf.ilike.%${q}%,numero_factura.ilike.%${q}%,tienda.ilike.%${q}%,enviado_por.ilike.%${q}%,rnc.ilike.%${q}%,clave.ilike.%${q}%`
+    );
   }
-  const needle = filtro.q?.trim().toLowerCase() ?? "";
-  return (data ?? [])
-    .map((row) => mapResumen(row as Record<string, unknown>))
-    .filter((row): row is FacturaResumen => Boolean(row))
-    .filter((row) => {
-      if (!needle) {
-        return true;
-      }
-      return [row.proveedor, row.ncf, row.numeroFactura, row.tienda, row.enviadoPor, row.referencia, row.rnc].some((value) => value?.toLowerCase().includes(needle));
-    });
+  return next;
 }
 
-export async function resumenFacturas(): Promise<FacturasResumen> {
+function filasFactura(data: unknown[] | null): FacturaResumen[] {
+  return (data ?? []).map((row) => mapResumen(row as Record<string, unknown>)).filter((row): row is FacturaResumen => Boolean(row));
+}
+
+export async function listFacturas(filtro: FacturaFiltro = {}): Promise<FacturaResumen[]> {
   const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase.from("facturas").select("estado, preguntas_abiertas, posible_duplicado, numero_documentos, problema").limit(5000);
+  const query = aplicarFiltroFacturas(
+    asFacturaQuery(supabase.from("facturas").select(FACTURA_SELECT).order("updated_at", { ascending: false })),
+    filtro
+  );
+  const { data, error } = await query.limit(LIST_MAX);
   if (error) {
     throw error;
   }
-  const rows = data ?? [];
+  return filasFactura(data);
+}
+
+export async function listFacturaIds(filtro: FacturaFiltro, max = LIST_MAX): Promise<string[]> {
+  const supabase = getSupabaseAdminClient();
+  const take = Math.min(Math.max(max, 1), LIST_MAX);
+  const query = aplicarFiltroFacturas(
+    asFacturaQuery(supabase.from("facturas").select("id").order("updated_at", { ascending: false })),
+    filtro
+  );
+  const { data, error } = await query.limit(take);
+  if (error) {
+    throw error;
+  }
+  return (data ?? []).map((row) => String((row as { id?: unknown }).id ?? "")).filter(Boolean);
+}
+
+export async function listFacturasPagina(filtro: FacturaFiltro, page: number): Promise<FacturaListado> {
+  const supabase = getSupabaseAdminClient();
+  const current = Number.isInteger(page) && page > 0 ? page : 1;
+  const from = (current - 1) * FACTURAS_PAGE_SIZE;
+  const to = from + FACTURAS_PAGE_SIZE - 1;
+  const query = aplicarFiltroFacturas(
+    asFacturaQuery(supabase.from("facturas").select(LIST_SELECT, { count: "exact" }).order("updated_at", { ascending: false })),
+    filtro
+  );
+  const { data, error, count } = await query.range(from, to);
+  if (error) {
+    throw error;
+  }
   return {
-    total: rows.length,
+    facturas: filasFactura(data),
+    total: count ?? 0,
+    page: current,
+    pageSize: FACTURAS_PAGE_SIZE,
+  };
+}
+
+let resumenCache: { at: number; resumen: FacturasResumen } | null = null;
+const RESUMEN_TTL_MS = 15_000;
+
+function resumenDesdeJson(value: unknown): FacturasResumen | null {
+  const row = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+  const porEstado = row?.porEstado;
+  if (!row || !porEstado || typeof porEstado !== "object") {
+    return null;
+  }
+  const por = porEstado as Record<string, unknown>;
+  return {
+    total: int(row.total),
     porEstado: FACTURA_ESTADOS.map((estado) => ({
       id: estado.id,
       label: estado.label,
-      facturas: rows.filter((row) => row.estado === estado.id).length,
+      facturas: int(por[estado.id]),
     })),
-    preguntasAbiertas: rows.reduce((sum, row) => sum + int(row.preguntas_abiertas), 0),
-    posiblesDuplicados: rows.filter((row) => row.posible_duplicado === true).length,
-    sinFoto: rows.filter((row) => int(row.numero_documentos) === 0).length,
-    conProblema: rows.filter((row) => row.problema === true).length,
-    atencion: rows.filter(
-      (row) =>
-        row.problema === true ||
-        int(row.preguntas_abiertas) > 0 ||
-        row.posible_duplicado === true ||
-        int(row.numero_documentos) === 0
-    ).length,
+    preguntasAbiertas: int(row.preguntasAbiertas),
+    posiblesDuplicados: int(row.posiblesDuplicados),
+    sinFoto: int(row.sinFoto),
+    conProblema: int(row.conProblema),
+    atencion: int(row.atencion),
   };
+}
+
+async function contarFacturas(aplicar?: (query: FacturaQuery) => FacturaQuery): Promise<number> {
+  const supabase = getSupabaseAdminClient();
+  let query = asFacturaQuery(supabase.from("facturas").select("id", { count: "exact", head: true }));
+  if (aplicar) {
+    query = aplicar(query);
+  }
+  const { count, error } = await query;
+  if (error) {
+    throw error;
+  }
+  return count ?? 0;
+}
+
+async function resumenFacturasConteo(): Promise<FacturasResumen> {
+  const supabase = getSupabaseAdminClient();
+  const [total, duplicados, sinFoto, problema, atencion, preguntas, ...porEstado] = await Promise.all([
+    contarFacturas(),
+    contarFacturas((query) => query.eq("posible_duplicado", true)),
+    contarFacturas((query) => query.eq("numero_documentos", 0)),
+    contarFacturas((query) => query.eq("problema", true)),
+    contarFacturas((query) => query.or(ATENCION_OR)),
+    supabase.from("facturas").select("preguntas_abiertas").gt("preguntas_abiertas", 0),
+    ...FACTURA_ESTADOS.map((estado) => contarFacturas((query) => query.eq("estado", estado.id))),
+  ]);
+  if (preguntas.error) {
+    throw preguntas.error;
+  }
+  return {
+    total,
+    porEstado: FACTURA_ESTADOS.map((estado, index) => ({
+      id: estado.id,
+      label: estado.label,
+      facturas: porEstado[index] ?? 0,
+    })),
+    preguntasAbiertas: (preguntas.data ?? []).reduce((sum, row) => sum + int(row.preguntas_abiertas), 0),
+    posiblesDuplicados: duplicados,
+    sinFoto,
+    conProblema: problema,
+    atencion,
+  };
+}
+
+export async function resumenFacturas(): Promise<FacturasResumen> {
+  if (resumenCache && Date.now() - resumenCache.at < RESUMEN_TTL_MS) {
+    return resumenCache.resumen;
+  }
+  const supabase = getSupabaseAdminClient();
+  const rpc = await supabase.rpc("facturas_resumen");
+  const payload = Array.isArray(rpc.data) ? rpc.data[0] : rpc.data;
+  let resumen = !rpc.error ? resumenDesdeJson(typeof payload === "string" ? parseJson(payload) : payload) : null;
+  if (rpc.error && !rpcAusenteFacturas(rpc.error)) {
+    throw rpc.error;
+  }
+  if (!resumen) {
+    resumen = await resumenFacturasConteo();
+  }
+  resumenCache = { at: Date.now(), resumen };
+  return resumen;
+}
+
+function parseJson(value: string): unknown {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function rpcAusenteFacturas(error: { code?: string; message?: string }): boolean {
+  const message = error.message ?? "";
+  return error.code === "PGRST202" || /could not find the function|schema cache/i.test(message);
 }
 
 export type FacturaConPendientes = Pick<FacturaResumen, "id" | "referencia" | "proveedor" | "estado" | "estadoLabel" | "total" | "moneda" | "fechaVencimiento"> & {

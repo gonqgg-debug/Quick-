@@ -2,9 +2,10 @@ import { publishAgentEvent } from "@/lib/agent-events";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import { toMoney } from "@/lib/money";
 import { parsePrice } from "@/lib/catalog-import";
-import { FACTURA_PRESENTACIONES, labelOf } from "@/lib/facturas-shared";
+import { FACTURA_PRESENTACIONES, isUuid, labelOf } from "@/lib/facturas-shared";
 import type {
   AdminCatalogCompra,
+  AdminCatalogComercial,
   AdminCatalogConteos,
   AdminCatalogPresentacion,
   AdminCatalogProduct,
@@ -24,6 +25,7 @@ import {
 export { CATALOG_PRODUCTS_PAGE_SIZE } from "@/lib/admin-catalog-products-shared";
 export type {
   AdminCatalogCompra,
+  AdminCatalogComercial,
   AdminCatalogConteos,
   AdminCatalogPresentacion,
   AdminCatalogProduct,
@@ -187,14 +189,50 @@ function filtrosBase(filters: AdminCatalogProductFilters): AdminCatalogProductFi
 
 let costoCache: { at: number; ids: Set<string> } | null = null;
 let conteoCache: { key: string; at: number; conteos: AdminCatalogConteos } | null = null;
-const COSTO_TTL_MS = 30_000;
+let categoriasCache: { at: number; items: string[] } | null = null;
+const COSTO_TTL_MS = 60_000;
 const CONTEO_TTL_MS = 15_000;
+const CATEGORIAS_TTL_MS = 5 * 60_000;
+const COMERCIAL_MAX = 80;
+const RESUMEN_CHUNK = 200;
+
+function olvidarCachesDeLista() {
+  costoCache = null;
+  conteoCache = null;
+  categoriasCache = null;
+}
+
+function idsDeCosto(data: unknown): string[] | null {
+  const payload = typeof data === "string" ? safeJson(data) : data;
+  if (!Array.isArray(payload)) {
+    return null;
+  }
+  return payload.map((id) => text(id)).filter((id): id is string => Boolean(id));
+}
+
+function rpcAusente(error: { code?: string; message?: string } | null): boolean {
+  if (!error) {
+    return false;
+  }
+  const message = error.message ?? "";
+  return error.code === "PGRST202" || /could not find the function|schema cache/i.test(message);
+}
 
 async function idsConCosto(): Promise<Set<string>> {
   if (costoCache && Date.now() - costoCache.at < COSTO_TTL_MS) {
     return costoCache.ids;
   }
   const supabase = getSupabaseAdminClient();
+  const rpc = await supabase.rpc("productos_con_costo");
+  const desdeRpc = idsDeCosto(rpc.data);
+  if (!rpc.error && desdeRpc) {
+    const ids = new Set(desdeRpc);
+    costoCache = { at: Date.now(), ids };
+    return ids;
+  }
+  if (rpc.error && !rpcAusente(rpc.error)) {
+    throw rpc.error;
+  }
   const ids = new Set<string>();
   for (let from = 0; from < 20000; from += 1000) {
     const { data, error } = await supabase
@@ -254,37 +292,85 @@ async function contarConCosto(filters: AdminCatalogProductFilters, conCosto: Set
   return total;
 }
 
-async function conteosDe(filters: AdminCatalogProductFilters, conCosto: Set<string>): Promise<AdminCatalogConteos> {
+function guardarConteos(key: string, conteos: AdminCatalogConteos): AdminCatalogConteos {
+  conteoCache = { key, at: Date.now(), conteos };
+  return conteos;
+}
+
+async function conteosPorRpc(filters: AdminCatalogProductFilters): Promise<AdminCatalogConteos | null> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.rpc("catalogo_conteos", {
+    p_busqueda: sanitizeSearch(filters.q),
+    p_categoria: filters.categoria.trim(),
+  });
+  if (error) {
+    if (rpcAusente(error)) {
+      return null;
+    }
+    throw error;
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || typeof row !== "object") {
+    return null;
+  }
+  const record = row as { todos?: unknown; activos?: unknown; inactivos?: unknown; sin_costo?: unknown };
+  return {
+    todos: num(record.todos) ?? 0,
+    activos: num(record.activos) ?? 0,
+    inactivos: num(record.inactivos) ?? 0,
+    sinCosto: num(record.sin_costo) ?? 0,
+  };
+}
+
+async function conteosDe(filters: AdminCatalogProductFilters): Promise<AdminCatalogConteos> {
   const key = `${filters.q}\n${filters.categoria}`;
   if (conteoCache && conteoCache.key === key && Date.now() - conteoCache.at < CONTEO_TTL_MS) {
     return conteoCache.conteos;
   }
+  const porRpc = await conteosPorRpc(filters);
+  if (porRpc) {
+    return guardarConteos(key, porRpc);
+  }
   const base = filtrosBase(filters);
+  const conCosto = await idsConCosto();
   const [todos, activos, inactivos, conCostoEnFiltro] = await Promise.all([
     contar(base),
     contar({ ...base, estado: "activo" }),
     contar({ ...base, estado: "inactivo" }),
     contarConCosto(filters, conCosto),
   ]);
-  const conteos = {
+  return guardarConteos(key, {
     todos,
     activos,
     inactivos,
     sinCosto: Math.max(0, todos - conCostoEnFiltro),
-  };
-  conteoCache = { key, at: Date.now(), conteos };
-  return conteos;
+  });
+}
+
+function ordenarCategorias(items: string[]): string[] {
+  return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right, "es"));
 }
 
 async function categoriasDe(): Promise<string[]> {
-  const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase.from("products").select("categoria").order("categoria", { ascending: true });
-  if (error) {
-    throw error;
+  if (categoriasCache && Date.now() - categoriasCache.at < CATEGORIAS_TTL_MS) {
+    return categoriasCache.items;
   }
-  return Array.from(new Set((data ?? []).map((row) => String(row.categoria ?? "").trim()).filter(Boolean))).sort((left, right) =>
-    left.localeCompare(right, "es")
-  );
+  const supabase = getSupabaseAdminClient();
+  const rpc = await supabase.rpc("catalogo_categorias");
+  let items: string[];
+  if (!rpc.error && Array.isArray(rpc.data)) {
+    items = ordenarCategorias(rpc.data.map((row) => String((row as { categoria?: unknown }).categoria ?? "")));
+  } else if (rpc.error && !rpcAusente(rpc.error)) {
+    throw rpc.error;
+  } else {
+    const { data, error } = await supabase.from("products").select("categoria").order("categoria", { ascending: true });
+    if (error) {
+      throw error;
+    }
+    items = ordenarCategorias((data ?? []).map((row) => String(row.categoria ?? "")));
+  }
+  categoriasCache = { at: Date.now(), items };
+  return items;
 }
 
 function excluirConCosto(query: FilterQuery, conCosto: Set<string>): FilterQuery {
@@ -485,13 +571,102 @@ function resumir(ids: string[], lineas: LineaCompra[]): Map<string, ResumenProdu
   return resumen;
 }
 
+function vacioResumen(ids: string[]): Map<string, ResumenProducto> {
+  const resumen = new Map<string, ResumenProducto>();
+  for (const id of ids) {
+    resumen.set(id, { costo: null, costoEn: null, proveedores: [], compra: null });
+  }
+  return resumen;
+}
+
+function proveedoresDe(value: unknown): AdminCatalogProveedor[] {
+  const parsed = typeof value === "string" ? safeJson(value) : value;
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+  const proveedores: AdminCatalogProveedor[] = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const row = item as { id?: unknown; nombre?: unknown; ultimaCompra?: unknown };
+    const id = text(row.id);
+    const nombre = text(row.nombre);
+    if (!id || !nombre) {
+      continue;
+    }
+    proveedores.push({ id, nombre, ultimaCompra: text(row.ultimaCompra)?.slice(0, 10) ?? null });
+  }
+  return proveedores;
+}
+
+function safeJson(value: string): unknown {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+async function resumenPorRpc(ids: string[]): Promise<Map<string, ResumenProducto> | null> {
+  if (ids.length === 0) {
+    return new Map();
+  }
+  const supabase = getSupabaseAdminClient();
+  const resumen = vacioResumen(ids);
+  for (let i = 0; i < ids.length; i += RESUMEN_CHUNK) {
+    const chunk = ids.slice(i, i + RESUMEN_CHUNK);
+    const { data, error } = await supabase.rpc("producto_resumen_comercial", { p_ids: chunk });
+    if (error) {
+      if (rpcAusente(error)) {
+        return null;
+      }
+      throw error;
+    }
+    for (const row of data ?? []) {
+      const record = row as {
+        producto_id?: unknown;
+        factura_id?: unknown;
+        costo?: unknown;
+        costo_en?: unknown;
+        proveedor?: unknown;
+        proveedores?: unknown;
+      };
+      const id = text(record.producto_id);
+      if (!id || !resumen.has(id)) {
+        continue;
+      }
+      const costo = num(record.costo);
+      const facturaId = text(record.factura_id);
+      const fecha = text(record.costo_en)?.slice(0, 10) || null;
+      resumen.set(id, {
+        costo,
+        costoEn: fecha,
+        proveedores: proveedoresDe(record.proveedores),
+        compra:
+          costo != null && facturaId
+            ? { facturaId, fecha, proveedor: text(record.proveedor), costo }
+            : null,
+      });
+    }
+  }
+  return resumen;
+}
+
+async function resumenDe(ids: string[]): Promise<Map<string, ResumenProducto>> {
+  const unicos = Array.from(new Set(ids));
+  const porRpc = await resumenPorRpc(unicos);
+  if (porRpc) {
+    return porRpc;
+  }
+  return resumir(unicos, await lineasDe(unicos));
+}
+
 async function adjuntarResumen(products: AdminCatalogProduct[]): Promise<{
   products: AdminCatalogProduct[];
   compras: Map<string, AdminCatalogCompra | null>;
 }> {
-  const ids = products.map((product) => product.id);
-  const lineas = await lineasDe(ids);
-  const resumen = resumir(ids, lineas);
+  const resumen = await resumenDe(products.map((product) => product.id));
   const compras = new Map<string, AdminCatalogCompra | null>();
   const next = products.map((product) => {
     const item = resumen.get(product.id);
@@ -505,16 +680,45 @@ function paraLista(product: AdminCatalogProduct): AdminCatalogProduct {
   return { ...product, descripcion: recorteDescripcion(product.descripcion) };
 }
 
-export async function listAdminCatalogProducts(filters: AdminCatalogProductFilters): Promise<AdminCatalogProductList> {
-  const conCosto = await idsConCosto();
-  const [categories, conteos] = await Promise.all([categoriasDe(), conteosDe(filters, conCosto)]);
+export async function listAdminCatalogProductMeta(
+  filters: AdminCatalogProductFilters
+): Promise<{ categories: string[]; conteos: AdminCatalogConteos }> {
+  const [categories, conteos] = await Promise.all([categoriasDe(), conteosDe(filters)]);
+  return { categories, conteos };
+}
+
+export async function resumenComercialProductos(ids: string[]): Promise<AdminCatalogComercial[]> {
+  const unique = Array.from(new Set(ids.map((id) => id.trim()).filter((id) => isUuid(id)))).slice(0, COMERCIAL_MAX);
+  const resumen = await resumenDe(unique);
+  return unique.map((id) => {
+    const item = resumen.get(id);
+    return {
+      id,
+      costo: item?.costo ?? null,
+      costoEn: item?.costoEn ?? null,
+      proveedores: item?.proveedores ?? [],
+    };
+  });
+}
+
+export async function listAdminCatalogProducts(
+  filters: AdminCatalogProductFilters,
+  options: { comercial?: boolean; meta?: boolean } = {}
+): Promise<AdminCatalogProductList> {
+  const comercial = options.comercial !== false;
+  const meta = options.meta !== false;
+  const [conCosto, categories, conteos] = await Promise.all([
+    filters.estado === "sin_costo" ? idsConCosto() : Promise.resolve(null),
+    meta ? categoriasDe() : Promise.resolve([] as string[]),
+    meta ? conteosDe(filters) : Promise.resolve(null),
+  ]);
   const page =
     filters.estado === "sin_costo"
-      ? await paginaSinCosto(filters, conCosto, conteos.sinCosto)
-      : await paginaDirecta(filters, conCosto);
-  const { products } = await adjuntarResumen(page.rows);
+      ? await paginaSinCosto(filters, conCosto ?? new Set<string>(), conteos?.sinCosto ?? (await conteosDe(filters)).sinCosto)
+      : await paginaDirecta(filters, conCosto ?? new Set<string>());
+  const rows = comercial ? (await adjuntarResumen(page.rows)).products : page.rows;
   return {
-    products: products.map(paraLista),
+    products: rows.map(paraLista),
     total: page.total,
     page: filters.page,
     pageSize: CATALOG_PRODUCTS_PAGE_SIZE,
@@ -705,6 +909,7 @@ export async function updateAdminCatalogProduct(input: {
   if (error || !data) {
     throw error ?? new Error("No pudimos guardar el producto");
   }
+  olvidarCachesDeLista();
   const mapped = mapRow(data as ProductRow);
   let product = mapped;
   try {
@@ -763,6 +968,7 @@ export async function batchUpdateAdminCatalogProducts(input: {
     }
     updated += count ?? chunk.length;
   }
+  olvidarCachesDeLista();
   await publishAgentEvent("productos.actualizados", { updated, ...patch });
   return { updated };
 }

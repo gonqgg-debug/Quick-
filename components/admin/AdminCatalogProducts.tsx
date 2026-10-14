@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { formatPrice } from "@/lib/money";
 import { brand } from "@/lib/theme";
@@ -23,6 +23,8 @@ import {
   CATALOG_PRODUCTS_PAGE_SIZE,
   catalogProductsQueryString,
   isUncategorized,
+  margenDe,
+  type AdminCatalogComercial,
   type AdminCatalogConteos,
   type AdminCatalogProduct,
   type AdminCatalogProductList,
@@ -82,6 +84,9 @@ export function AdminCatalogProducts() {
   const [total, setTotal] = useState(0);
   const [booting, setBooting] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [comercialPendiente, setComercialPendiente] = useState(false);
+  const [metaTick, setMetaTick] = useState(0);
+  const [listaTick, setListaTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [batchBusy, setBatchBusy] = useState(false);
@@ -185,8 +190,9 @@ export function AdminCatalogProducts() {
     };
   }, [selected.length]);
 
-  const load = useCallback(async () => {
-    const response = await fetch(`/api/admin/catalogo/productos?${queryString}`, { credentials: "include" });
+  const loadLista = useCallback(async () => {
+    const params = queryString ? `${queryString}&parte=lista` : "parte=lista";
+    const response = await fetch(`/api/admin/catalogo/productos?${params}`, { credentials: "include" });
     if (response.status === 401) {
       router.replace("/admin/login");
       return;
@@ -198,8 +204,8 @@ export function AdminCatalogProducts() {
     const rows = body?.products ?? [];
     setProducts(rows);
     setTotal(body?.total ?? 0);
-    setCategories(body?.categories ?? []);
-    setConteos(body?.conteos ?? null);
+    setComercialPendiente(rows.length > 0);
+    setListaTick((value) => value + 1);
   }, [queryString, router]);
 
   useEffect(() => {
@@ -214,7 +220,7 @@ export function AdminCatalogProducts() {
     setRefreshing(true);
     (async () => {
       try {
-        await load();
+        await loadLista();
         if (!cancelled) {
           setError(null);
         }
@@ -232,7 +238,103 @@ export function AdminCatalogProducts() {
     return () => {
       cancelled = true;
     };
-  }, [load]);
+  }, [loadLista]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const params = new URLSearchParams();
+    params.set("parte", "meta");
+    if (qUrl.trim()) {
+      params.set("q", qUrl.trim());
+    }
+    if (categoria) {
+      params.set("categoria", categoria);
+    }
+    void fetch(`/api/admin/catalogo/productos?${params}`, { credentials: "include" })
+      .then(async (response) => {
+        if (response.status === 401) {
+          router.replace("/admin/login");
+          return;
+        }
+        const body = (await response.json().catch(() => null)) as {
+          categories?: string[];
+          conteos?: AdminCatalogConteos;
+          error?: string;
+        } | null;
+        if (!response.ok) {
+          throw new Error(body?.error || "No pudimos cargar los conteos");
+        }
+        if (!cancelled) {
+          setCategories(body?.categories ?? []);
+          setConteos(body?.conteos ?? null);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) {
+          setError(reason instanceof Error ? reason.message : "Error al cargar");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [qUrl, categoria, metaTick, router]);
+
+  const idsKey = products.map((product) => product.id).join(",");
+
+  useEffect(() => {
+    const ids = idsKey ? idsKey.split(",") : [];
+    if (ids.length === 0) {
+      setComercialPendiente(false);
+      return;
+    }
+    let cancelled = false;
+    const params = new URLSearchParams();
+    params.set("parte", "comercial");
+    params.set("ids", ids.join(","));
+    void fetch(`/api/admin/catalogo/productos?${params}`, { credentials: "include" })
+      .then(async (response) => {
+        if (response.status === 401) {
+          router.replace("/admin/login");
+          return;
+        }
+        const body = (await response.json().catch(() => null)) as { productos?: AdminCatalogComercial[]; error?: string } | null;
+        if (!response.ok) {
+          throw new Error(body?.error || "No pudimos cargar el costo");
+        }
+        if (cancelled) {
+          return;
+        }
+        const byId = new Map((body?.productos ?? []).map((item) => [item.id, item]));
+        setProducts((current) =>
+          current.map((product) => {
+            const extra = byId.get(product.id);
+            if (!extra) {
+              return product;
+            }
+            return {
+              ...product,
+              costo: extra.costo,
+              costoEn: extra.costoEn,
+              margen: margenDe(product.precio, extra.costo),
+              proveedores: extra.proveedores,
+            };
+          })
+        );
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) {
+          setError(reason instanceof Error ? reason.message : "Error al cargar");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setComercialPendiente(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [idsKey, listaTick, router]);
 
   function rememberCategory(value: string) {
     const next = value.trim();
@@ -278,7 +380,8 @@ export function AdminCatalogProducts() {
       setSelected([]);
       setBatchCategory("");
       setBatchNewCategory("");
-      await load();
+      await loadLista();
+      setMetaTick((value) => value + 1);
     } catch (batchError) {
       setError(batchError instanceof Error ? batchError.message : "Error en la acción masiva");
     } finally {
@@ -520,13 +623,17 @@ export function AdminCatalogProducts() {
                     {formatPrice(product.precio)}
                   </DataTableCell>
                   <DataTableCell numeric className={product.costo == null ? "text-brand-muted" : "font-semibold"}>
-                    {textoCosto(product.costo)}
+                    <DatoPendiente pendiente={comercialPendiente}>{textoCosto(product.costo)}</DatoPendiente>
                   </DataTableCell>
                   <DataTableCell>
-                    <MargenProducto margen={product.margen} />
+                    <DatoPendiente pendiente={comercialPendiente}>
+                      <MargenProducto margen={product.margen} />
+                    </DatoPendiente>
                   </DataTableCell>
                   <DataTableCell>
-                    <ProveedoresProducto proveedores={product.proveedores} />
+                    <DatoPendiente pendiente={comercialPendiente}>
+                      <ProveedoresProducto proveedores={product.proveedores} />
+                    </DatoPendiente>
                   </DataTableCell>
                   <DataTableCell>
                     <EstadoProducto activo={product.activo} />
@@ -567,17 +674,23 @@ export function AdminCatalogProducts() {
                     </div>
                     <div>
                       <dt className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted">Costo</dt>
-                      <dd className={`mt-0.5 tabular-nums ${product.costo == null ? "text-brand-muted" : "font-semibold"}`}>{textoCosto(product.costo)}</dd>
+                      <dd className={`mt-0.5 tabular-nums ${product.costo == null ? "text-brand-muted" : "font-semibold"}`}>
+                        <DatoPendiente pendiente={comercialPendiente}>{textoCosto(product.costo)}</DatoPendiente>
+                      </dd>
                     </div>
                     <div>
                       <dt className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted">Margen</dt>
                       <dd className="mt-0.5">
-                        <MargenProducto margen={product.margen} />
+                        <DatoPendiente pendiente={comercialPendiente}>
+                          <MargenProducto margen={product.margen} />
+                        </DatoPendiente>
                       </dd>
                     </div>
                   </dl>
                   <div className="mt-3">
-                    <ProveedoresProducto proveedores={product.proveedores} />
+                    <DatoPendiente pendiente={comercialPendiente}>
+                      <ProveedoresProducto proveedores={product.proveedores} />
+                    </DatoPendiente>
                   </div>
                 </Link>
               </li>
@@ -682,4 +795,11 @@ export function AdminCatalogProducts() {
         : null}
     </div>
   );
+}
+
+function DatoPendiente({ pendiente, children }: { pendiente: boolean; children: ReactNode }) {
+  if (!pendiente) {
+    return <>{children}</>;
+  }
+  return <span className="inline-block h-4 w-16 animate-pulse rounded bg-[#E7EBE4]" aria-hidden="true" />;
 }

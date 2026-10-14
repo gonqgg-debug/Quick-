@@ -434,6 +434,16 @@ export type FacturasResumen = {
   atencion: number;
 };
 
+/** Filas que pinta la administración. El agente sigue pidiendo el lote completo. */
+export const FACTURAS_PAGE_SIZE = 40;
+
+export type FacturaListado = {
+  facturas: FacturaResumen[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 export type FacturaCampos = {
   clave?: string | null;
   recibidoEn?: string | null;
