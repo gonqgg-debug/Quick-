@@ -8,6 +8,8 @@ import {
   type PendientesInput,
 } from "../lib/facturas-pendientes";
 import type { FacturaLinea } from "../lib/facturas-shared";
+import { buildImportPreview } from "../lib/catalog-import";
+import { productosACsv } from "../lib/catalog-import-http";
 import { documentosDesdeValor } from "../lib/factura-documentos";
 import { distanciaVentana, leerEstadoCuenta, leerFechaBanco, leerMontoBanco, llavesMovimientos, ventanaBanco } from "../lib/banco-shared";
 import { revisarNcf } from "../lib/ncf";
@@ -455,5 +457,17 @@ assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path.endsWith("/lineas/candi
 assert(FACTURAS_AGENT_USO.includes("razon") && !FACTURAS_AGENT_USO.includes("texto hasta 85"), "el texto de uso dice que Phillip propone");
 assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path === "/api/agent/presentaciones"), "hay una ruta para guardar presentaciones");
 assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path.includes("documentos")), "hay una ruta para subir la foto");
+
+const csvCatalogo = productosACsv([
+  { codigo: "A1", nombre: "Agua, 16oz", precio: 25, categoria: "Bebidas", codigoBarras: "7460000000017" },
+  { codigo: "B2", nombre: "Pan", precio: 60, categoria: "Panadería" },
+  { codigo: "C3", nombre: "Sin precio", categoria: "Otros" },
+]);
+const vistaCatalogo = buildImportPreview(Buffer.from(csvCatalogo), "productos.csv", [
+  { id: "p-b2", codigo_odoo: "B2", codigo_barras: null, nombre: "Pan", marca: null, categoria: "Panadería", precio: 55 },
+]);
+assert(vistaCatalogo.created.length === 1 && vistaCatalogo.created[0].nombre === "Agua, 16oz", "Rodrigo crea productos desde JSON, con comas en el nombre");
+assert(vistaCatalogo.updated[0]?.changes.map((change) => change.field).join() === "precio", "un código existente solo cambia lo que difiere");
+assert(vistaCatalogo.invalid[0]?.codigo === "C3", "sin precio no se importa");
 
 console.log("facturas ok");

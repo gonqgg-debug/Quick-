@@ -47,6 +47,12 @@ export async function GET(request: NextRequest) {
       { method: "GET", path: "/api/agent/compras/{id}/captura", describe: "Descarga la captura de esa factura" },
       { method: "GET", path: "/api/agent/caja?fecha=YYYY-MM-DD", describe: "Turnos y ledger del rango" },
       { method: "GET", path: "/api/agent/catalogo?cursor=&q=", describe: "Productos de a 100. stock siempre es null" },
+      {
+        method: "POST",
+        path: "/api/agent/catalogo",
+        describe:
+          "Rodrigo importa productos al catálogo. Multipart: archivo (.xlsx o .csv, el export de Odoo sirve). JSON: productos: [{ codigo, nombre, precio, categoria, marca, codigoBarras }], o csv, o base64 con nombre. codigo (Odoo), nombre, precio y categoria son obligatorios; si el código ya existe, se actualiza. Sin confirmar: true solo responde qué cambiaría (nuevos, actualizados con sus cambios, invalidos con la razón); con confirmar: true lo guarda. Nunca borra productos.",
+      },
       { method: "GET", path: "/api/agent/contable?mes=YYYY-MM", describe: "Paquete contable del mes, con líneas y comprobaciones" },
       ...FACTURAS_AGENT_ENDPOINTS,
       ...OPERACION_AGENT_ENDPOINTS,
