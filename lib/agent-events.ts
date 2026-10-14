@@ -16,6 +16,7 @@ export const AGENT_EVENT_TYPES = [
   "catalogo.importado",
   "meta.guardada",
   "parametros.actualizados",
+  "factura.recordatorio",
 ] as const;
 
 export type AgentEventType = (typeof AGENT_EVENT_TYPES)[number];

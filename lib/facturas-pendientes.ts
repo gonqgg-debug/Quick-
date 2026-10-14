@@ -209,3 +209,48 @@ export function pendientesDe(factura: PendientesInput, opciones: { hoy: string; 
   }
   return items;
 }
+
+/** Horas que espera el recordatorio antes de avisarle a Rodrigo que falta la recepción. */
+export const RECEPCION_AVISO_HORAS = 24;
+
+export type RecordatorioCaso = { caso: string; dueno: OperacionBot; queFalta: string };
+
+/**
+ * Casos que el cron diario abre como excepción. El caso de vencimiento lleva la fecha,
+ * así un cambio de vencimiento abre un recordatorio nuevo.
+ */
+export function casosRecordatorio(
+  factura: {
+    estado: FacturaResumen["estado"];
+    esCompraPersonal: boolean;
+    tipoDocumento: FacturaResumen["tipoDocumento"];
+    recibidoEn: string;
+    lineasSinRecepcion: number;
+    /** Vencimiento de la cuenta por pagar si sigue sin pagar y le queda saldo. */
+    venceSinPagar: string | null;
+  },
+  ahora: { hoy: string; ms: number }
+): RecordatorioCaso[] {
+  const casos: RecordatorioCaso[] = [];
+  const recibida = Date.parse(factura.recibidoEn);
+  if (
+    factura.estado === "recibida" &&
+    !factura.esCompraPersonal &&
+    factura.lineasSinRecepcion > 0 &&
+    Number.isFinite(recibida) &&
+    ahora.ms - recibida >= RECEPCION_AVISO_HORAS * 3_600_000
+  ) {
+    casos.push({
+      caso: "sin_recepcion",
+      dueno: "rodrigo",
+      queFalta: `Lleva más de ${RECEPCION_AVISO_HORAS} horas recibida y la tienda no ha confirmado ${factura.lineasSinRecepcion === 1 ? "1 línea" : `${factura.lineasSinRecepcion} líneas`}.`,
+    });
+  }
+  if (factura.venceSinPagar && factura.tipoDocumento !== "nota_credito" && isDayKey(factura.venceSinPagar)) {
+    const dias = diffDayKeys(ahora.hoy, factura.venceSinPagar);
+    if (dias <= VENCE_AVISO_DIAS) {
+      casos.push({ caso: `vence:${factura.venceSinPagar}`, dueno: "fred", queFalta: textoVence(dias) });
+    }
+  }
+  return casos;
+}

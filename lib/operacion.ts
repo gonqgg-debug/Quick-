@@ -558,6 +558,7 @@ function mapExcepcion(row: Record<string, unknown>, referencia: string | null): 
     autor,
     dueno,
     queFalta,
+    caso: textOrNull(row.caso, 80),
     estado,
     resolucion: textOrNull(row.resolucion, 2000),
     abiertaEn,

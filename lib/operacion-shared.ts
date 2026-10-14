@@ -199,6 +199,8 @@ export type Excepcion = {
   autor: OperacionBot;
   dueno: OperacionBot;
   queFalta: string;
+  /** Lo pone el recordatorio diario (sin_recepcion o vence:YYYY-MM-DD). Null si la abrió un bot. */
+  caso: string | null;
   estado: ExcepcionEstado;
   resolucion: string | null;
   abiertaEn: string;
