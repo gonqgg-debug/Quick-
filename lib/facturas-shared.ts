@@ -252,6 +252,7 @@ export type FacturasResumen = {
   posiblesDuplicados: number;
   sinFoto: number;
   conProblema: number;
+  atencion: number;
 };
 
 export type FacturaCampos = {

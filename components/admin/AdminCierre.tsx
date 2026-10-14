@@ -209,7 +209,7 @@ function Fuentes({ linea }: { linea: ReporteLinea }) {
       {vacio ? <p>Esta línea no trae facturas, asientos ni movimientos.</p> : null}
       {linea.facturaIds.map((id) => (
         <p key={id}>
-          Factura <Link className="font-semibold underline" href={`/admin/facturas?factura=${id}`}>{id.slice(0, 8)}</Link>
+          Factura <Link className="font-semibold underline" href={`/admin/facturas/${id}`}>{id.slice(0, 8)}</Link>
         </p>
       ))}
       {linea.asientoIds.map((id) => (
