@@ -268,8 +268,33 @@ export type FacturaResumen = {
   problemaFalta: string | null;
   ledgerId: string | null;
   compraId: string | null;
+  facturaOrigenId: string | null;
   actualizadoEn: string;
 };
+
+export type FacturaPago = {
+  id: string;
+  ledgerId: string;
+  fecha: string | null;
+  caja: string | null;
+  concepto: string | null;
+  referencia: string | null;
+  monto: number;
+  confirmadoPor: string;
+  confirmadoEn: string;
+};
+
+export type FacturaPagoCandidato = {
+  ledgerId: string;
+  fecha: string;
+  caja: string | null;
+  concepto: string | null;
+  referencia: string | null;
+  monto: number;
+  confianza: number;
+};
+
+export type FacturaNotaRef = { id: string; referencia: string; total: number | null; estado: FacturaEstado; estadoLabel: string };
 
 export type FacturaVerificacion = {
   id: string;
@@ -304,6 +329,13 @@ export type FacturaDetalle = FacturaResumen & {
   preguntas: FacturaPregunta[];
   documentos: FacturaDocumento[];
   proveedorFicha: FacturaProveedorFicha | null;
+  pagos: FacturaPago[];
+  /** Salidas de caja que podrían ser el pago. Vacío si ya está conciliada. */
+  pagosCandidatos: FacturaPagoCandidato[];
+  /** Total menos lo ligado en caja. Null sin total o sin pagos. */
+  pagosDiferencia: number | null;
+  facturaOrigen: { id: string; referencia: string } | null;
+  notasCredito: FacturaNotaRef[];
   verificacion: FacturaVerificacion | null;
   conciliacion: FacturaConciliacion | null;
 };
@@ -340,6 +372,8 @@ export type FacturaCampos = {
   total?: number | null;
   estado?: FacturaEstado;
   observaciones?: string | null;
+  /** Id o clave de la factura original. Solo para notas de crédito. */
+  facturaOrigen?: string | null;
 };
 
 export type FacturaLineaInput = {
@@ -855,6 +889,50 @@ export function resolverUnidades(input: {
   };
 }
 
+/** Una salida de caja cuenta como el pago si cae a ±1 día y a ±RD$ 5 del total. */
+export const PAGO_DIAS = 1;
+export const PAGO_TOLERANCIA = 5;
+
+function palabrasProveedor(proveedor: string | null): string[] {
+  const norm = normalizarDescripcion(proveedor);
+  if (!norm) {
+    return [];
+  }
+  const vacias = new Set(["srl", "sas", "sa", "eirl", "distribuidora", "comercial", "industrias", "grupo", "dominicana", "del", "las", "los"]);
+  return norm.split(" ").filter((palabra) => palabra.length >= 4 && !vacias.has(palabra));
+}
+
+/** Null si el movimiento no puede ser el pago. Si no, 70 a 100 según monto, fecha y si el concepto nombra al proveedor. */
+export function confianzaPago(input: {
+  total: number;
+  monto: number;
+  diasDeDiferencia: number;
+  proveedor: string | null;
+  concepto: string | null;
+  referencia: string | null;
+}): number | null {
+  const diferencia = Math.abs(input.monto - input.total);
+  if (diferencia > PAGO_TOLERANCIA || Math.abs(input.diasDeDiferencia) > PAGO_DIAS) {
+    return null;
+  }
+  let confianza = diferencia <= 1 ? 80 : 70;
+  if (input.diasDeDiferencia === 0) {
+    confianza += 5;
+  }
+  const texto = normalizarDescripcion([input.concepto, input.referencia].filter(Boolean).join(" ")) ?? "";
+  if (palabrasProveedor(input.proveedor).some((palabra) => texto.split(" ").includes(palabra))) {
+    confianza += 15;
+  }
+  return Math.min(100, confianza);
+}
+
+export function diferenciaPagos(total: number | null, pagos: Array<{ monto: number }>): number | null {
+  if (total == null || !pagos.length) {
+    return null;
+  }
+  return roundTo(total - pagos.reduce((sum, pago) => sum + pago.monto, 0), 2);
+}
+
 /** Confianza de una coincidencia por nombre. Nunca llega a 90, así «aceptar todas» no toma coincidencias de texto. */
 export function confianzaTexto(similitud: number): number {
   if (!Number.isFinite(similitud)) {
@@ -1242,6 +1320,9 @@ export function leerCamposFactura(body: Record<string, unknown>, mode: "create" 
   }
   take(["observaciones"], (value) => {
     campos.observaciones = textOrNull(value, 4000);
+  });
+  take(["facturaOrigenId", "facturaOrigen", "factura_origen_id"], (value) => {
+    campos.facturaOrigen = textOrNull(value, 80);
   });
 
   if (mode === "create") {

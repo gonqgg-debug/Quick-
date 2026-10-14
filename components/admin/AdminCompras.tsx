@@ -345,7 +345,12 @@ function PendientesTable({
             <DataTableRow key={compra.id}>
               <CompraProveedorCell compra={compra} />
               <DataTableCell numeric className="font-bold">
-                {formatPrice(compra.monto)}
+                {formatPrice(compra.saldo)}
+                {compra.notasCredito > 0 ? (
+                  <span className="block text-xs font-medium" style={{ color: brand.muted }}>
+                    {formatPrice(compra.monto)} menos notas de crédito
+                  </span>
+                ) : null}
               </DataTableCell>
               <DataTableCell className="whitespace-nowrap">{formatDayKey(compra.fecha)}</DataTableCell>
               <DataTableCell className="whitespace-nowrap">{formatDayKey(compra.dueDate)}</DataTableCell>

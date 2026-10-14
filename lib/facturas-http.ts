@@ -43,6 +43,7 @@ function statusFor(message: string): number {
     message.startsWith("Las ") ||
     message.startsWith("Manda ") ||
     message.startsWith("Esa ") ||
+    message.startsWith("Ese ") ||
     message.startsWith("Cada foto") ||
     message.startsWith("Hay ") ||
     message.startsWith("Solo ") ||

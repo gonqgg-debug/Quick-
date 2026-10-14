@@ -73,18 +73,7 @@ export function Equipo({ factura, enviar }: { factura: FacturaDetalle; enviar: E
           )}
         </Paso>
         <Paso nombre="Fred" rol="Concilia el pago" estado={fred}>
-          {factura.conciliacion ? (
-            <p className="text-sm">
-              <span className="font-semibold">
-                {factura.conciliacion.resultadoLabel}
-                {factura.conciliacion.medioLabel ? ` por ${factura.conciliacion.medioLabel}` : ""}
-                {factura.conciliacion.fecha ? ` el ${fechaCorta(factura.conciliacion.fecha)}` : ""}
-              </span>
-              {factura.conciliacion.nota ? <span className="mt-1 block text-brand-muted">{factura.conciliacion.nota}</span> : null}
-            </p>
-          ) : (
-            <p className="text-sm text-brand-muted">Todavía no publica la conciliación.</p>
-          )}
+          <Fred factura={factura} enviar={enviar} />
         </Paso>
       </ol>
     </Seccion>
@@ -232,6 +221,106 @@ function Rodrigo({ factura, enviar }: { factura: FacturaDetalle; enviar: EnviarF
           </BotonSecundario>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Fred({ factura, enviar }: { factura: FacturaDetalle; enviar: EnviarFactura }) {
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
+  const abierta = factura.estado !== "conciliada";
+
+  async function correr(clave: string, accion: () => Promise<void>, fallback: string) {
+    setSaving(clave);
+    setError(null);
+    try {
+      await accion();
+    } catch (reason) {
+      setError(mensajeDe(reason, fallback));
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  return (
+    <div className="space-y-3 text-sm">
+      {error ? <Aviso>{error}</Aviso> : null}
+      {factura.conciliacion ? (
+        <p>
+          <span className="font-semibold">
+            {factura.conciliacion.resultadoLabel}
+            {factura.conciliacion.medioLabel ? ` por ${factura.conciliacion.medioLabel}` : ""}
+            {factura.conciliacion.fecha ? ` el ${fechaCorta(factura.conciliacion.fecha)}` : ""}
+          </span>
+          {factura.conciliacion.nota ? <span className="mt-1 block text-brand-muted">{factura.conciliacion.nota}</span> : null}
+        </p>
+      ) : (
+        <p className="text-brand-muted">Todavía no publica la conciliación.</p>
+      )}
+      {factura.pagos.length ? (
+        <div className="rounded-xl border border-[#E7EBE4] p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-semibold">Pagado en caja</p>
+            {factura.pagosDiferencia != null ? (
+              factura.pagosDiferencia === 0 ? (
+                <Pill label="Cuadra con el total" tone={TONO.verde} />
+              ) : (
+                <Pill
+                  label={factura.pagosDiferencia > 0 ? `Faltan ${formatMonto(factura.pagosDiferencia, factura.moneda)}` : `Sobran ${formatMonto(-factura.pagosDiferencia, factura.moneda)}`}
+                  tone={TONO.naranja}
+                />
+              )
+            ) : null}
+          </div>
+          <ul className="mt-2 divide-y divide-[#F0F2EE]">
+            {factura.pagos.map((pago) => (
+              <li key={pago.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <div>
+                  <p className="font-semibold tabular-nums">{formatMonto(pago.monto, "DOP")}</p>
+                  <p className="text-xs text-brand-muted">
+                    {[fechaCorta(pago.fecha), pago.caja, pago.concepto].filter(Boolean).join(" · ")} · ligado por {pago.confirmadoPor}
+                  </p>
+                </div>
+                {abierta ? (
+                  <button
+                    type="button"
+                    disabled={saving !== null}
+                    className="text-xs font-bold disabled:opacity-40"
+                    style={{ color: brand.error }}
+                    onClick={() => void correr(pago.id, () => enviar(`/pagos/${pago.id}`, "DELETE"), "No pudimos quitar el pago")}
+                  >
+                    {saving === pago.id ? "..." : "Quitar"}
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {abierta && factura.pagosCandidatos.length ? (
+        <div className="rounded-xl border border-[#E7EBE4] p-3">
+          <p className="font-semibold">Posibles pagos en caja</p>
+          <p className="mt-1 text-brand-muted">Salidas de caja de ese día o del día antes o después, por el mismo monto. Nada se liga solo: confírmalo tú o Fred.</p>
+          <ul className="mt-2 divide-y divide-[#F0F2EE]">
+            {factura.pagosCandidatos.map((candidato) => (
+              <li key={candidato.ledgerId} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <div>
+                  <p className="font-semibold tabular-nums">
+                    {formatMonto(candidato.monto, "DOP")} <span className="text-xs font-medium text-brand-muted">· {candidato.confianza}% seguro</span>
+                  </p>
+                  <p className="text-xs text-brand-muted">{[fechaCorta(candidato.fecha), candidato.caja, candidato.concepto, candidato.referencia].filter(Boolean).join(" · ")}</p>
+                </div>
+                <BotonSecundario
+                  disabled={saving !== null}
+                  onClick={() => void correr(candidato.ledgerId, () => enviar("/pagos", "POST", { ledgerId: candidato.ledgerId }), "No pudimos ligar el pago")}
+                >
+                  {saving === candidato.ledgerId ? "..." : "Ligar"}
+                </BotonSecundario>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }
