@@ -727,6 +727,8 @@ export async function updateAdminCatalogProduct(input: {
   precio?: unknown;
   costo?: unknown;
   activo?: unknown;
+  /** Quién lo cambió, para el evento. Sin valor es el admin. */
+  por?: string;
 }): Promise<AdminCatalogProduct> {
   if (!input.id) {
     throw new Error("Falta el producto");
@@ -820,6 +822,7 @@ export async function updateAdminCatalogProduct(input: {
     codigoOdoo: product.codigoOdoo,
     codigoBarras: product.codigoBarras,
     activo: product.activo,
+    por: input.por ?? "admin",
   });
   return product;
 }
@@ -828,6 +831,7 @@ export async function batchUpdateAdminCatalogProducts(input: {
   ids: string[];
   activo?: unknown;
   categoria?: unknown;
+  por?: string;
 }): Promise<{ updated: number }> {
   const ids = Array.from(new Set(input.ids.map((id) => id.trim()).filter(Boolean))).slice(0, BATCH_MAX);
   if (ids.length === 0) {
@@ -861,6 +865,6 @@ export async function batchUpdateAdminCatalogProducts(input: {
     }
     updated += count ?? chunk.length;
   }
-  await publishAgentEvent("productos.actualizados", { updated, ...patch });
+  await publishAgentEvent("productos.actualizados", { updated, ...patch, por: input.por ?? "admin" });
   return { updated };
 }
