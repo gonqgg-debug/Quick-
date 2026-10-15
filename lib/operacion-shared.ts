@@ -285,7 +285,7 @@ export const OPERACION_AGENT_ENDPOINTS = [
     method: "POST",
     path: "/api/agent/facturas/{id}/recepcion",
     describe:
-      "Rodrigo confirma qué llegó. lineas[{ numeroLinea, recepcion, cantidadRecibida }] con recepcion completa, faltante (cantidadRecibida obligatoria, 0 si no llegó nada) o regalo. Si llegó todo, manda todas: \"completa\". Phillip solo puede pasar a registrada cuando ninguna línea queda sin confirmar, salvo compra personal.",
+      "Rodrigo confirma qué llegó, en unidades de venta. lineas[{ numeroLinea, recepcion, cantidadRecibida }] con recepcion completa, faltante (cantidadRecibida obligatoria, en unidades, 0 si no llegó nada) o regalo. Si llegó completo, manda todas: \"completa\" y la cantidad recibida queda igual a las unidades compradas. Phillip solo puede pasar a registrada cuando ninguna línea queda sin confirmar, salvo compra personal.",
   },
   {
     method: "POST",

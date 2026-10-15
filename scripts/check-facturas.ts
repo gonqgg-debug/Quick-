@@ -66,16 +66,20 @@ assert(referencia.includes("Distribuidora Sol"), "la referencia lleva el proveed
 assert(referencia.includes("Jardines 3"), "la referencia lleva la tienda");
 assert(!referencia.includes("uuid"), "la referencia no usa el id interno");
 
-const sinCaja = resolverUnidades({
-  presentacion: "caja",
-  cantidadComprada: 4,
-  unidadesPorPresentacion: null,
-  unidadesTotales: 96,
-  costoPorPresentacion: 480,
-  costoUnitario: 5,
-});
-assert(sinCaja.unidadesTotales === null && sinCaja.costoUnitario === null, "no calcula unidades si no conoce la caja");
-assert(sinCaja.aviso?.includes("no está confirmado"), "avisa que ignoró el cálculo");
+let sinCaja = false;
+try {
+  resolverUnidades({
+    presentacion: "caja",
+    cantidadComprada: 4,
+    unidadesPorPresentacion: null,
+    unidadesTotales: 96,
+    costoPorPresentacion: 480,
+    costoUnitario: 5,
+  });
+} catch (error) {
+  sinCaja = error instanceof Error && error.message.includes("no se registra");
+}
+assert(sinCaja, "sin empaque no registra la línea en cajas");
 
 const unidad = resolverUnidades({
   presentacion: "unidad",
@@ -96,20 +100,48 @@ const caja = resolverUnidades({
   costoUnitario: null,
 });
 assert(caja.unidadesTotales === 96 && caja.costoUnitario === 20, "4 cajas de 24 salen 96 y el costo unitario es 20");
-assert(caja.aviso?.includes("recalcularon"), "avisa si el total enviado no coincide");
+assert(caja.aviso?.includes("empaque"), "avisa si el total enviado no coincide");
+
+const foc = resolverUnidades({
+  presentacion: "caja",
+  cantidadComprada: 2,
+  unidadesPorPresentacion: 10,
+  unidadesTotales: null,
+  costoPorPresentacion: 0,
+  costoUnitario: null,
+});
+assert(foc.unidadesTotales === 20 && foc.costoUnitario === 0, "el regalo queda en unidades de venta a costo 0");
+const convertida = leerLinea({ descripcion: "Maria Aldape", presentacion: "fardo", cantidad: 2, unidadesPorPresentacion: 25, costo: 500, total: 1000 }, 0);
+assert(convertida.unidadesTotales === 50 && convertida.costoUnitario === 20 && convertida.totalLinea === 1000, "el total de la línea no cambia y el costo unitario es pagado entre unidades");
+
+let lineaEnCajas = false;
+try {
+  leerLinea(
+    {
+      descripcion: "Agua 500 ml",
+      presentacion: "caja",
+      cantidad: 4,
+      unidadesTotales: 96,
+      costo: 480,
+    },
+    0
+  );
+} catch (error) {
+  lineaEnCajas = error instanceof Error && error.message.startsWith("La línea 1") && error.message.includes("no se registra");
+}
+assert(lineaEnCajas, "la línea no se registra en cajas sin el empaque");
 
 const linea = leerLinea(
   {
     descripcion: "Agua 500 ml",
-    presentacion: "caja",
     cantidad: 4,
-    unidadesTotales: 96,
-    costo: 480,
+    unidadesTotales: 4,
+    costoUnitario: 30,
+    costo: 30,
   },
   0
 );
-assert(linea.unidadesTotales === null && linea.costoUnitario === null, "la línea no guarda unidades dudosas");
-assert(linea.observacion?.includes("no está confirmado"), "la observación explica por qué");
+assert(linea.unidadesTotales === 4 && linea.costoUnitario === 30, "guarda las unidades de venta cuando no viene en cajas");
 assert(linea.catalogo.accion === "omitir", "sin productoId no toca el catálogo");
 
 const conCodigo = leerLinea({ descripcion: "Agua", codigoOdoo: "OD-1" }, 0);
@@ -214,6 +246,7 @@ assert(sinRncFicha.rnc_proveedor.explicacion?.includes("Proveedores"), "si la fi
 assert(parseFormaPago("Transferencia") === "transferencia" && parseFormaPago("cheque") === null, "la forma de pago se normaliza");
 assert(dueDateFromCredit("2026-10-14", { tieneCredito: true, diasCredito: 30 }) === "2026-11-13", "30 días de crédito desde el 14 de octubre vencen el 13 de noviembre");
 assert(FACTURAS_AGENT_USO.includes("rnc_proveedor") && FACTURAS_AGENT_USO.includes("ticket"), "el texto de uso explica las validaciones automáticas y el ticket");
+assert(FACTURAS_AGENT_USO.includes("unidades de venta") && FACTURAS_AGENT_USO.includes("tabla de equivalencias") && !FACTURAS_AGENT_USO.includes("no calcules"), "el texto de uso pide unidades de venta");
 
 assert(normalizarDescripcion("  CAFÉ Santo Domingo 1lb. ") === "cafe santo domingo 1lb", "la descripción se normaliza para el alias");
 assert(normalizarDescripcion("x") === null, "una descripción de una letra no sirve de alias");
@@ -251,6 +284,19 @@ try {
 }
 assert(faltaCompleta, "si llegaron todas no es faltante");
 assert(cantidadRecibidaDe({ numeroLinea: 1, recepcion: "completa", cantidadRecibida: null }, 10) === 10, "completa guarda la cantidad comprada");
+assert(cantidadRecibidaDe({ numeroLinea: 1, recepcion: "completa", cantidadRecibida: null }, 4, 96) === 96, "completa iguala las unidades compradas");
+assert(
+  diferenciaRecepcion({
+    recepcion: "faltante",
+    cantidadComprada: 4,
+    unidadesTotales: 96,
+    cantidadRecibida: 72,
+    costoPorPresentacion: 480,
+    costoUnitario: 20,
+    totalLinea: 1920,
+  }) === 480,
+  "el faltante se cobra por unidad de venta"
+);
 let todasFaltante = false;
 try {
   leerRecepcion({ todas: "faltante" });

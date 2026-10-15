@@ -334,7 +334,7 @@ export async function guardarPresentacion(body: Record<string, unknown>, actor: 
   }
   const unidades = num(body.unidades ?? body.unidadesPorPresentacion);
   if (unidades == null || !(unidades > 0) || unidades > 100000) {
-    throw new Error("Las unidades por presentación tienen que ser mayores que cero");
+    throw new Error("Las unidades por empaque tienen que ser mayores que cero");
   }
   const supabase = getSupabaseAdminClient();
   const { data: producto, error: productoError } = await supabase.from("products").select("id").eq("id", productoId).maybeSingle();

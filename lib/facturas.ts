@@ -285,6 +285,8 @@ function mapLinea(row: Record<string, unknown>): FacturaLinea | null {
       cantidadRecibida,
       costoPorPresentacion: num(row.costo_por_presentacion),
       totalLinea: num(row.total_linea),
+      unidadesTotales: num(row.unidades_totales),
+      costoUnitario: num(row.costo_unitario),
     }),
   };
 }

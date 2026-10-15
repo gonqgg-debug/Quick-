@@ -417,7 +417,7 @@ function RecepcionLinea({ factura, linea, enviar }: { factura: FacturaDetalle; l
               inputMode="decimal"
               value={cantidad}
               onChange={(event) => setCantidad(event.target.value)}
-              placeholder={linea.cantidadComprada == null ? "0" : `de ${linea.cantidadComprada}`}
+              placeholder={linea.unidadesTotales == null && linea.cantidadComprada == null ? "0" : `de ${linea.unidadesTotales ?? linea.cantidadComprada}`}
               className="mt-1"
             />
           </label>
