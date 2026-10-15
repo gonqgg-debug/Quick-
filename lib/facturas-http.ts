@@ -6,6 +6,7 @@ import {
   asignarProductoLinea,
   candidatosLineas,
   confirmarUnidadesEnLinea,
+  borrarFactura,
   createFactura,
   filtroDesdeParams,
   getFactura,
@@ -175,6 +176,11 @@ export async function handleGetFactura(idOrClave: string) {
     return NextResponse.json({ error: "No encontramos esa factura" }, { status: 404 });
   }
   return NextResponse.json({ factura });
+}
+
+export async function handleBorrarFactura(idOrClave: string, actor: Actor) {
+  const borrada = await borrarFactura(idOrClave, actor);
+  return NextResponse.json({ ok: true, ...borrada });
 }
 
 export async function handlePatchFactura(idOrClave: string, request: NextRequest, actor: Actor = "lectura") {

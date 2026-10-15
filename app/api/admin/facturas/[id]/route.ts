@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
-import { facturasError, handleAdminPatch, handleGetFactura } from "@/lib/facturas-http";
+import { facturasError, handleAdminPatch, handleBorrarFactura, handleGetFactura } from "@/lib/facturas-http";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +13,18 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     return await handleGetFactura(params.id);
   } catch (error) {
     return facturasError(error, "No pudimos abrir la factura", "[admin] factura");
+  }
+}
+
+export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await requireAdminApi();
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+  try {
+    return await handleBorrarFactura(params.id, "admin");
+  } catch (error) {
+    return facturasError(error, "No pudimos borrar la factura", "[admin] factura delete");
   }
 }
 

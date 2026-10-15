@@ -45,6 +45,7 @@ import {
   medidaLinea,
   diferenciaPagos,
   diferenciaRecepcion,
+  efectoCuentaAlBorrar,
   leerRecepcion,
   normalizarDescripcion,
   resumenRecepcion,
@@ -511,7 +512,24 @@ assert(pendientesDe({ ...pendienteBase, lineasConAlerta: 2 }, opciones)[0]?.duen
 
 assert(FACTURAS_AGENT_USO.includes("movimientoId") && FACTURAS_AGENT_USO.includes("alertas"), "el texto de uso explica banco y alertas");
 assert(FACTURAS_AGENT_USO.includes("facturaOrigen") && FACTURAS_AGENT_USO.includes("/api/agent/pendientes"), "el texto de uso explica notas y pendientes");
-assert(FACTURAS_AGENT_ENDPOINTS.length === 15, "el directorio del agente lista las rutas de facturas");
+assert(FACTURAS_AGENT_ENDPOINTS.length === 16, "el directorio del agente lista las rutas de facturas");
+assert(
+  FACTURAS_AGENT_ENDPOINTS.some((item) => item.method === "DELETE" && item.path === "/api/agent/facturas/{id-o-clave}"),
+  "Rodrigo tiene ruta para borrar una factura"
+);
+assert(FACTURAS_AGENT_USO.includes("DELETE /api/agent/facturas/"), "el texto de uso explica cómo borrar una factura");
+const cuentaBase = { tipoDocumento: "factura" as const, total: 1500, compraAjena: false, pagado: false, notasCredito: 0, monto: 1500 };
+assert(efectoCuentaAlBorrar(cuentaBase).accion === "borrar-compra", "la cuenta sin pagar de una factura sola se borra con ella");
+assert(efectoCuentaAlBorrar({ ...cuentaBase, compraAjena: true }).accion === "ninguna", "un duplicado no borra la cuenta de la factura original");
+let cuentaPagada = false;
+try {
+  efectoCuentaAlBorrar({ ...cuentaBase, pagado: true });
+} catch (error) {
+  cuentaPagada = error instanceof Error && error.message.includes("ya está pagada");
+}
+assert(cuentaPagada, "una cuenta pagada no se borra");
+const notaBorrada = efectoCuentaAlBorrar({ tipoDocumento: "nota_credito", total: 200, compraAjena: true, pagado: true, notasCredito: 1500, monto: 1500 });
+assert(notaBorrada.accion === "ajustar-nota" && notaBorrada.notasCredito === 1300 && notaBorrada.reabrir, "borrar la nota devuelve el descuento y reabre la cuenta");
 assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path.endsWith("/lineas/propuestas")), "Phillip tiene ruta para proponer");
 assert(FACTURAS_AGENT_ENDPOINTS.some((item) => item.path.endsWith("/lineas/candidatos")), "Phillip tiene ruta de candidatos");
 assert(FACTURAS_AGENT_USO.includes("razon") && !FACTURAS_AGENT_USO.includes("texto hasta 85"), "el texto de uso dice que Phillip propone");

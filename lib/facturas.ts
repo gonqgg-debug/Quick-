@@ -12,6 +12,7 @@ import {
   proponerCatalogo,
   type Vinculo,
 } from "@/lib/factura-catalogo";
+import { removeCompraCaptura } from "@/lib/compra-captura";
 import { borrarArchivos, guardarDocumentos, type DocumentoEntrada } from "@/lib/factura-documentos";
 import { candidatosPago, pagosDe } from "@/lib/factura-pagos";
 import {
@@ -36,6 +37,7 @@ import {
   diferenciaPagos,
   diferenciaRecepcion,
   resumenRecepcion,
+  efectoCuentaAlBorrar,
   explicacionDuplicado,
   facturaTieneIdentidad,
   isUuid,
@@ -1557,6 +1559,77 @@ async function borrarArchivosDeFactura(id: string): Promise<void> {
   const { data } = await supabase.from("factura_documentos").select("storage_path").eq("factura_id", id);
   const paths = (data ?? []).map((row) => (typeof row.storage_path === "string" ? row.storage_path : "")).filter(Boolean);
   await borrarArchivos(paths);
+}
+
+/** Borra la ficha de Contabilidad. Rodrigo y el admin pueden. La cuenta por pagar se quita solo si esta factura era la única y no está pagada. */
+export async function borrarFactura(idOrClave: string, actor: Actor): Promise<{ id: string; referencia: string }> {
+  if (actor !== "admin" && actor !== "rodrigo") {
+    throw new Error("Solo Rodrigo puede borrar una factura");
+  }
+  const factura = await getFactura(idOrClave);
+  if (!factura) {
+    throw new Error("No encontramos esa factura");
+  }
+  const supabase = getSupabaseAdminClient();
+  if (factura.compraId) {
+    const [{ count, error: countError }, compraResult] = await Promise.all([
+      supabase.from("facturas").select("id", { count: "exact", head: true }).eq("compra_id", factura.compraId).neq("id", factura.id),
+      supabase.from("compras").select("id, monto, notas_credito, pagado, captura_path").eq("id", factura.compraId).maybeSingle(),
+    ]);
+    if (countError) {
+      throw countError;
+    }
+    if (compraResult.error) {
+      throw compraResult.error;
+    }
+    const compra = compraResult.data;
+    if (compra) {
+      const efecto = efectoCuentaAlBorrar({
+        tipoDocumento: factura.tipoDocumento,
+        total: factura.total,
+        compraAjena: (count ?? 0) > 0,
+        pagado: compra.pagado === true,
+        notasCredito: Number(compra.notas_credito ?? 0),
+        monto: Number(compra.monto),
+      });
+      if (efecto.accion === "ajustar-nota") {
+        const { error } = await supabase
+          .from("compras")
+          .update({
+            notas_credito: efecto.notasCredito,
+            ...(efecto.reabrir ? { pagado: false, pagado_en: null } : {}),
+          })
+          .eq("id", compra.id);
+        if (error) {
+          throw error;
+        }
+      } else if (efecto.accion === "borrar-compra") {
+        await removeCompraCaptura(typeof compra.captura_path === "string" ? compra.captura_path : null);
+        const { error } = await supabase.from("compras").delete().eq("id", compra.id);
+        if (error) {
+          throw error;
+        }
+      }
+    }
+  }
+  await borrarArchivosDeFactura(factura.id);
+  const { error } = await supabase.from("facturas").delete().eq("id", factura.id);
+  if (error) {
+    throw error;
+  }
+  const { data: lineasReporte, error: reporteError } = await supabase.from("reporte_lineas").select("id, factura_ids").contains("factura_ids", [factura.id]);
+  if (reporteError) {
+    throw reporteError;
+  }
+  for (const linea of lineasReporte ?? []) {
+    const ids = Array.isArray(linea.factura_ids) ? linea.factura_ids.filter((item) => item !== factura.id) : [];
+    const { error: updateError } = await supabase.from("reporte_lineas").update({ factura_ids: ids }).eq("id", linea.id);
+    if (updateError) {
+      throw updateError;
+    }
+  }
+  resumenCache = null;
+  return { id: factura.id, referencia: factura.referencia };
 }
 
 export async function updateFactura(
