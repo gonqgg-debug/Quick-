@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAgentApi, requireAgentRol } from "@/lib/agent-auth";
-import { facturasError, handleGetFactura, handlePatchFactura } from "@/lib/facturas-http";
+import { facturasError, handleBorrarFactura, handleGetFactura, handlePatchFactura } from "@/lib/facturas-http";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +13,18 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     return await handleGetFactura(params.id);
   } catch (error) {
     return facturasError(error, "No pudimos leer la factura", "[agent] factura");
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+  const rol = requireAgentRol(request, ["rodrigo"]);
+  if (rol instanceof NextResponse) {
+    return rol;
+  }
+  try {
+    return await handleBorrarFactura(params.id, rol);
+  } catch (error) {
+    return facturasError(error, "No pudimos borrar la factura", "[agent] factura delete");
   }
 }
 

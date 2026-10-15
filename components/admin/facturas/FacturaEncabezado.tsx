@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { FACTURA_ESTADOS, formatMonto, type FacturaDetalle, type FacturaEstado } from "@/lib/facturas-shared";
 import { brand } from "@/lib/theme";
@@ -11,10 +12,30 @@ import { Aviso, BotonPrincipal, ETAPAS_CAMINO, Pill, TONO, estadoCorto, estadoTo
 type Navegacion = { anterior: string | null; siguiente: string | null; posicion: number | null; total: number; volver: string };
 
 export function FacturaEncabezado({ factura, enviar, nav }: { factura: FacturaDetalle; enviar: EnviarFactura; nav: Navegacion }) {
+  const router = useRouter();
   const [saving, setSaving] = useState(false);
+  const [borrando, setBorrando] = useState(false);
+  const [confirmarBorrado, setConfirmarBorrado] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bloqueo = bloqueoRegistro(factura);
   const registrable = bloqueo === null;
+
+  async function borrar() {
+    setBorrando(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/facturas/${factura.id}`, { method: "DELETE", credentials: "include" });
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        throw new Error(body.error || "No pudimos borrar la factura");
+      }
+      router.push(nav.volver);
+      router.refresh();
+    } catch (reason) {
+      setError(mensajeDe(reason, "No pudimos borrar la factura"));
+      setBorrando(false);
+    }
+  }
 
   async function cambiarEtapa(estado: FacturaEstado) {
     setSaving(true);
@@ -65,6 +86,45 @@ export function FacturaEncabezado({ factura, enviar, nav }: { factura: FacturaDe
 
       <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl px-3 py-3" style={{ backgroundColor: "#F7F8F6" }}>
         <SiguientePaso factura={factura} bloqueo={bloqueo} saving={saving} onRegistrar={() => void cambiarEtapa("registrada")} />
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {confirmarBorrado ? (
+          <>
+            <p className="text-sm text-brand-muted">
+              Se borra esta factura, su foto y, si era la única y no está pagada, la cuenta por pagar. No se puede deshacer.
+            </p>
+            <button
+              type="button"
+              disabled={borrando}
+              onClick={() => setConfirmarBorrado(false)}
+              className="rounded-full border border-[#E5E7EB] bg-white px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={borrando}
+              onClick={() => void borrar()}
+              className="rounded-full px-3 py-1.5 text-sm font-bold text-white disabled:opacity-50"
+              style={{ backgroundColor: brand.error }}
+            >
+              {borrando ? "Borrando…" : "Borrar factura"}
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setConfirmarBorrado(true);
+            }}
+            className="rounded-full border px-3 py-1.5 text-sm font-semibold"
+            style={{ borderColor: "#FECACA", color: brand.error }}
+          >
+            Borrar factura
+          </button>
+        )}
       </div>
 
       {error ? (
