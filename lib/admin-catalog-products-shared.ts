@@ -78,13 +78,21 @@ export type AdminCatalogProductFilters = {
   page: number;
 };
 
+export type AdminCatalogComercial = {
+  id: string;
+  costo: number | null;
+  costoEn: string | null;
+  proveedores: AdminCatalogProveedor[];
+};
+
 export type AdminCatalogProductList = {
   products: AdminCatalogProduct[];
   total: number;
   page: number;
   pageSize: number;
   categories: string[];
-  conteos: AdminCatalogConteos;
+  /** Null cuando la lista llegó sola y los conteos se piden aparte. */
+  conteos: AdminCatalogConteos | null;
 };
 
 export function catalogProductsQueryString(filters: AdminCatalogProductFilters): string {

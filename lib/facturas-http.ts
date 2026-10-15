@@ -10,6 +10,8 @@ import {
   filtroDesdeParams,
   getFactura,
   listFacturas,
+  listFacturaIds,
+  listFacturasPagina,
   proponerLineas,
   responderPregunta,
   resumenFacturas,
@@ -149,8 +151,16 @@ export async function handleFacturasOverview(request: NextRequest) {
 }
 
 export async function handleAdminFacturas(request: NextRequest) {
-  const [resumen, facturas] = await Promise.all([resumenFacturas(), listFacturas(filtroDesdeParams(request.nextUrl.searchParams))]);
-  return NextResponse.json({ resumen, facturas });
+  const params = request.nextUrl.searchParams;
+  const filtro = filtroDesdeParams(params);
+  if (params.get("ids") === "1") {
+    const ids = await listFacturaIds(filtro);
+    return NextResponse.json({ ids });
+  }
+  const pageRaw = Number(params.get("page") || "1");
+  const page = Number.isInteger(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+  const [resumen, listado] = await Promise.all([resumenFacturas(), listFacturasPagina(filtro, page)]);
+  return NextResponse.json({ resumen, ...listado });
 }
 
 export async function handleCreateFactura(request: NextRequest, actor: Actor = "lectura") {

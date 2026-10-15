@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { DataTable, DataTableCell, DataTableHead, DataTableRow, DataTableTh } from "@/components/admin/DataTable";
 import { AdminInput } from "@/components/admin/AdminField";
-import { FACTURA_ESTADOS, formatMonto, type FacturaEstado, type FacturaResumen, type FacturasResumen } from "@/lib/facturas-shared";
+import { FACTURA_ESTADOS, FACTURAS_PAGE_SIZE, formatMonto, type FacturaEstado, type FacturaResumen, type FacturasResumen } from "@/lib/facturas-shared";
 import { brand } from "@/lib/theme";
 import { guardarLista } from "@/components/admin/facturas/lista-guardada";
 import { ETAPAS_CAMINO, TONO, estadoCorto, estadoTono, fechaCorta, fechaHora, pasoDeEtapa, Pill } from "@/components/admin/facturas/ui";
@@ -35,7 +35,7 @@ function conteo(vista: Vista, resumen: FacturasResumen | null): number | null {
   return resumen.porEstado.find((item) => item.id === vista)?.facturas ?? 0;
 }
 
-function apiQuery(vista: Vista, q: string): string {
+function apiQuery(vista: Vista, q: string, page: number): string {
   const params = new URLSearchParams();
   if (vista === "atencion") {
     params.set("atencion", "true");
@@ -44,6 +44,9 @@ function apiQuery(vista: Vista, q: string): string {
   }
   if (q.trim()) {
     params.set("q", q.trim());
+  }
+  if (page > 1) {
+    params.set("page", String(page));
   }
   return params.toString();
 }
@@ -54,10 +57,14 @@ export function FacturasLista() {
   const searchParams = useSearchParams();
   const vista = vistaDesde(searchParams.get("vista"));
   const qUrl = searchParams.get("q") ?? "";
+  const pageRaw = Number(searchParams.get("page") || "1");
+  const page = Number.isInteger(pageRaw) && pageRaw > 0 ? pageRaw : 1;
   const [q, setQ] = useState(qUrl);
   const [facturas, setFacturas] = useState<FacturaResumen[]>([]);
   const [resumen, setResumen] = useState<FacturasResumen | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [booting, setBooting] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const listaQuery = useMemo(() => {
@@ -68,13 +75,17 @@ export function FacturasLista() {
     if (qUrl.trim()) {
       params.set("q", qUrl.trim());
     }
+    if (page > 1) {
+      params.set("page", String(page));
+    }
     return params.toString();
-  }, [vista, qUrl]);
+  }, [vista, qUrl, page]);
 
-  function setUrl(next: { vista?: Vista; q?: string }) {
+  function setUrl(next: { vista?: Vista; q?: string; page?: number }) {
     const params = new URLSearchParams(searchParams.toString());
     const nextVista = next.vista ?? vista;
     const nextQ = next.q ?? qUrl;
+    const nextPage = next.page ?? (next.vista || next.q != null ? 1 : page);
     if (nextVista === "atencion") {
       params.delete("vista");
     } else {
@@ -84,6 +95,11 @@ export function FacturasLista() {
       params.set("q", nextQ.trim());
     } else {
       params.delete("q");
+    }
+    if (nextPage > 1) {
+      params.set("page", String(nextPage));
+    } else {
+      params.delete("page");
     }
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
@@ -105,20 +121,44 @@ export function FacturasLista() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    const query = apiQuery(vista, qUrl);
+    let idsDeLaVista = false;
+    setRefreshing(true);
+    const query = apiQuery(vista, qUrl, page);
+    const idsQuery = apiQuery(vista, qUrl, 1);
+    const idsParams = new URLSearchParams(idsQuery);
+    idsParams.set("ids", "1");
+    void fetch(`/api/admin/facturas?${idsParams}`, { credentials: "include" })
+      .then(async (response) => {
+        const body = (await response.json()) as { ids?: string[] };
+        if (!response.ok || cancelled || !Array.isArray(body.ids)) {
+          return;
+        }
+        idsDeLaVista = true;
+        guardarLista({ ids: body.ids, query: listaQuery });
+      })
+      .catch(() => {
+        /* la página visible igual deja una lista para anterior y siguiente */
+      });
     void fetch(`/api/admin/facturas${query ? `?${query}` : ""}`, { credentials: "include" })
       .then(async (response) => {
-        const body = (await response.json()) as { facturas?: FacturaResumen[]; resumen?: FacturasResumen; error?: string };
+        const body = (await response.json()) as {
+          facturas?: FacturaResumen[];
+          resumen?: FacturasResumen;
+          total?: number;
+          error?: string;
+        };
         if (!response.ok) {
           throw new Error(body.error || "No pudimos cargar las facturas");
         }
         if (!cancelled) {
           const rows = body.facturas ?? [];
           setFacturas(rows);
+          setTotal(body.total ?? rows.length);
           setResumen(body.resumen ?? null);
           setError(null);
-          guardarLista({ ids: rows.map((row) => row.id), query: listaQuery });
+          if (!idsDeLaVista) {
+            guardarLista({ ids: rows.map((row) => row.id), query: listaQuery });
+          }
         }
       })
       .catch((reason: unknown) => {
@@ -128,13 +168,14 @@ export function FacturasLista() {
       })
       .finally(() => {
         if (!cancelled) {
-          setLoading(false);
+          setBooting(false);
+          setRefreshing(false);
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [vista, qUrl, listaQuery]);
+  }, [vista, qUrl, page, listaQuery]);
 
   return (
     <div>
@@ -184,11 +225,12 @@ export function FacturasLista() {
       ) : null}
 
       <div className="mt-4">
-        {loading ? (
+        {booting ? (
           <div className="h-64 animate-pulse rounded-2xl bg-[#F3F4F6]" />
         ) : facturas.length === 0 ? (
           <Vacio vista={vista} buscando={Boolean(qUrl.trim())} />
         ) : (
+          <div className={refreshing ? "opacity-60 transition-opacity" : "transition-opacity"}>
           <DataTable tableClassName="min-w-[760px]">
             <DataTableHead>
               <DataTableTh>Proveedor</DataTableTh>
@@ -224,7 +266,46 @@ export function FacturasLista() {
               ))}
             </tbody>
           </DataTable>
+          </div>
         )}
+      </div>
+
+      {facturas.length > 0 || total > 0 ? <Paginacion page={page} total={total} onPage={(next) => setUrl({ page: next })} /> : null}
+    </div>
+  );
+}
+
+function Paginacion({ page, total, onPage }: { page: number; total: number; onPage: (page: number) => void }) {
+  const pageCount = Math.max(1, Math.ceil(total / FACTURAS_PAGE_SIZE));
+  const fromRow = total === 0 ? 0 : (page - 1) * FACTURAS_PAGE_SIZE + 1;
+  const toRow = Math.min(page * FACTURAS_PAGE_SIZE, total);
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+      <p className="text-sm text-brand-muted">
+        {fromRow}–{toRow} de {total.toLocaleString("es-DO")}
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={page <= 1}
+          onClick={() => onPage(Math.max(1, page - 1))}
+          className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
+          style={{ minHeight: 40, backgroundColor: "#F3F4F6" }}
+        >
+          Anterior
+        </button>
+        <p className="text-sm font-semibold tabular-nums">
+          {page} / {pageCount}
+        </p>
+        <button
+          type="button"
+          disabled={page >= pageCount}
+          onClick={() => onPage(Math.min(pageCount, page + 1))}
+          className="rounded-full px-4 text-sm font-bold disabled:opacity-40"
+          style={{ minHeight: 40, backgroundColor: "#F3F4F6" }}
+        >
+          Siguiente
+        </button>
       </div>
     </div>
   );

@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
 import {
   listAdminCatalogProductIds,
+  listAdminCatalogProductMeta,
   listAdminCatalogProducts,
   parseCatalogProductFilters,
+  resumenComercialProductos,
   updateAdminCatalogProduct,
 } from "@/lib/admin-catalog-products";
 
@@ -17,11 +19,20 @@ export async function GET(request: NextRequest) {
 
   try {
     const filters = parseCatalogProductFilters(request.nextUrl.searchParams);
-    if (request.nextUrl.searchParams.get("ids") === "1") {
+    const params = request.nextUrl.searchParams;
+    if (params.get("ids") === "1") {
       const ids = await listAdminCatalogProductIds(filters);
       return NextResponse.json({ ids, total: ids.length });
     }
-    const result = await listAdminCatalogProducts(filters);
+    const parte = params.get("parte");
+    if (parte === "meta") {
+      return NextResponse.json(await listAdminCatalogProductMeta(filters));
+    }
+    if (parte === "comercial") {
+      const ids = (params.get("ids") ?? "").split(",").map((id) => id.trim()).filter(Boolean);
+      return NextResponse.json({ productos: await resumenComercialProductos(ids) });
+    }
+    const result = await listAdminCatalogProducts(filters, parte === "lista" ? { comercial: false, meta: false } : {});
     return NextResponse.json(result);
   } catch (error) {
     console.error("[admin] catalog products list", error);

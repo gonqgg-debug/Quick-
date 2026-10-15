@@ -159,7 +159,7 @@ export async function guardarRecepcion(idOrClave: string, body: Record<string, u
       .from("factura_lineas")
       .update({
         recepcion: entrada.recepcion,
-        cantidad_recibida: cantidadRecibidaDe(entrada, linea.cantidadComprada),
+        cantidad_recibida: cantidadRecibidaDe(entrada, linea.cantidadComprada, linea.unidadesTotales),
         recepcion_por: pendiente ? null : quien,
         recepcion_en: pendiente ? null : ahora,
       })

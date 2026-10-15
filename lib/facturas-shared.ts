@@ -220,7 +220,7 @@ export type FacturaLinea = {
   cantidadRecibida: number | null;
   recepcionPor: string | null;
   recepcionEn: string | null;
-  /** Monto que no llegó: costo por presentación × (comprada − recibida). Cero si llegó completa o es regalo. */
+  /** Monto que no llegó: costo unitario × (unidades compradas − recibidas). Sin unidades de venta, costo por presentación × (comprada − recibida). Cero si llegó completa o es regalo. */
   diferenciaRecepcion: number | null;
   /** Precio o cantidad fuera de lo normal contra las últimas compras del mismo producto al mismo proveedor. */
   alertas: FacturaLineaAlerta[];
@@ -434,6 +434,16 @@ export type FacturasResumen = {
   atencion: number;
 };
 
+/** Filas que pinta la administración. El agente sigue pidiendo el lote completo. */
+export const FACTURAS_PAGE_SIZE = 40;
+
+export type FacturaListado = {
+  facturas: FacturaResumen[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 export type FacturaCampos = {
   clave?: string | null;
   recibidoEn?: string | null;
@@ -517,7 +527,7 @@ export type DuplicadoCandidato = {
 };
 
 export const FACTURAS_AGENT_USO =
-  "Guarda cada factura en la misma ficha, con la foto original. POST /api/agent/facturas manda proveedor, tienda, fechas, montos, lineas (o productos), validaciones, preguntas y la foto: en JSON usa fotoBase64 o documentos[{ pagina, base64 }]; en multipart adjunta el archivo en el campo foto (también vale captura o documento). JPG, PNG, WebP o PDF, hasta 4 MB por archivo. Si hay varias páginas, mándalas todas. Identifica la factura con referencia (proveedor, fecha, monto y tienda): el id es interno y no se menciona en la conversación. Si no sabes cuántas unidades trae la caja, el paquete o el fardo, no mandes unidadesPorPresentacion ni calcules unidadesTotales o costoUnitario. Para cruzar una línea con el catálogo manda productoId o codigoOdoo; si no lo mandas, el producto ya elegido se conserva. Repetir el POST con la misma clave no pisa la factura y responde creado: false; una foto nueva de esa clave sí se guarda. Para corregir usa PATCH. Las etapas son falta_factura, recibida, registrada, verificada y conciliada. Completa cuenta como registrada. Phillip solo puede pasar a registrada cuando Rodrigo confirmó la recepción de todas las líneas (POST /recepcion: completa, faltante o regalo), salvo que sea compra personal. La respuesta de Ramón en texto se guarda igual, como evidencia. Phillip decide el producto de cada línea: pide GET /lineas/candidatos (señales exactas por alias, código de barras u Odoo, nombres parecidos, presentaciones y última compra a ese proveedor) y manda POST /lineas/propuestas con productoId, confianza de 0 a 100 y razon. Un alias ya confirmado para ese proveedor se liga solo; barras (95) y odoo (90) quedan como propuesta de la plataforma. Con aceptar: true, las de 90 o más se ligan y quedan aprendidas; las demás las confirma una persona, y bajo 70 hay que revisarlas. También puede elegir directo con PATCH /lineas/{lineaId} y productoId. Cuando un producto tiene las unidades por presentación guardadas (POST /api/agent/presentaciones), la plataforma completa unidades y costo unitario. La plataforma liga la factura a la ficha del proveedor (primero por RNC, después por nombre), calcula fecha_vencimiento con sus días de crédito si no la mandas, y revisa sola ncf_formato, ncf_unico y rnc_proveedor: no mandes esas tres validaciones, se reemplazan. El ticket de pago se adjunta a la misma ficha con tipo ticket. Una nota de crédito (tipoDocumento nota_credito) manda facturaOrigen con el id o la clave de la factura que corrige; Boris la verifica después de la original y la plataforma la descuenta de la cuenta por pagar. Fred liga los pagos con POST /pagos: ledgerId para caja o movimientoId para un débito del banco ya importado (POST /api/agent/banco), con su confianza de 0 a 100 y razon. pagosCandidatos son solo la lista de movimientos que cuadran en monto y fecha: Fred decide cuál es. Cada línea ligada al catálogo trae alertas cuando su precio o su cantidad se sale de la mediana de las últimas 6 compras del mismo producto al mismo proveedor (15% en precio y 50% en cantidad, se cambian en Parámetros; necesita al menos 3 compras). GET /api/agent/pendientes dice qué le falta a cada factura y a quién le toca. Si una persona confirma el producto en la plataforma, la línea queda ligada: trae productoConfirmadoPor, productoConfirmadoEn y origenLigue (humano, propuesta_auto o alias). Una línea ambigua pasa a completa y se cierran las preguntas abiertas con campo productoId, con respuesta y evidencia «Confirmado por <usuario> en UI». Phillip no vuelve a preguntar ese producto. Ese ligue publica el evento linea.confirmada con facturaId, numeroLinea, productoId y por. Si la persona edita las unidades por presentación, queda quién las confirmó y se cierra la pregunta de unidades de esa línea. En la ficha se pueden confirmar de una vez las propuestas de 70 a 89. Cada bot escribe con su propio token.";
+  "Guarda cada factura en la misma ficha, con la foto original. POST /api/agent/facturas manda proveedor, tienda, fechas, montos, lineas (o productos), validaciones, preguntas y la foto: en JSON usa fotoBase64 o documentos[{ pagina, base64 }]; en multipart adjunta el archivo en el campo foto (también vale captura o documento). JPG, PNG, WebP o PDF, hasta 4 MB por archivo. Si hay varias páginas, mándalas todas. Identifica la factura con referencia (proveedor, fecha, monto y tienda): el id es interno y no se menciona en la conversación. Todo se registra en unidades de venta, nunca en cajas, bultos ni presentaciones. Unidades = bultos × unidades por empaque: manda cantidadComprada y unidadesPorPresentacion; la plataforma calcula unidadesTotales y el costo unitario (pagado ÷ unidades pagadas). El total de la línea no cambia. El regalo o FOC va como línea aparte a costo 0. La unidad es lo que se vende en la tienda (por ejemplo, Maria Aldape 25/8 = 25 paquetes y la unidad es el paquete). Si no sabes el empaque, búscalo en este orden: tabla de equivalencias, hoja de proveedores y facturas anteriores del mismo proveedor. Si no aparece, la pregunta va al grupo de la tienda por medio de Rodrigo, y la línea no se registra en cajas mientras tanto. La recepción también se graba en unidades e iguala lo comprado cuando llegó completo. Para cruzar una línea con el catálogo manda productoId o codigoOdoo; si no lo mandas, el producto ya elegido se conserva. Repetir el POST con la misma clave no pisa la factura y responde creado: false; una foto nueva de esa clave sí se guarda. Para corregir usa PATCH. Las etapas son falta_factura, recibida, registrada, verificada y conciliada. Completa cuenta como registrada. Phillip solo puede pasar a registrada cuando Rodrigo confirmó la recepción de todas las líneas (POST /recepcion: completa, faltante o regalo), salvo que sea compra personal. La respuesta de Ramón en texto se guarda igual, como evidencia. Phillip decide el producto de cada línea: pide GET /lineas/candidatos (señales exactas por alias, código de barras u Odoo, nombres parecidos, presentaciones y última compra a ese proveedor) y manda POST /lineas/propuestas con productoId, confianza de 0 a 100 y razon. Un alias ya confirmado para ese proveedor se liga solo; barras (95) y odoo (90) quedan como propuesta de la plataforma. Con aceptar: true, las de 90 o más se ligan y quedan aprendidas; las demás las confirma una persona, y bajo 70 hay que revisarlas. También puede elegir directo con PATCH /lineas/{lineaId} y productoId. Cuando un producto tiene las unidades por empaque en la tabla de equivalencias (POST /api/agent/presentaciones), la plataforma completa las unidades de venta y el costo unitario. La plataforma liga la factura a la ficha del proveedor (primero por RNC, después por nombre), calcula fecha_vencimiento con sus días de crédito si no la mandas, y revisa sola ncf_formato, ncf_unico y rnc_proveedor: no mandes esas tres validaciones, se reemplazan. El ticket de pago se adjunta a la misma ficha con tipo ticket. Una nota de crédito (tipoDocumento nota_credito) manda facturaOrigen con el id o la clave de la factura que corrige; Boris la verifica después de la original y la plataforma la descuenta de la cuenta por pagar. Fred liga los pagos con POST /pagos: ledgerId para caja o movimientoId para un débito del banco ya importado (POST /api/agent/banco), con su confianza de 0 a 100 y razon. pagosCandidatos son solo la lista de movimientos que cuadran en monto y fecha: Fred decide cuál es. Cada línea ligada al catálogo trae alertas cuando su precio o su cantidad se sale de la mediana de las últimas 6 compras del mismo producto al mismo proveedor (15% en precio y 50% en cantidad, se cambian en Parámetros; necesita al menos 3 compras). GET /api/agent/pendientes dice qué le falta a cada factura y a quién le toca. Si una persona confirma el producto en la plataforma, la línea queda ligada: trae productoConfirmadoPor, productoConfirmadoEn y origenLigue (humano, propuesta_auto o alias). Una línea ambigua pasa a completa y se cierran las preguntas abiertas con campo productoId, con respuesta y evidencia «Confirmado por <usuario> en UI». Phillip no vuelve a preguntar ese producto. Ese ligue publica el evento linea.confirmada con facturaId, numeroLinea, productoId y por. Si la persona edita las unidades por empaque, queda quién las confirmó y se cierra la pregunta de unidades de esa línea. En la ficha se pueden confirmar de una vez las propuestas de 70 a 89. Cada bot escribe con su propio token.";
 
 export const FACTURAS_AGENT_ENDPOINTS = [
   {
@@ -546,7 +556,8 @@ export const FACTURAS_AGENT_ENDPOINTS = [
   {
     method: "POST",
     path: "/api/agent/facturas/{id-o-clave}/lineas",
-    describe: "Agrega o corrige productos. El mismo numeroLinea actualiza la fila. Para enlazar el catálogo manda productoId o codigoOdoo. No calcules unidades si no conoces las unidades por presentación.",
+    describe:
+      "Agrega o corrige productos. El mismo numeroLinea actualiza la fila. Para enlazar el catálogo manda productoId o codigoOdoo. Todo se registra en unidades de venta: manda unidadesPorPresentacion (unidades por empaque) y la plataforma calcula unidadesTotales = cantidad × empaque y el costo unitario (pagado ÷ unidades pagadas). El total de la línea no cambia. Sin el empaque la línea no se registra en cajas, bultos ni presentaciones.",
   },
   {
     method: "PATCH",
@@ -574,7 +585,7 @@ export const FACTURAS_AGENT_ENDPOINTS = [
     method: "POST",
     path: "/api/agent/presentaciones",
     describe:
-      "Phillip guarda cuántas unidades trae una presentación: productoId, presentacion (paquete, caja, fardo u otro), unidades y, si es solo de un proveedor, proveedorId. Completa unidades y costo unitario de las líneas abiertas de ese producto.",
+      "Tabla de equivalencias. Phillip guarda cuántas unidades de venta trae el empaque: productoId, presentacion (paquete, caja, fardo u otro), unidades y, si es solo de un proveedor, proveedorId. Con eso se completan las unidades de venta y el costo unitario de las líneas de ese producto.",
   },
   {
     method: "POST",
@@ -953,6 +964,11 @@ export function explicacionDuplicado(motivo: "ncf" | "numero", referencia: strin
   return `Hay otra factura del mismo proveedor, número y fecha: ${referencia}`;
 }
 
+const PRESENTACIONES_CON_EMPAQUE = new Set<FacturaPresentacion>(["paquete", "caja", "fardo", "otro"]);
+
+export const LINEA_SIN_EMPAQUE =
+  "La línea no se registra en cajas, bultos ni presentaciones sin las unidades por empaque. Busca el empaque en la tabla de equivalencias, la hoja de proveedores y facturas anteriores del mismo proveedor; si no aparece, la pregunta va al grupo de la tienda por medio de Rodrigo.";
+
 export function resolverUnidades(input: {
   presentacion: FacturaPresentacion | null;
   cantidadComprada: number | null;
@@ -962,25 +978,25 @@ export function resolverUnidades(input: {
   costoUnitario: number | null;
 }): { unidadesPorPresentacion: number | null; unidadesTotales: number | null; costoUnitario: number | null; aviso: string | null } {
   const known = input.unidadesPorPresentacion ?? (input.presentacion === "unidad" ? 1 : null);
-  const intentoIndividual = input.unidadesTotales != null || input.costoUnitario != null;
   if (known == null) {
+    if (input.presentacion && PRESENTACIONES_CON_EMPAQUE.has(input.presentacion)) {
+      throw new Error(LINEA_SIN_EMPAQUE);
+    }
     return {
       unidadesPorPresentacion: null,
-      unidadesTotales: null,
-      costoUnitario: null,
-      aviso: intentoIndividual
-        ? "No se guardaron las unidades individuales ni el costo unitario: no está confirmado cuántas unidades trae la presentación."
-        : null,
+      unidadesTotales: input.unidadesTotales,
+      costoUnitario: input.costoUnitario,
+      aviso: null,
     };
   }
   if (!(known > 0)) {
-    throw new Error("Las unidades por presentación tienen que ser mayores que cero");
+    throw new Error("Las unidades por empaque tienen que ser mayores que cero");
   }
   const unidadesTotales = input.cantidadComprada == null ? null : roundTo(input.cantidadComprada * known, 3);
   const costoUnitario = input.costoPorPresentacion == null ? null : roundTo(input.costoPorPresentacion / known, 4);
   const aviso =
     input.unidadesTotales != null && unidadesTotales != null && Math.abs(input.unidadesTotales - unidadesTotales) > 0.001
-      ? "Las unidades totales se recalcularon con la cantidad y las unidades por presentación."
+      ? "Las unidades de venta se recalcularon: bultos × unidades por empaque. El total de la línea no cambia."
       : null;
   return {
     unidadesPorPresentacion: known,
@@ -1147,6 +1163,8 @@ export function diferenciaRecepcion(linea: {
   cantidadRecibida: number | null;
   costoPorPresentacion: number | null;
   totalLinea: number | null;
+  unidadesTotales?: number | null;
+  costoUnitario?: number | null;
 }): number | null {
   if (linea.recepcion === "pendiente") {
     return null;
@@ -1154,15 +1172,18 @@ export function diferenciaRecepcion(linea: {
   if (linea.recepcion !== "faltante") {
     return 0;
   }
-  if (linea.cantidadComprada == null || linea.cantidadRecibida == null) {
+  const enUnidades = linea.unidadesTotales != null;
+  const compradas = enUnidades ? linea.unidadesTotales : linea.cantidadComprada;
+  if (compradas == null || linea.cantidadRecibida == null) {
     return null;
   }
-  const costo =
-    linea.costoPorPresentacion ?? (linea.totalLinea != null && linea.cantidadComprada > 0 ? linea.totalLinea / linea.cantidadComprada : null);
+  const costo = enUnidades
+    ? (linea.costoUnitario ?? (linea.totalLinea != null && compradas > 0 ? linea.totalLinea / compradas : null))
+    : (linea.costoPorPresentacion ?? (linea.totalLinea != null && compradas > 0 ? linea.totalLinea / compradas : null));
   if (costo == null) {
     return null;
   }
-  return roundTo(costo * Math.max(0, linea.cantidadComprada - linea.cantidadRecibida), 2);
+  return roundTo(costo * Math.max(0, compradas - linea.cantidadRecibida), 2);
 }
 
 export type RecepcionResumen = { lineas: number; sinConfirmar: number; faltantes: number; regalos: number; diferencia: number };
@@ -1246,22 +1267,23 @@ export function leerRecepcion(body: Record<string, unknown>): { todas: FacturaRe
   return { todas: null, lineas, por };
 }
 
-/** Cantidad que se guarda según lo que dijo la tienda y lo que dice la factura. */
-export function cantidadRecibidaDe(input: RecepcionLineaInput, cantidadComprada: number | null): number | null {
+/** Cantidad que se guarda, en unidades de venta si la línea ya las tiene, si no en lo comprado. */
+export function cantidadRecibidaDe(input: RecepcionLineaInput, cantidadComprada: number | null, unidadesTotales: number | null = null): number | null {
+  const compradas = unidadesTotales ?? cantidadComprada;
   if (input.recepcion === "pendiente") {
     return null;
   }
   if (input.recepcion === "completa") {
-    return cantidadComprada;
+    return compradas;
   }
   if (input.recepcion === "regalo") {
-    return input.cantidadRecibida ?? cantidadComprada;
+    return input.cantidadRecibida ?? compradas;
   }
   if (input.cantidadRecibida == null) {
     throw new Error(`La línea ${input.numeroLinea} es faltante: manda cuántas llegaron en cantidadRecibida (0 si no llegó nada)`);
   }
-  if (cantidadComprada != null && input.cantidadRecibida >= cantidadComprada) {
-    throw new Error(`En la línea ${input.numeroLinea} llegaron ${input.cantidadRecibida} de ${cantidadComprada}: eso es completa, no faltante`);
+  if (compradas != null && input.cantidadRecibida >= compradas) {
+    throw new Error(`En la línea ${input.numeroLinea} llegaron ${input.cantidadRecibida} de ${compradas}: eso es completa, no faltante`);
   }
   return input.cantidadRecibida;
 }
@@ -1582,17 +1604,25 @@ export function leerLinea(raw: Record<string, unknown>, index: number): FacturaL
   if (presentacionRaw != null && presentacionRaw !== "" && !presentacion) {
     throw new Error(`${donde} tiene una presentación inválida. Usa unidad, paquete, caja, fardo u otro`);
   }
-  const unidades = resolverUnidades({
-    presentacion,
-    cantidadComprada: requireCantidad(pick(raw, ["cantidadComprada", "cantidad_comprada", "cantidad"]), `${donde}: la cantidad`),
-    unidadesPorPresentacion: requireCantidad(
-      pick(raw, ["unidadesPorPresentacion", "unidades_por_presentacion", "unidadesPorCaja", "unidadesPresentacion"]),
-      `${donde}: las unidades por presentación`
-    ),
-    unidadesTotales: requireCantidad(pick(raw, ["unidadesTotales", "unidades_totales", "unidades"]), `${donde}: las unidades totales`),
-    costoPorPresentacion: requireMoney(pick(raw, ["costoPorPresentacion", "costo_por_presentacion", "costo", "costoPresentacion"]), `${donde}: el costo`),
-    costoUnitario: requireMoney(pick(raw, ["costoUnitario", "costo_unitario", "costoUnidad"]), `${donde}: el costo unitario`),
-  });
+  let unidades: ReturnType<typeof resolverUnidades>;
+  try {
+    unidades = resolverUnidades({
+      presentacion,
+      cantidadComprada: requireCantidad(pick(raw, ["cantidadComprada", "cantidad_comprada", "cantidad"]), `${donde}: la cantidad`),
+      unidadesPorPresentacion: requireCantidad(
+        pick(raw, ["unidadesPorPresentacion", "unidades_por_presentacion", "unidadesPorCaja", "unidadesPresentacion"]),
+        `${donde}: las unidades por empaque`
+      ),
+      unidadesTotales: requireCantidad(pick(raw, ["unidadesTotales", "unidades_totales", "unidades"]), `${donde}: las unidades totales`),
+      costoPorPresentacion: requireMoney(pick(raw, ["costoPorPresentacion", "costo_por_presentacion", "costo", "costoPresentacion"]), `${donde}: el costo`),
+      costoUnitario: requireMoney(pick(raw, ["costoUnitario", "costo_unitario", "costoUnidad"]), `${donde}: el costo unitario`),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === LINEA_SIN_EMPAQUE) {
+      throw new Error(`${donde}: ${error.message}`);
+    }
+    throw error;
+  }
   const estadoRaw = pick(raw, ["estadoLinea", "estado_linea", "estado"]);
   const estado = estadoRaw == null || estadoRaw === "" ? "pendiente" : parseEstadoLinea(estadoRaw);
   if (!estado) {
