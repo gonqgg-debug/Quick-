@@ -21,6 +21,9 @@ import {
 } from "../lib/pos-domain";
 import { anioAnterior, asociacionCanasta, coberturaDeFechas, desgloseVenta, estadoComparacion, estadoHora, participacion, promedioOcurrencia, resolverComparacion, variacionPct } from "../lib/consumo-metricas";
 import { MilesError, hashPayload, parseHallazgo } from "../lib/miles-domain";
+import { calcularPromo, revisarAritmetica, supuestosVacios } from "../lib/promo-calculo";
+import { parseCorreccionPropuesta, parsePropuesta } from "../lib/promo-domain";
+import { indicadoresPromo, ordenAtencion, probabilidadCompleta } from "../lib/promo-presentacion";
 import { clasificarHallazgo, formatoDiaComercial, formatoInstante, graficoAlcanza, leerVisual, recomendacionActual, visualCoherente } from "../lib/miles-presentacion";
 
 function assert(condition: unknown, message: string) {
@@ -394,3 +397,97 @@ const cerrada = aplicarSesion(partes, cierre, new Map());
 assert(cerrada.estado.ordenes.has("quick:9001") && cerrada.estado.ordenes.has("quick:9002") && cerrada.estado.ordenes.has("quick:9003"), "el final conserva las partes del mismo lote");
 assert(!cerrada.estado.ordenes.has("quick:9004"), "el final borra lo que llegó con otro lote");
 assert(ventaDelDia(cerrada.estado, "quick", "2026-10-12") === 15310, `las partes suman 15310, fue ${ventaDelDia(cerrada.estado, "quick", "2026-10-12")}`);
+
+const promoBase = {
+  idempotencyKey: "promo-1",
+  nombre: "Agua con pan",
+  objetivo: "Que el pan lleve agua",
+  comportamiento: "Sumar agua al ticket del pan.",
+  tipo: "combo",
+  periodo: { desde: "2026-10-01", hasta: "2026-10-07" },
+  productos: [{ productId: "11111111-1111-4111-8111-111111111111", cantidad: 1, funcion: "principal" }],
+  mecanica: {},
+  evidencia: { solidez: "baja", fundamento: "Periodo corto", consultas: [] },
+};
+assert(parsePropuesta(promoBase).probabilidad == null && parsePropuesta(promoBase).evidencia.solidez === "baja", "la solidez baja no fabrica un porcentaje");
+let promoRechazada = false;
+try {
+  parsePropuesta({ ...promoBase, estado: "lista_para_probar" });
+} catch (error) {
+  promoRechazada = error instanceof MilesError && error.status === 403;
+}
+assert(promoRechazada, "Miles no marca una propuesta como lista para probar");
+let htmlRechazado = false;
+try {
+  parsePropuesta({ ...promoBase, nombre: "<b>combo</b>" });
+} catch (error) {
+  htmlRechazado = error instanceof MilesError;
+}
+assert(htmlRechazado, "la propuesta rechaza HTML");
+let probabilidadIncompleta = false;
+try {
+  parsePropuesta({ ...promoBase, probabilidad: { valor: 0.4 } });
+} catch (error) {
+  probabilidadIncompleta = error instanceof MilesError;
+}
+assert(probabilidadIncompleta, "una probabilidad sin modelo no entra");
+assert(parseCorreccionPropuesta({ version: 1, limitaciones: "Falta el corte" }).patch.limitaciones === "Falta el corte", "Miles puede corregir una limitación");
+const mismoImpuesto = calcularPromo({
+  tipo: "combo",
+  precioCombo: null,
+  descuento: null,
+  supuestos: { ...supuestosVacios(), ticketsElegibles: 100, yaCompraban: 10, adopcion: 0.1 },
+  lineas: [
+    { productId: "a", cantidad: 1, precioHabitual: 50, precioPromo: 40.56, costo: 26.4, tasa: 18 },
+  ],
+});
+const central = mismoImpuesto.escenarios.find((escenario) => escenario.nombre === "central");
+const basePromo = mismoImpuesto.escenarios.find((escenario) => escenario.nombre === "base");
+assert(mismoImpuesto.combinacion.margenHabitual === 20 && mismoImpuesto.combinacion.margen === 12, `el margen por producto usa su tasa, fue ${mismoImpuesto.combinacion.margenHabitual} y ${mismoImpuesto.combinacion.margen}`);
+assert(central?.redencionesNuevas === 9 && central.resultado === 28, `las compras nuevas salen de quienes no la llevaban, fue ${central?.redencionesNuevas} y ${central?.resultado}`);
+assert(basePromo?.resultado === -80, `la base descuenta a quien ya compraba, fue ${basePromo?.resultado}`);
+assert(mismoImpuesto.equilibrio.tasa === 0.0741, `el equilibrio es 0.0741, fue ${mismoImpuesto.equilibrio.tasa}`);
+assert(mismoImpuesto.probabilidad == null && !mismoImpuesto.escenarios.some((escenario) => escenario.nombre === "conservador"), "sin adopción extra no hay escenario ni porcentaje");
+const tasasMixtas = calcularPromo({
+  tipo: "combo",
+  precioCombo: 100,
+  descuento: null,
+  supuestos: supuestosVacios(),
+  lineas: [
+    { productId: "a", cantidad: 1, precioHabitual: 80, precioPromo: null, costo: 40, tasa: 18 },
+    { productId: "b", cantidad: 1, precioHabitual: 40, precioPromo: null, costo: 20, tasa: 0 },
+  ],
+});
+assert(tasasMixtas.combinacion.ingreso === 100 && tasasMixtas.combinacion.margen == null, "un combo con tasas distintas no reparte el ITBIS");
+const sinCosto = calcularPromo({
+  tipo: "acompanamiento",
+  precioCombo: null,
+  descuento: null,
+  supuestos: supuestosVacios(),
+  lineas: [{ productId: "a", cantidad: 1, precioHabitual: 25, precioPromo: 20, costo: null, tasa: 18 }],
+});
+assert(sinCosto.combinacion.ingreso === 20 && sinCosto.combinacion.margen == null, "sin costo no hay margen");
+const umbral = calcularPromo({
+  tipo: "compra_minima",
+  precioCombo: null,
+  descuento: null,
+  supuestos: { ...supuestosVacios(), ticketsElegibles: 100, yaCompraban: 10 },
+  lineas: [{ productId: "a", cantidad: 1, precioHabitual: 50, precioPromo: 50, costo: 20, tasa: 18 }],
+});
+assert(umbral.equilibrio.tasa == null && umbral.escenarios.every((escenario) => escenario.resultado == null), "la compra mínima no inventa el equilibrio");
+const descuentoMixto = calcularPromo({
+  tipo: "combo",
+  precioCombo: null,
+  descuento: 30,
+  supuestos: supuestosVacios(),
+  lineas: [
+    { productId: "a", cantidad: 1, precioHabitual: 100, precioPromo: null, costo: 50, tasa: 18 },
+    { productId: "b", cantidad: 1, precioHabitual: 50, precioPromo: null, costo: 20, tasa: 0 },
+  ],
+});
+assert(descuentoMixto.combinacion.margen === 45.42, `el descuento conserva la tasa de cada línea, fue ${descuentoMixto.combinacion.margen}`);
+assert(revisarAritmetica({ ingreso: 118, costo: 0, tasa: 18, margen: 100 }).aritmetica === "coincide", "la estimación externa se revisa y no queda validada");
+assert(revisarAritmetica({ ingreso: 118, costo: 0, tasa: 18, margen: 10 }).aritmetica === "difiere", "una estimación que no cuadra queda marcada");
+assert(probabilidadCompleta({ valor: 0.8, solidez: "alta" }) == null, "ni el lift ni la solidez son una probabilidad");
+assert(ordenAtencion({ estado: "por_revisar", pruebas: [{ estado: "finalizada" }] }) > ordenAtencion({ estado: "archivada", pruebas: [{ estado: "pendiente_evaluacion" }] }), "una prueba por evaluar va antes que el estado de la propuesta");
+assert(indicadoresPromo([{ estado: "por_revisar", pruebas: [{ estado: "finalizada" }], evaluaciones: [] }]).evaluadas === 0, "una prueba finalizada sin evaluación no cuenta como evaluada");

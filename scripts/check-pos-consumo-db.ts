@@ -8,6 +8,7 @@ const migrationCosto = join(root, "supabase/migrations/20261016190000_costo_con_
 const migrationMiles = join(root, "supabase/migrations/20261016200000_miles_consumo.sql");
 const migrationVuelto = join(root, "supabase/migrations/20261016210000_pagos_con_vuelto.sql");
 const migrationVisual = join(root, "supabase/migrations/20261016220000_miles_visual.sql");
+const migrationPromos = join(root, "supabase/migrations/20261016230000_miles_promos.sql");
 const DB = "quick_pos_test";
 
 function quote(value: string): string {
@@ -120,6 +121,7 @@ sqlFile(DB, migrationCosto);
 sqlFile(DB, migrationMiles);
 sqlFile(DB, migrationVuelto);
 sqlFile(DB, migrationVisual);
+sqlFile(DB, migrationPromos);
 
 sql(
   DB,
@@ -578,6 +580,60 @@ begin
   end if;
   select efectivo, tarjeta, venta into venta, neta, venta_pos
   from public.resumen_dia where fecha = '2026-09-01';
+  insert into public.miles_propuestas (
+    idempotency_key, payload_hash, nombre, objetivo, comportamiento, tipo,
+    periodo_desde, periodo_hasta, evidencia
+  ) values (
+    'p-test', 'hash', 'Combo agua', 'Subir el ticket', 'Que lleven agua con el pan', 'combo',
+    '2026-10-11', '2026-10-11', '{"solidez":"baja","fundamento":"Un ticket","consultas":[]}'::jsonb
+  );
+  insert into public.miles_propuesta_productos (propuesta_id, product_id, funcion, cantidad)
+  select p.id, pr.id, 'principal', 1
+  from public.miles_propuestas p
+  join public.products pr on pr.codigo_odoo = 'cod-18'
+  where p.idempotency_key = 'p-test';
+  insert into public.miles_propuesta_hallazgos (propuesta_id, hallazgo_id)
+  select p.id, h.id
+  from public.miles_propuestas p
+  join public.miles_hallazgos h on h.idempotency_key = 'h-test'
+  where p.idempotency_key = 'p-test';
+  begin
+    insert into public.miles_propuestas (
+      idempotency_key, payload_hash, nombre, objetivo, comportamiento, tipo,
+      periodo_desde, periodo_hasta, evidencia
+    ) values (
+      'p-test', 'otro', 'Otra', 'Otro objetivo', 'Otro comportamiento', 'combo',
+      '2026-10-11', '2026-10-11', '{"solidez":"baja","fundamento":"x","consultas":[]}'::jsonb
+    );
+    raise exception 'la propuesta repetida debio chocar';
+  exception
+    when unique_violation then
+      null;
+  end;
+  begin
+    insert into public.miles_propuestas (
+      idempotency_key, payload_hash, nombre, objetivo, comportamiento, tipo,
+      periodo_desde, periodo_hasta, evidencia
+    ) values (
+      'p-mala', 'hash', 'Mala', 'Objetivo', 'Comportamiento', 'regalo',
+      '2026-10-11', '2026-10-11', '{"solidez":"baja","fundamento":"x","consultas":[]}'::jsonb
+    );
+    raise exception 'un tipo fuera del catalogo debio fallar';
+  exception
+    when check_violation then
+      null;
+  end;
+  insert into public.miles_pruebas (propuesta_id, hipotesis, accion, metrica_principal, snapshot)
+  select id, 'Hipotesis de la prueba', 'Accion de la prueba', 'Tickets con ambos', '{"precio":10}'::jsonb
+  from public.miles_propuestas where idempotency_key = 'p-test';
+  update public.products set precio = 999 where codigo_odoo = 'cod-18';
+  if (select snapshot->>'precio' from public.miles_pruebas where propuesta_id = (select id from public.miles_propuestas where idempotency_key = 'p-test')) is distinct from '10' then
+    raise exception 'el snapshot de la prueba cambio con el catalogo';
+  end if;
+  insert into public.miles_comentarios (recurso_tipo, recurso_id, autor, autor_rol, cuerpo)
+  select 'propuesta', id, 'admin', 'humano', 'nota'
+  from public.miles_propuestas where idempotency_key = 'p-test';
+
   if venta is distinct from 50 or neta is distinct from 50 or venta_pos is distinct from 100 then
     raise exception 'el mix del 1 sep debio ser efectivo 50, tarjeta 50 y venta 100; fue % % %', venta, neta, venta_pos;
   end if;

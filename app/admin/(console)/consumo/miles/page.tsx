@@ -1,7 +1,9 @@
 import { MilesVista } from "@/components/admin/consumo/MilesVista";
 import { ErrorPanel } from "@/components/admin/consumo/ui";
+import { MilesError } from "@/lib/miles-domain";
 import { credencialMilesActiva, leerHallazgo, listarEjecuciones, listarHallazgos, listarInvestigaciones, listarPruebas, resumenMiles } from "@/lib/miles-store";
 import { cargarFrescura } from "@/lib/pos-consumo";
+import { listarPropuestas } from "@/lib/promo-store";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +20,7 @@ export default async function MilesPage({
   };
   try {
     const hallazgoId = uno("hallazgo");
-    const [hallazgos, investigaciones, pruebas, ejecuciones, credencial, miles, frescura, detalle] = await Promise.all([
+    const [hallazgos, investigaciones, pruebas, ejecuciones, credencial, miles, frescura, detalle, promos] = await Promise.all([
       listarHallazgos({ tienda: null, tipo: null, estado: null, prioridad: null, desde: null, hasta: null, limit: 100, cursor: null }),
       listarInvestigaciones(null, 50),
       listarPruebas(null),
@@ -27,6 +29,13 @@ export default async function MilesPage({
       resumenMiles(),
       cargarFrescura().catch(() => null),
       hallazgoId ? leerHallazgo(hallazgoId) : Promise.resolve(null),
+      listarPropuestas().then(
+        (rows) => ({ rows, disponibles: true }),
+        (error: unknown) => {
+          if (error instanceof MilesError && error.status === 503) return { rows: [], disponibles: false };
+          throw error;
+        },
+      ),
     ]);
     return (
       <MilesVista
@@ -43,6 +52,9 @@ export default async function MilesPage({
         hallazgos={hallazgos}
         investigaciones={investigaciones}
         pruebas={pruebas}
+        propuestas={promos.rows}
+        promosDisponibles={promos.disponibles}
+        pedirPromo={uno("pedir") === "1"}
         ejecuciones={ejecuciones}
         credencial={credencial}
         ultima={miles.ultima}

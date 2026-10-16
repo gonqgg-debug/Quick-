@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { MilesVisual, textoComparacion, textoMetrica } from "@/components/admin/consumo/MilesVisual";
+import { PropuestasRelacionadas } from "@/components/admin/consumo/PropuestasRelacionadas";
 import { Pildora } from "@/components/admin/consumo/ui";
 import type { EvidenciaMiles } from "@/lib/miles-domain";
 import { formatNumero } from "@/lib/pos-domain";
@@ -230,6 +231,13 @@ export function MilesFicha({
         ) : null}
       </section>
 
+      <section>
+        <h3 className="text-sm font-semibold">Propuestas relacionadas</h3>
+        <div className="mt-2">
+          <PropuestasRelacionadas hallazgoId={String(row.id)} />
+        </div>
+      </section>
+
       <details>
         <summary className="cursor-pointer text-sm font-semibold">Fuentes y corte</summary>
         <p className="mt-2 text-xs leading-5 text-brand-muted">
@@ -250,6 +258,7 @@ export function MilesFicha({
           </Link>
         ) : null}
         {vigente ? <Link href={`/admin/consumo/miles?vista=pruebas&origen=${row.id}`} className="rounded-full bg-[#F3F4F6] px-3 py-1.5 text-sm font-semibold">Crear prueba</Link> : null}
+        <Link href={`/admin/consumo/miles?vista=combos&origen=${row.id}&pedir=1`} className="rounded-full bg-[#F3F4F6] px-3 py-1.5 text-sm font-semibold">Pedir propuesta a Miles</Link>
         {onClose ? null : <Link href="/admin/consumo/miles" className="rounded-full bg-[#F3F4F6] px-3 py-1.5 text-sm font-semibold">Volver</Link>}
       </div>
 

@@ -111,6 +111,75 @@ PATCH /api/agent/miles/investigations/<id>
 
 La respuesta va con `"estado": "completada"` y `respuesta`. Miles no puede cancelarla ni aprobar una prueba. Una evaluación (`POST /api/agent/miles/experiments/<id>/evaluations`) no cambia el estado de la prueba.
 
+## Publicar una propuesta
+
+```http
+POST /api/agent/miles/proposals
+Authorization: Bearer <token de Miles>
+```
+
+```json
+{
+  "idempotencyKey": "promo-agua-pan-2026-10-11",
+  "tienda": "quick",
+  "nombre": "Agua con el pan",
+  "objetivo": "Subir los tickets que llevan pan y no llevan agua",
+  "comportamiento": "Que quien compra pan también lleve agua.",
+  "tipo": "combo",
+  "estado": "por_revisar",
+  "periodo": { "desde": "2026-10-01", "hasta": "2026-10-07" },
+  "corte": "2026-10-07",
+  "productos": [
+    {
+      "productId": "11111111-1111-4111-8111-111111111111",
+      "cantidad": 1,
+      "funcion": "principal",
+      "precioHabitual": 25,
+      "precioPromo": 22,
+      "precioObservadoEn": "2026-10-07",
+      "presentacion": null
+    }
+  ],
+  "mecanica": {
+    "precioCombo": null,
+    "descuento": null,
+    "compraMinima": null,
+    "canal": "caja",
+    "dias": "todos",
+    "horas": "todo el día",
+    "duracion": "7 días",
+    "exclusiones": "",
+    "acumulacion": "no acumulable",
+    "limites": "sin límite publicado",
+    "caja": "marcar ambos productos"
+  },
+  "hallazgos": [],
+  "metricas": { "ticketsConPanSinAgua": 40 },
+  "evidencia": {
+    "solidez": "baja",
+    "fundamento": "Un periodo corto y sin prueba.",
+    "consultas": ["consumo_canasta_par"]
+  },
+  "limitaciones": "No hay modelo de demanda.",
+  "supuestos": {},
+  "escenarios": [],
+  "costos": null,
+  "modelo": null,
+  "probabilidad": null,
+  "visual": null
+}
+```
+
+`tipo` es `combo`, `acompanamiento`, `compra_minima`, `horario` o `salida_inventario`. `funcion` es `principal`, `complemento` o `beneficio`. Cada producto lleva `productId` o `codigoOdoo` del catálogo. `estado` solo puede ser `borrador` o `por_revisar`. La misma `idempotencyKey` devuelve la misma propuesta; otro contenido es 409.
+
+`solidez` alta, media o baja no es un porcentaje. `probabilidad` se omite, o llega completa: `valor` entre 0 y 1, `objetivo`, `horizonte`, `modelo`, `version`, `datos`, `supuestos`, `validacion` fuera de muestra, `evaluadaEn` y `limitaciones`. Un intervalo necesita `inferior`, `superior` y `representa`. Sin ese paquete la pantalla dice que todavía no es estimable.
+
+Si `escenarios` trae `ingreso`, `costo`, `margen` y `tasa`, la API anota `aritmetica` en `coincide` o `difiere`. Eso no valida el modelo. El simulador de la plataforma usa la fórmula `combo-v1` con el costo vigente y la tasa de cada producto. Un precio único de combo con tasas distintas no calcula margen. En compra mínima hacen falta el costo del beneficio para quien ya superaba el umbral y el margen supuesto de la compra que lo cruza. Esos campos van en `supuestos` como `costoBeneficio` y `margenIncrementalUmbral`.
+
+`GET /api/agent/miles/proposals` y `GET /api/agent/miles/proposals/<id>` devuelven productos, hallazgos, pruebas y evaluaciones. `PATCH` corrige texto, mecánica, evidencia, escenarios o el estado propio si `version` coincide. No acepta HTML, `decision`, descarte ni `lista_para_probar`.
+
+Las solicitudes de propuestas y de ampliación salen en `GET /api/agent/miles/investigations`. El alcance trae `solicitud` `propuestas` o `ampliacion`, y `propuestaId` cuando aplica. Tomarlas no genera una propuesta.
+
 ## Permisos
 
 | Acción | Miles | Admin |
@@ -118,7 +187,9 @@ La respuesta va con `"estado": "completada"` y `respuesta`. Miles no puede cance
 | Leer cobertura, resumen, productos, horas y canasta | sí | por el dashboard |
 | Abrir y cerrar sus ejecuciones | sí | no |
 | Publicar y corregir texto de sus hallazgos | sí | no publica como Miles |
-| Descartar, archivar, pedir ampliación | no | sí |
+| Publicar y corregir sus propuestas, escenarios y supuestos | sí, sin aprobar ni descartar | no publica como Miles |
+| Descartar, archivar, pedir ampliación, marcar lista para probar | no | sí, sin encender la caja |
+| Guardar una variante y crear una prueba con snapshot | no | sí |
 | Crear y cambiar estado de pruebas | no | sí, sin tocar precios ni pedidos |
 | Tomar investigaciones y evaluar pruebas | sí | no evalúa como Miles |
 | Escribir ventas, costos, inventario, precios o permisos | no | según su rol de admin |
@@ -126,4 +197,6 @@ La respuesta va con `"estado": "completada"` y `respuesta`. Miles no puede cance
 
 ## Migración
 
-`supabase/migrations/20261016200000_miles_consumo.sql` crea las tablas de Miles. `20261016220000_miles_visual.sql` agrega `visual`, `resolucion` y `recomendacion_estado`. Hay que aplicarla en cada entorno antes de publicar hallazgos visuales o registrar una resolución. Este cambio no la aplica en producción.
+`supabase/migrations/20261016200000_miles_consumo.sql` crea las tablas de Miles. `20261016220000_miles_visual.sql` agrega `visual`, `resolucion` y `recomendacion_estado`. `20261016230000_miles_promos.sql` crea propuestas, productos, hallazgos vinculados y variantes, y agrega `propuesta_id`, `variante_id` y `snapshot` a las pruebas. Hay que aplicarla en cada entorno antes de publicar propuestas. Este cambio no la aplica en producción y no enciende promociones.
+
+Una propuesta guardada sigue siendo válida si no trae probabilidad ni visual. El estado de la propuesta no es el estado de la prueba. El snapshot de una prueba no se recalcula cuando cambian el catálogo o el simulador.

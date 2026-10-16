@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { CombosVista } from "@/components/admin/consumo/CombosVista";
 import { MilesFicha, enlacePrincipal, etiquetaClase, etiquetaTipo, hrefExplorar, visualDe } from "@/components/admin/consumo/MilesFicha";
 import { MilesVisual, textoComparacion, textoMetrica } from "@/components/admin/consumo/MilesVisual";
 import { Pildora, Vacio } from "@/components/admin/consumo/ui";
@@ -28,6 +29,9 @@ export function MilesVista({
   hallazgos,
   investigaciones,
   pruebas,
+  propuestas,
+  promosDisponibles,
+  pedirPromo,
   ejecuciones,
   credencial,
   ultima,
@@ -40,6 +44,9 @@ export function MilesVista({
   hallazgos: Fila[];
   investigaciones: Fila[];
   pruebas: Fila[];
+  propuestas: Fila[];
+  promosDisponibles: boolean;
+  pedirPromo: boolean;
   ejecuciones: Fila[];
   credencial: { id: string; prefijo: string; creadoEn: string } | null;
   ultima: Fila | null;
@@ -160,17 +167,20 @@ export function MilesVista({
         </div>
       </header>
 
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <Indicador etiqueta="Por revisar" valor={porRevisar} activo={vista === "hallazgos" && filtros.rapido === "revisar"} onClick={() => aplicarIndicador({ vista: "hallazgos", rapido: "revisar" })} />
-        <Indicador etiqueta="Oportunidades" valor={oportunidades} activo={vista === "hallazgos" && filtros.rapido === "oportunidades"} onClick={() => aplicarIndicador({ vista: "hallazgos", rapido: "oportunidades" })} />
-        <Indicador etiqueta="Pruebas en curso" valor={enCurso} activo={vista === "pruebas" && filtros.estado === "en_curso"} onClick={() => aplicarIndicador({ vista: "pruebas", estado: "en_curso" })} />
-        <Indicador etiqueta="Resueltos" valor={resueltos} activo={vista === "hallazgos" && filtros.rapido === "resueltos"} onClick={() => aplicarIndicador({ vista: "hallazgos", rapido: "resueltos" })} />
-      </div>
+      {vista === "combos" ? null : (
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <Indicador etiqueta="Por revisar" valor={porRevisar} activo={vista === "hallazgos" && filtros.rapido === "revisar"} onClick={() => aplicarIndicador({ vista: "hallazgos", rapido: "revisar" })} />
+          <Indicador etiqueta="Oportunidades" valor={oportunidades} activo={vista === "hallazgos" && filtros.rapido === "oportunidades"} onClick={() => aplicarIndicador({ vista: "hallazgos", rapido: "oportunidades" })} />
+          <Indicador etiqueta="Pruebas en curso" valor={enCurso} activo={vista === "pruebas" && filtros.estado === "en_curso"} onClick={() => aplicarIndicador({ vista: "pruebas", estado: "en_curso" })} />
+          <Indicador etiqueta="Resueltos" valor={resueltos} activo={vista === "hallazgos" && filtros.rapido === "resueltos"} onClick={() => aplicarIndicador({ vista: "hallazgos", rapido: "resueltos" })} />
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-1.5">
         {(
           [
             ["hallazgos", "Hallazgos"],
+            ["combos", "Combos y promos"],
             ["pruebas", "Acciones y pruebas"],
             ["investigaciones", "Investigaciones"],
           ] as const
@@ -183,6 +193,7 @@ export function MilesVista({
       {pending ? <p className="text-xs text-brand-muted" role="status">Cargando…</p> : null}
 
       {vista === "hallazgos" ? <Hallazgos filtros={filtros} hallazgos={hallazgos} ir={ir} seleccionado={detalle ? String(detalle.hallazgo.id) : ""} /> : null}
+      {vista === "combos" ? <CombosVista propuestas={propuestas} disponibles={promosDisponibles} origen={origen} pedirInicial={pedirPromo} hallazgos={hallazgos} /> : null}
       {vista === "pruebas" ? <Pruebas pruebas={pruebas} origen={origen} estado={filtros.estado} ir={ir} /> : null}
       {vista === "investigaciones" ? <Investigaciones investigaciones={investigaciones} hallazgos={hallazgos} pedir={pedir} /> : null}
       {vista === "actividad" ? <Actividad ejecuciones={ejecuciones} credencial={credencial} token={token} error={error} emitir={emitir} /> : null}
@@ -471,6 +482,7 @@ function FichaPrueba({
       {row.inicio_real || row.fin_real ? (
         <p className="text-xs text-brand-muted">Real: {row.inicio_real ? formatoDiaComercial(row.inicio_real) : "—"} a {row.fin_real ? formatoDiaComercial(row.fin_real) : "—"}</p>
       ) : null}
+      {row.propuesta_id ? <p className="mt-2 text-xs"><Link href={`/admin/consumo/miles/propuestas/${row.propuesta_id}`} className="font-semibold" style={{ color: "#3F6B1C" }}>Ver la propuesta</Link></p> : null}
       <p className="mt-2 text-xs font-semibold">{pasoPrueba(String(row.estado))}</p>
       <div className="mt-2 flex flex-wrap gap-2">
         {siguiente(String(row.estado)).map((estado) => (

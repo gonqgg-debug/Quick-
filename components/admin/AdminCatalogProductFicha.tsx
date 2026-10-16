@@ -8,6 +8,7 @@ import { brand } from "@/lib/theme";
 import { AdminInput, AdminSelect, AdminTextarea, adminLabelClass } from "@/components/admin/AdminField";
 import { leerListaProductos } from "@/components/admin/catalogo/lista-guardada";
 import { EstadoProducto, FotoProducto, MargenProducto, lineaSecundaria } from "@/components/admin/catalogo/producto-ui";
+import { PropuestasRelacionadas } from "@/components/admin/consumo/PropuestasRelacionadas";
 import { Aviso, BotonPrincipal, BotonSecundario, Dato, Seccion, fechaCorta } from "@/components/admin/facturas/ui";
 import {
   elegirCosto,
@@ -23,6 +24,7 @@ const SECCIONES = [
   { id: "precio", label: "Precio" },
   { id: "compras", label: "Compras" },
   { id: "presentaciones", label: "Presentaciones" },
+  { id: "propuestas", label: "Combos y promos" },
 ];
 
 const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
@@ -601,6 +603,10 @@ function Editor({
             ))}
           </ul>
         )}
+      </Seccion>
+
+      <Seccion id="propuestas" titulo="Combos y promos">
+        <PropuestasRelacionadas productoId={product.id} />
       </Seccion>
     </div>
   );

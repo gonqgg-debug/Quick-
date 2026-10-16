@@ -14,4 +14,8 @@ export const MILES_AGENT_ENDPOINTS = [
   { method: "PATCH", path: "/api/agent/miles/investigations/{id}", describe: "Tomar (en_analisis), pedir información o responder. No las crea ni las cancela." },
   { method: "GET", path: "/api/agent/miles/experiments", describe: "Pruebas. estado=pendiente_evaluacion son las que esperan evaluación." },
   { method: "POST", path: "/api/agent/miles/experiments/{id}/evaluations", describe: "Publica una evaluación. No cambia el estado ni la decisión humana." },
+  { method: "GET", path: "/api/agent/miles/proposals", describe: "Propuestas de combos y promos, con productos, hallazgos, pruebas y evaluaciones." },
+  { method: "POST", path: "/api/agent/miles/proposals", describe: "Publica una propuesta. idempotencyKey. Solo borrador o por_revisar. No activa descuentos." },
+  { method: "GET", path: "/api/agent/miles/proposals/{id}", describe: "Propuesta, variantes e historial." },
+  { method: "PATCH", path: "/api/agent/miles/proposals/{id}", describe: "Corrige una propuesta propia si la version coincide. No la aprueba, no la descarta y no cambia precios." },
 ] as const;
