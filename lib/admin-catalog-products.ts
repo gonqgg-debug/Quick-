@@ -40,7 +40,7 @@ export type {
 } from "@/lib/admin-catalog-products-shared";
 
 const SELECT_FIELDS =
-  "id, nombre, descripcion, marca, categoria, precio, codigo_odoo, codigo_barras, foto_url, activo, costo_manual, costo_manual_fuente, costo_manual_en";
+  "id, nombre, descripcion, marca, categoria, precio, tasa_itbis, codigo_odoo, codigo_barras, foto_url, activo, costo_manual, costo_manual_fuente, costo_manual_en";
 const EXPORT_MAX = 5000;
 const BATCH_MAX = 2000;
 const IDS_MAX = 2000;
@@ -69,6 +69,7 @@ type ProductRow = {
   marca: string | null;
   categoria: string;
   precio: number | string;
+  tasa_itbis: number | string | null;
   codigo_odoo: string | null;
   codigo_barras: string | null;
   foto_url: string | null;
@@ -160,6 +161,11 @@ function vacioComercial(): Pick<
   };
 }
 
+function tasaItbisDe(value: unknown): number {
+  const number = num(value);
+  return number === 0 || number === 16 || number === 18 ? number : 18;
+}
+
 function mapRow(row: ProductRow): AdminCatalogProduct {
   const precio = toMoney(row.precio);
   return {
@@ -169,6 +175,7 @@ function mapRow(row: ProductRow): AdminCatalogProduct {
     marca: row.marca ? String(row.marca) : null,
     categoria: String(row.categoria ?? ""),
     precio,
+    tasaItbis: tasaItbisDe(row.tasa_itbis),
     codigoOdoo: row.codigo_odoo ? String(row.codigo_odoo) : null,
     codigoBarras: row.codigo_barras ? String(row.codigo_barras) : null,
     fotoUrl: row.foto_url ? String(row.foto_url) : null,
@@ -198,7 +205,7 @@ function aplicarResumen(product: AdminCatalogProduct, resumen: ResumenProducto |
     costoFactura: facturaCosto,
     costoFacturaEn: resumen?.costoEn ?? null,
     costoFacturaClave: resumen?.costoClave ?? null,
-    margen: margenDe(product.precio, elegido.costo),
+    margen: margenDe(product.precio, elegido.costo, product.tasaItbis),
     proveedores: resumen?.proveedores ?? [],
   };
 }
@@ -914,6 +921,7 @@ export function catalogExportRows(products: AdminCatalogProduct[]): Array<Array<
     product.marca || "",
     isUncategorized(product.categoria) ? "Sin categoría" : product.categoria,
     product.precio,
+    product.tasaItbis,
     product.costo ?? "",
     etiquetaCostoFuente(product.costoFuente),
     product.margen == null ? "" : Math.round(product.margen * 1000) / 10,
@@ -932,6 +940,7 @@ export async function updateAdminCatalogProduct(input: {
   categoria?: unknown;
   precio?: unknown;
   costo?: unknown;
+  tasaItbis?: unknown;
   activo?: unknown;
 }): Promise<AdminCatalogProduct> {
   if (!input.id) {
@@ -947,6 +956,7 @@ export async function updateAdminCatalogProduct(input: {
     costo_manual_fuente?: CostoManualFuente | null;
     costo_manual_en?: string | null;
     activo?: boolean;
+    tasa_itbis?: number;
   } = {};
   if (input.nombre !== undefined) {
     const nombre = String(input.nombre ?? "").trim();
@@ -991,6 +1001,13 @@ export async function updateAdminCatalogProduct(input: {
       patch.costo_manual_fuente = "admin";
       patch.costo_manual_en = new Date().toISOString();
     }
+  }
+  if (input.tasaItbis !== undefined) {
+    const tasa = typeof input.tasaItbis === "number" ? input.tasaItbis : Number(input.tasaItbis);
+    if (tasa !== 0 && tasa !== 16 && tasa !== 18) {
+      throw new Error("La tasa de ITBIS tiene que ser 0, 16 o 18");
+    }
+    patch.tasa_itbis = tasa;
   }
   if (input.activo !== undefined) {
     if (typeof input.activo !== "boolean") {

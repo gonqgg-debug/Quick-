@@ -24,7 +24,11 @@ Traer a la plataforma el detalle de ventas del POS de Odoo (sesiones, órdenes, 
 - `tienda text not null default 'quick'` en las tablas nuevas.
 - RLS + `service_role` only, como el resto de migraciones.
 - La ingesta la empuja un agente externo. La plataforma no llama a Odoo y no guarda credenciales de Odoo.
-- Costo y margen salen de `products.costo_manual` o de la última factura de compra en unidades. Sin costo, el margen es null, nunca 0. El precio de venta ya incluye ITBIS 18%: la venta del día se muestra así, y el margen usa la venta sin ese impuesto.
+- Costo y margen salen de `products.costo_manual` o de la última factura de compra en unidades. Los dos costos se guardan **sin ITBIS**. Sin costo, el margen es null, nunca 0. El precio de venta ya incluye ITBIS. La tasa es la de la línea (`tasaItbis` o `tax_ids`) y, si no vino, `products.tasa_itbis` (0, 16 o 18, default 18). La venta del día se muestra con el impuesto incluido. El margen es venta / (1 + tasa/100) − unidades × costo.
+- Solo cuentan las órdenes `paid`, `done` e `invoiced`. `draft` y `cancel` se guardan y no entran en los resúmenes. Una devolución (monto negativo) resta.
+- Una sesión grande puede llegar en partes con el mismo `loteId`: `parcial` agrega sin borrar ni recalcular; `final` borra lo que no vino en ninguna parte y recalcula. El tope de 1.500 líneas es por request.
+- Cambiar `products.codigo_odoo` solo encola el re-cruce. `POST /api/agent/pos/rematch` lo procesa por lotes.
+- Las filas de `ventas_diarias` que ya existían quedan con `override_manual`. El POS no las pisa. Si difieren en más de RD$500, queda `alerta_pos`.
 - `ventas_diarias` se deriva de las sesiones. Un guardado manual queda como override.
 
 El contrato del POST está en [pos-ingesta-contrato.md](pos-ingesta-contrato.md).

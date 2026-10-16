@@ -15,7 +15,13 @@ export const POS_AGENT_ENDPOINTS = [
     method: "POST",
     path: "/api/agent/pos/sesiones",
     describe:
-      "Rodrigo empuja una sesión cerrada del POS. JSON: tienda y sesiones con una sola sesión, sus órdenes, líneas y pagos. Máximo 1.500 líneas. Idempotente: reenviar reemplaza lo que ya no venga. No manda categoría ni costo de Odoo. Responde conteos, líneas sin match y la venta del día.",
+      "Rodrigo empuja una sesión cerrada. Acepta un objeto sesion o sesiones con una sola. modo completo reemplaza lo que no venga; parcial agrega sin borrar ni recalcular; final cierra el lote y recalcula. Máximo 1.500 líneas por request, sin tope por sesión. La línea puede traer tasaItbis o tax_ids. Solo paid, done e invoiced cuentan. No manda categoría ni costo de Odoo.",
+  },
+  {
+    method: "POST",
+    path: "/api/agent/pos/rematch",
+    describe:
+      "Procesa la cola de re-cruce de codigo_odoo en lotes de hasta 500 líneas. Responde procesadas y pendientes. La importación del catálogo solo encola; no recalcula en el mismo request.",
   },
   {
     method: "GET",
@@ -98,6 +104,7 @@ export type PosLinea = {
   subtotal: number | null;
   subtotalConItbis: number | null;
   odooRefundedLineId: number | null;
+  tasaItbis: number | null;
 };
 
 export type PosPago = {
@@ -142,13 +149,15 @@ export type PosSesion = {
 
 export type PosNormalizado = {
   tienda: string;
+  modo: ModoIngest;
+  loteId: string | null;
   sesion: PosSesion;
   ordenes: PosOrden[];
 };
 
 export type ParsePosResult =
   | { ok: true; payload: PosNormalizado; lineas: number }
-  | { ok: false; status: 413 | 422; error: string };
+  | { ok: false; status: 413 | 422; error: string; campo: string | null };
 
 export type ConteosPos = { sesiones: number; ordenes: number; lineas: number; pagos: number };
 
@@ -172,6 +181,8 @@ export type OrdenMem = {
   horaLocal: number;
   dow: number;
   total: number;
+  estado: string | null;
+  loteId: string | null;
 };
 
 export type PagoMem = {
@@ -231,8 +242,18 @@ export type ConsumoPeriodo = {
 };
 
 export type CursorConsumo = { n: number; v: number | null; id: string; orden: string };
+export type ModoIngest = "completo" | "parcial" | "final";
 
-class ParseError extends Error {}
+export class PosEntradaError extends Error {
+  campo: string;
+  constructor(message: string, campo = "sesion") {
+    super(message);
+    this.name = "PosEntradaError";
+    this.campo = campo;
+  }
+}
+
+class ParseError extends PosEntradaError {}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -304,19 +325,24 @@ export function metodoCanon(valor: string | null): MetodoPago {
   return "otro";
 }
 
-export function ventaSinItbis(venta: number): number {
-  return round2(venta / (1 + ITBIS_TASA));
+export function ventaSinItbis(venta: number, tasa = 18): number {
+  return round2(venta / (1 + tasa / 100));
 }
 
-export function itbisIncluido(venta: number): number {
-  return round2(venta - venta / (1 + ITBIS_TASA));
+export function itbisIncluido(venta: number, tasa = 18): number {
+  return round2(venta - venta / (1 + tasa / 100));
 }
 
-export function margenConsumo(venta: number, unidades: number, costo: number | null): number | null {
+export function margenConsumo(venta: number, unidades: number, costo: number | null, tasa = 18): number | null {
   if (costo == null) {
     return null;
   }
-  return round2(venta / (1 + ITBIS_TASA) - unidades * costo);
+  return round2(venta / (1 + tasa / 100) - unidades * costo);
+}
+
+export function ordenCuenta(estado: string | null | undefined): boolean {
+  const valor = (estado ?? "").trim().toLowerCase();
+  return valor === "paid" || valor === "done" || valor === "invoiced";
 }
 
 export function costoVigenteConsumo(
@@ -385,47 +411,47 @@ function forbiddenKey(value: unknown): string | null {
   return null;
 }
 
-function asInt(value: unknown, label: string): number {
+function asInt(value: unknown, label: string, campo = "sesion"): number {
   const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
   if (!Number.isInteger(number) || number <= 0 || number > 2_000_000_000) {
-    throw new ParseError(label);
+    throw new ParseError(label, campo);
   }
   return number;
 }
 
-function asOptionalInt(value: unknown, label: string): number | null {
+function asOptionalInt(value: unknown, label: string, campo = "sesion"): number | null {
   if (value == null || value === "") {
     return null;
   }
-  return asInt(value, label);
+  return asInt(value, label, campo);
 }
 
-function asMoney(value: unknown, label: string, required: boolean): number | null {
+function asMoney(value: unknown, label: string, required: boolean, campo = "sesion"): number | null {
   if (value == null || value === "") {
     if (required) {
-      throw new ParseError(label);
+      throw new ParseError(label, campo);
     }
     return null;
   }
   const number = typeof value === "number" ? value : Number(String(value).replace(/,/g, ""));
   if (!Number.isFinite(number) || Math.abs(number) > 100_000_000) {
-    throw new ParseError(label);
+    throw new ParseError(label, campo);
   }
   return round2(number);
 }
 
-function asQty(value: unknown, label: string): number {
+function asQty(value: unknown, label: string, campo = "lineas.cantidad"): number {
   const number = typeof value === "number" ? value : Number(String(value ?? "").replace(/,/g, ""));
   if (!Number.isFinite(number) || Math.abs(number) > 1_000_000) {
-    throw new ParseError(label);
+    throw new ParseError(label, campo);
   }
   return round3(number);
 }
 
-function asIso(value: unknown, label: string, required: boolean): string | null {
+function asIso(value: unknown, label: string, required: boolean, campo = "sesion"): string | null {
   if (value == null || value === "") {
     if (required) {
-      throw new ParseError(label);
+      throw new ParseError(label, campo);
     }
     return null;
   }
@@ -435,9 +461,48 @@ function asIso(value: unknown, label: string, required: boolean): string | null 
   }
   const date = new Date(raw);
   if (Number.isNaN(date.getTime())) {
-    throw new ParseError(label);
+    throw new ParseError(label, campo);
   }
   return date.toISOString();
+}
+
+function normalizarTasa(value: unknown, campo: string): number {
+  const number = typeof value === "number" ? value : Number(String(value).replace("%", "").trim());
+  const tasa = number > 0 && number < 1 ? Math.round(number * 100) : number;
+  if (tasa === 0 || tasa === 16 || tasa === 18) {
+    return tasa;
+  }
+  throw new ParseError("La tasa de ITBIS tiene que ser 0, 16 o 18", campo);
+}
+
+function tasaDeLinea(raw: Record<string, unknown>, campo: string): number | null {
+  const directa = pick(raw, ["tasaItbis", "tasa_itbis", "tax_rate", "taxRate"]);
+  if (directa != null && directa !== "") {
+    return normalizarTasa(directa, campo);
+  }
+  const tax = raw.tax_ids ?? raw.taxIds;
+  if (tax == null) {
+    return null;
+  }
+  const lista = Array.isArray(tax) ? tax : [tax];
+  for (const item of lista) {
+    if (typeof item === "number" || typeof item === "string") {
+      if (String(item).trim() === "") {
+        continue;
+      }
+      return normalizarTasa(item, campo);
+    }
+    if (isRecord(item)) {
+      const amount = pick(item, ["amount", "tasa", "tasaItbis", "percent"]);
+      if (amount != null && amount !== "") {
+        return normalizarTasa(amount, campo);
+      }
+    }
+  }
+  if (lista.length > 0) {
+    throw new ParseError("tax_ids no trae la tasa. Manda tasaItbis 0, 16 o 18", campo);
+  }
+  return null;
 }
 
 function asText(value: unknown, max: number): string | null {
@@ -448,58 +513,69 @@ function asText(value: unknown, max: number): string | null {
   return text ? text.slice(0, max) : null;
 }
 
-function countLineas(body: Record<string, unknown>): number {
-  const sesiones = Array.isArray(body.sesiones) ? body.sesiones : [];
+function countLineasItem(item: Record<string, unknown>): number {
+  if (!Array.isArray(item.ordenes)) {
+    return 0;
+  }
   let total = 0;
-  for (const item of sesiones) {
-    if (!isRecord(item) || !Array.isArray(item.ordenes)) {
-      continue;
-    }
-    for (const orden of item.ordenes) {
-      if (isRecord(orden) && Array.isArray(orden.lineas)) {
-        total += orden.lineas.length;
-      }
+  for (const orden of item.ordenes) {
+    if (isRecord(orden) && Array.isArray(orden.lineas)) {
+      total += orden.lineas.length;
     }
   }
   return total;
 }
 
+function parseModo(value: unknown): ModoIngest {
+  if (value == null || value === "") {
+    return "completo";
+  }
+  const modo = String(value).trim().toLowerCase();
+  if (modo === "completo" || modo === "parcial" || modo === "final") {
+    return modo;
+  }
+  throw new ParseError("modo tiene que ser completo, parcial o final", "modo");
+}
+
 function parseLinea(raw: unknown): PosLinea {
   if (!isRecord(raw)) {
-    throw new ParseError("Una línea no tiene la forma esperada");
+    throw new ParseError("Una línea no tiene la forma esperada", "lineas");
   }
   return {
-    odooId: asInt(pick(raw, ["odooId", "odoo_id", "id"]), "Cada línea necesita odooId"),
-    odooProductId: asInt(pick(raw, ["odooProductId", "odoo_product_id", "product_id"]), "Cada línea necesita odooProductId"),
+    odooId: asInt(pick(raw, ["odooId", "odoo_id", "id"]), "Cada línea necesita odooId", "lineas.odooId"),
+    odooProductId: asInt(pick(raw, ["odooProductId", "odoo_product_id", "product_id"]), "Cada línea necesita odooProductId", "lineas.odooProductId"),
     odooTmplId: asOptionalInt(pick(raw, ["odooTmplId", "odoo_tmpl_id", "product_tmpl_id"]), "odooTmplId no es válido"),
     codigoOdoo: asText(pick(raw, ["codigoOdoo", "codigo_odoo"]), 160),
     nombreOdoo: asText(pick(raw, ["nombreOdoo", "nombre_odoo", "full_product_name"]), 240),
-    cantidad: asQty(pick(raw, ["cantidad", "qty"]), "La cantidad de una línea no es válida"),
-    precioUnit: asMoney(pick(raw, ["precioUnit", "precio_unit", "price_unit"]), "El precio de una línea no es válido", false),
-    descuento: asMoney(pick(raw, ["descuento", "discount"]), "El descuento de una línea no es válido", false),
-    subtotal: asMoney(pick(raw, ["subtotal", "price_subtotal"]), "El subtotal de una línea no es válido", false),
+    cantidad: asQty(pick(raw, ["cantidad", "qty"]), "La cantidad de una línea no es válida", "lineas.cantidad"),
+    precioUnit: asMoney(pick(raw, ["precioUnit", "precio_unit", "price_unit"]), "El precio de una línea no es válido", false, "lineas.precioUnit"),
+    descuento: asMoney(pick(raw, ["descuento", "discount"]), "El descuento de una línea no es válido", false, "lineas.descuento"),
+    subtotal: asMoney(pick(raw, ["subtotal", "price_subtotal"]), "El subtotal de una línea no es válido", false, "lineas.subtotal"),
     subtotalConItbis: asMoney(
       pick(raw, ["subtotalConItbis", "subtotal_con_itbis", "price_subtotal_incl"]),
       "El subtotal con ITBIS no es válido",
       false,
+      "lineas.subtotalConItbis",
     ),
     odooRefundedLineId: asOptionalInt(
       pick(raw, ["odooRefundedLineId", "odoo_refunded_line_id", "refunded_orderline_id"]),
       "La línea devuelta no es válida",
+      "lineas.odooRefundedLineId",
     ),
+    tasaItbis: tasaDeLinea(raw, "lineas.tasaItbis"),
   };
 }
 
 function parsePago(raw: unknown): PosPago {
   if (!isRecord(raw)) {
-    throw new ParseError("Un pago no tiene la forma esperada");
+    throw new ParseError("Un pago no tiene la forma esperada", "pagos");
   }
   const metodo = asText(pick(raw, ["metodo", "payment_method", "payment_method_name", "metodoNombre"]), 80);
   return {
-    odooId: asInt(pick(raw, ["odooId", "odoo_id", "id"]), "Cada pago necesita odooId"),
+    odooId: asInt(pick(raw, ["odooId", "odoo_id", "id"]), "Cada pago necesita odooId", "pagos.odooId"),
     metodoOdooId: asOptionalInt(pick(raw, ["metodoOdooId", "metodo_odoo_id", "payment_method_id"]), "El método de pago no es válido"),
     metodo,
-    monto: asMoney(pick(raw, ["monto", "amount"]), "El monto de un pago no es válido", true) ?? 0,
+    monto: asMoney(pick(raw, ["monto", "amount"]), "El monto de un pago no es válido", true, "pagos.monto") ?? 0,
     fecha: asIso(pick(raw, ["fecha", "payment_date"]), "La fecha de un pago no es válida", false),
     esCambio: pick(raw, ["esCambio", "es_cambio", "is_change"]) === true || pick(raw, ["esCambio", "es_cambio", "is_change"]) === "true",
     tipoTarjeta: asText(pick(raw, ["tipoTarjeta", "tipo_tarjeta", "card_type"]), 40),
@@ -508,16 +584,16 @@ function parsePago(raw: unknown): PosPago {
 
 function parseOrdenPos(raw: unknown): PosOrden {
   if (!isRecord(raw)) {
-    throw new ParseError("Una orden no tiene la forma esperada");
+    throw new ParseError("Una orden no tiene la forma esperada", "ordenes");
   }
   const lineasRaw = Array.isArray(raw.lineas) ? raw.lineas : [];
   const pagosRaw = Array.isArray(raw.pagos) ? raw.pagos : [];
   return {
-    odooId: asInt(pick(raw, ["odooId", "odoo_id", "id"]), "Cada orden necesita odooId"),
+    odooId: asInt(pick(raw, ["odooId", "odoo_id", "id"]), "Cada orden necesita odooId", "ordenes.odooId"),
     nombre: asText(pick(raw, ["nombre", "name"]), 80),
     posReference: asText(pick(raw, ["posReference", "pos_reference"]), 80),
-    fecha: asIso(pick(raw, ["fecha", "date_order"]), "Cada orden necesita fecha", true) ?? "",
-    total: asMoney(pick(raw, ["total", "amount_total"]), "Cada orden necesita total", true) ?? 0,
+    fecha: asIso(pick(raw, ["fecha", "date_order"]), "Cada orden necesita fecha", true, "ordenes.fecha") ?? "",
+    total: asMoney(pick(raw, ["total", "amount_total"]), "Cada orden necesita total", true, "ordenes.total") ?? 0,
     impuesto: asMoney(pick(raw, ["impuesto", "amount_tax"]), "El impuesto de una orden no es válido", false),
     pagado: asMoney(pick(raw, ["pagado", "amount_paid"]), "El pagado de una orden no es válido", false),
     cambio: asMoney(pick(raw, ["cambio", "amount_return"]), "El cambio de una orden no es válido", false),
@@ -532,81 +608,105 @@ function parseOrdenPos(raw: unknown): PosOrden {
 
 export function parsePosIngestBody(body: unknown): ParsePosResult {
   if (!isRecord(body)) {
-    return { ok: false, status: 422, error: "El cuerpo no tiene la forma esperada" };
+    return { ok: false, status: 422, error: "El cuerpo no tiene la forma esperada", campo: "sesion" };
   }
-  const sesiones = body.sesiones;
-  if (!Array.isArray(sesiones)) {
-    return { ok: false, status: 422, error: "Falta sesiones" };
+  const tieneSesion = isRecord(body.sesion);
+  const tieneLista = Array.isArray(body.sesiones);
+  if (tieneSesion && tieneLista) {
+    return { ok: false, status: 422, error: "Manda sesion o sesiones, no las dos", campo: "sesiones" };
   }
-  if (sesiones.length > POS_MAX_SESIONES) {
-    return { ok: false, status: 413, error: "Manda una sola sesión por request" };
+  let item: Record<string, unknown>;
+  if (tieneLista) {
+    const sesiones = body.sesiones as unknown[];
+    if (sesiones.length > POS_MAX_SESIONES) {
+      return { ok: false, status: 413, error: "Manda una sola sesión por request", campo: "sesiones" };
+    }
+    if (sesiones.length !== 1 || !isRecord(sesiones[0])) {
+      return { ok: false, status: 422, error: "Falta la sesión", campo: "sesiones" };
+    }
+    item = sesiones[0];
+  } else if (tieneSesion) {
+    item = { sesion: body.sesion, ordenes: body.ordenes };
+  } else {
+    return { ok: false, status: 422, error: "Falta la sesión", campo: "sesion" };
   }
-  if (countLineas(body) > POS_MAX_LINEAS) {
-    return { ok: false, status: 413, error: "La sesión trae más de 1.500 líneas" };
+  if (countLineasItem(item) > POS_MAX_LINEAS) {
+    return { ok: false, status: 413, error: "La sesión trae más de 1.500 líneas", campo: "lineas" };
   }
   const forbidden = forbiddenKey(body);
   if (forbidden) {
-    return { ok: false, status: 422, error: `No se acepta ${forbidden} de Odoo` };
-  }
-  if (sesiones.length !== 1) {
-    return { ok: false, status: 422, error: "Falta la sesión" };
+    return { ok: false, status: 422, error: `No se acepta ${forbidden} de Odoo`, campo: forbidden };
   }
   try {
-    const item = sesiones[0];
-    if (!isRecord(item) || !isRecord(item.sesion)) {
-      throw new ParseError("Falta la sesión");
+    if (!isRecord(item.sesion)) {
+      throw new ParseError("Falta la sesión", "sesion");
     }
     const sesionRaw = item.sesion;
     const ordenesRaw = Array.isArray(item.ordenes) ? item.ordenes : [];
+    const modo = parseModo(body.modo ?? item.modo);
+    const loteId = asText(pick(body, ["loteId", "lote_id"]) ?? pick(item, ["loteId", "lote_id"]), 80);
+    if ((modo === "parcial" || modo === "final") && !loteId) {
+      throw new ParseError("Una sesión en partes necesita loteId", "loteId");
+    }
     const tienda = (asText(body.tienda, 40) ?? TIENDA_DEFAULT).toLowerCase();
     const sesion: PosSesion = {
-      odooId: asInt(pick(sesionRaw, ["odooId", "odoo_id", "id"]), "La sesión necesita odooId"),
+      odooId: asInt(pick(sesionRaw, ["odooId", "odoo_id", "id"]), "La sesión necesita odooId", "sesion.odooId"),
       nombre: asText(pick(sesionRaw, ["nombre", "name"]), 80) ?? `POS/${pick(sesionRaw, ["odooId", "odoo_id", "id"])}`,
-      odooConfigId: asOptionalInt(pick(sesionRaw, ["odooConfigId", "odoo_config_id", "config_id"]), "La caja no es válida"),
+      odooConfigId: asOptionalInt(pick(sesionRaw, ["odooConfigId", "odoo_config_id", "config_id"]), "La caja no es válida", "sesion.odooConfigId"),
       estado: (asText(pick(sesionRaw, ["estado", "state"]), 40) ?? "").toLowerCase(),
-      startAt: asIso(pick(sesionRaw, ["startAt", "start_at"]), "La sesión necesita startAt", true) ?? "",
-      stopAt: asIso(pick(sesionRaw, ["stopAt", "stop_at"]), "stopAt no es válido", false),
+      startAt: asIso(pick(sesionRaw, ["startAt", "start_at"]), "La sesión necesita startAt", true, "sesion.startAt") ?? "",
+      stopAt: asIso(pick(sesionRaw, ["stopAt", "stop_at"]), "stopAt no es válido", false, "sesion.stopAt"),
       totalPagos: asMoney(
         pick(sesionRaw, ["totalPagos", "total_pagos", "total_payments_amount"]),
         "El total de pagos no es válido",
         false,
+        "sesion.totalPagos",
       ),
       efectivoInicial: asMoney(
         pick(sesionRaw, ["efectivoInicial", "efectivo_inicial", "cash_register_balance_start"]),
         "El efectivo inicial no es válido",
         false,
+        "sesion.efectivoInicial",
       ),
       efectivoFinal: asMoney(
         pick(sesionRaw, ["efectivoFinal", "efectivo_final", "cash_register_balance_end_real"]),
         "El efectivo final no es válido",
         false,
+        "sesion.efectivoFinal",
       ),
-      odooWriteDate: asIso(pick(sesionRaw, ["odooWriteDate", "odoo_write_date", "write_date"]), "write_date no es válido", false),
+      odooWriteDate: asIso(
+        pick(sesionRaw, ["odooWriteDate", "odoo_write_date", "write_date"]),
+        "write_date no es válido",
+        false,
+        "sesion.odooWriteDate",
+      ),
     };
     const ordenes = ordenesRaw.map(parseOrdenPos);
     const vistos = new Set<string>();
-    const marcar = (tipo: string, id: number) => {
+    const marcar = (tipo: string, id: number, campo: string) => {
       const key = `${tipo}:${id}`;
       if (vistos.has(key)) {
-        throw new ParseError(`Hay un ${tipo} repetido (${id})`);
+        throw new ParseError(`Hay un ${tipo} repetido (${id})`, campo);
       }
       vistos.add(key);
     };
-    marcar("sesión", sesion.odooId);
+    marcar("sesión", sesion.odooId, "sesion.odooId");
     for (const orden of ordenes) {
-      marcar("orden", orden.odooId);
+      marcar("orden", orden.odooId, "ordenes.odooId");
       for (const linea of orden.lineas) {
-        marcar("línea", linea.odooId);
+        marcar("línea", linea.odooId, "lineas.odooId");
       }
       for (const pago of orden.pagos) {
-        marcar("pago", pago.odooId);
+        marcar("pago", pago.odooId, "pagos.odooId");
       }
     }
     const lineas = ordenes.reduce((sum, orden) => sum + orden.lineas.length, 0);
-    return { ok: true, payload: { tienda, sesion, ordenes }, lineas };
+    return { ok: true, payload: { tienda, modo, loteId, sesion, ordenes }, lineas };
   } catch (error) {
-    const message = error instanceof ParseError ? error.message : "El cuerpo no es válido";
-    return { ok: false, status: 422, error: message };
+    if (error instanceof ParseError) {
+      return { ok: false, status: 422, error: error.message, campo: error.campo };
+    }
+    return { ok: false, status: 422, error: "El cuerpo no es válido", campo: "sesion" };
   }
 }
 
@@ -665,7 +765,16 @@ export function aplicarSesion(
   let borradosLineas = 0;
   let borradosPagos = 0;
   for (const [key, orden] of Array.from(next.ordenes)) {
-    if (orden.tienda === payload.tienda && orden.sesionOdooId === payload.sesion.odooId && !incomingOrders.has(orden.odooId)) {
+    if (orden.tienda !== payload.tienda || orden.sesionOdooId !== payload.sesion.odooId) {
+      continue;
+    }
+    const sobra =
+      payload.modo === "parcial"
+        ? false
+        : payload.modo === "final"
+          ? orden.loteId !== payload.loteId
+          : !incomingOrders.has(orden.odooId);
+    if (sobra) {
       next.ordenes.delete(key);
       borradosOrdenes += 1;
       for (const [lineKey, linea] of Array.from(next.lineas)) {
@@ -705,6 +814,8 @@ export function aplicarSesion(
       horaLocal: hora,
       dow: dowOperativo(fecha),
       total: orden.total,
+      estado: orden.estado,
+      loteId: payload.loteId,
     });
 
     const incomingLines = new Set(orden.lineas.map((linea) => linea.odooId));
@@ -766,12 +877,18 @@ export function aplicarSesion(
   let sumaPagos = 0;
   let sinMatch = 0;
   for (const orden of Array.from(next.ordenes.values())) {
-    if (orden.tienda === payload.tienda && orden.sesionOdooId === payload.sesion.odooId) {
+    if (orden.tienda === payload.tienda && orden.sesionOdooId === payload.sesion.odooId && ordenCuenta(orden.estado)) {
       sumaOrdenes += orden.total;
     }
   }
   for (const pago of Array.from(next.pagos.values())) {
-    if (pago.tienda === payload.tienda && pago.sesionOdooId === payload.sesion.odooId) {
+    const orden = next.ordenes.get(clavePos(pago.tienda, pago.ordenOdooId));
+    if (
+      pago.tienda === payload.tienda &&
+      pago.sesionOdooId === payload.sesion.odooId &&
+      orden &&
+      ordenCuenta(orden.estado)
+    ) {
       sumaPagos += pago.monto;
     }
   }
@@ -784,7 +901,10 @@ export function aplicarSesion(
   sumaOrdenes = round2(sumaOrdenes);
   sumaPagos = round2(sumaPagos);
   const total = payload.sesion.totalPagos;
-  const alerta = total != null && (Math.abs(total - sumaOrdenes) > 0.01 || Math.abs(total - sumaPagos) > 0.01);
+  const alerta =
+    payload.modo !== "parcial" &&
+    total != null &&
+    (Math.abs(total - sumaOrdenes) > 0.01 || Math.abs(total - sumaPagos) > 0.01);
 
   return {
     estado: next,
@@ -804,7 +924,7 @@ export function aplicarSesion(
 export function ventaDelDia(estado: EstadoPos, tienda: string, fecha: string): number {
   let suma = 0;
   for (const orden of Array.from(estado.ordenes.values())) {
-    if (orden.tienda === tienda && orden.fechaOperativa === fecha) {
+    if (orden.tienda === tienda && orden.fechaOperativa === fecha && ordenCuenta(orden.estado)) {
       suma += orden.total;
     }
   }
@@ -946,10 +1066,10 @@ export function formatPct(value: number | null | undefined): string {
 }
 
 export const DEFINICIONES = {
-  venta: "Lo que pagó el cliente, con las devoluciones ya restadas. El ITBIS de 18% ya va incluido: no se suma encima.",
+  venta: "Lo que pagó el cliente, con las devoluciones ya restadas. El ITBIS ya va incluido: no se suma encima. Solo entran órdenes paid, done e invoiced.",
   ticket: "Venta dividida entre el número de órdenes del periodo. El ITBIS ya va incluido.",
   unidadesTicket: "Unidades vendidas divididas entre el número de órdenes.",
-  margen: "Venta sin el ITBIS incluido, menos unidades por el costo vigente. El impuesto no cuenta como ganancia. Si no hay costo, no se calcula: no es cero.",
+  margen: "Venta sin el ITBIS de la línea (o el del producto: 0, 16 o 18), menos unidades por el costo sin ITBIS. Si no hay costo, no se calcula: no es cero.",
   cobertura: "Parte de la venta que tiene costo, manual o de la última factura.",
   lift: "Cuántas veces más se llevan juntos de lo que se esperaría por separado.",
   hora: "Una venta después de medianoche sigue en el día en que se abrió la caja.",

@@ -315,7 +315,7 @@ export function AdminCatalogProducts() {
               ...product,
               costo: extra.costo,
               costoEn: extra.costoEn,
-              margen: margenDe(product.precio, extra.costo),
+              margen: margenDe(product.precio, extra.costo, product.tasaItbis),
               proveedores: extra.proveedores,
             };
           })

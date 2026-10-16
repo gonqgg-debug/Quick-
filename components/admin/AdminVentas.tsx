@@ -166,7 +166,11 @@ export function AdminVentas() {
             </span>
           </p>
         ) : null}
-        {captured?.difiere ? (
+        {captured?.alertaPos ? (
+          <p className="mt-3 rounded-2xl px-3 py-2 text-sm" style={{ backgroundColor: "#FEF3C7", color: "#92400E" }}>
+            La caja ({formatPrice(captured.ventaPos)}) difiere en más de RD$500 del monto fijado ({formatPrice(captured.monto)}). Metas sigue usando el monto fijado.
+          </p>
+        ) : captured?.difiere ? (
           <p className="mt-3 rounded-2xl px-3 py-2 text-sm" style={{ backgroundColor: "#FEF3C7", color: "#92400E" }}>
             El monto fijado ({formatPrice(captured.monto)}) no coincide con la caja ({formatPrice(captured.ventaPos)}). Metas usa el monto fijado.
           </p>
@@ -273,6 +277,11 @@ export function AdminVentas() {
                       ariaLabel={`Monto del ${venta.fecha}`}
                       onSave={(nextMonto) => saveInline(venta.fecha, nextMonto)}
                     />
+                    {venta.alertaPos ? (
+                      <span className="mt-1 block text-xs font-semibold" style={{ color: "#92400E" }}>
+                        Difiere más de RD$500
+                      </span>
+                    ) : null}
                     {venta.overrideManual ? (
                       <span className="mt-1 block text-xs font-semibold text-brand-muted">Fijado a mano</span>
                     ) : venta.origen === "pos" ? (

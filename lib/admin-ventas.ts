@@ -14,7 +14,7 @@ import {
 export type { VentaDiaria } from "@/lib/admin-ventas-shared";
 export { VENTAS_DEFAULT_LIMIT, parseVentasLimit } from "@/lib/admin-ventas-shared";
 
-const VENTA_SELECT = "id, fecha, dia_semana, venta_real, origen, override_manual, venta_pos";
+const VENTA_SELECT = "id, fecha, dia_semana, venta_real, origen, override_manual, venta_pos, alerta_pos";
 const VENTA_SELECT_BASE = "id, fecha, dia_semana, venta_real";
 
 type VentaRow = {
@@ -25,6 +25,7 @@ type VentaRow = {
   origen?: unknown;
   override_manual?: unknown;
   venta_pos?: unknown;
+  alerta_pos?: unknown;
 };
 
 function missingColumn(error: unknown): boolean {
@@ -81,6 +82,7 @@ function mapVenta(row: VentaRow | null): VentaDiaria | null {
     origen,
     overrideManual: row.override_manual === true,
     difiere: ventaDifiere({ ventaReal: monto, ventaPos }),
+    alertaPos: row.alerta_pos === true || (ventaPos != null && monto != null && Math.abs(monto - ventaPos) > 500),
   };
 }
 
@@ -138,13 +140,15 @@ export async function upsertVentaDiaria(fecha: string, monto: number): Promise<V
       .upsert({ fecha, dia_semana: diaSemana, venta_real: monto }, { onConflict: "fecha" })
       .select(VENTA_SELECT_BASE)
       .maybeSingle();
-    if (!legacy.error) {
-      const mapped = mapVenta(legacy.data);
-      if (mapped) {
-        await publishAgentEvent("venta.guardada", { ...mapped });
-        return mapped;
-      }
+    if (legacy.error) {
+      throw legacy.error;
     }
+    const mapped = mapVenta(legacy.data);
+    if (!mapped) {
+      throw new Error("No pudimos guardar la venta");
+    }
+    await publishAgentEvent("venta.guardada", { ...mapped });
+    return mapped;
   }
   if (!upsertError) {
     const mapped = mapVenta(upserted);

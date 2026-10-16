@@ -1,5 +1,7 @@
 -- POS de Odoo como detalle de venta. La plataforma no escribe en Odoo.
 -- Categoría y costo salen del catálogo y de las facturas de compra, nunca del POS.
+-- El costo (costo_manual y factura_lineas.costo_unitario) se guarda SIN ITBIS.
+-- El precio de venta ya incluye ITBIS. La tasa es la de la línea, si vino, y si no la de products.tasa_itbis.
 
 create table if not exists public.pos_sesiones (
   id bigserial primary key,
@@ -46,6 +48,7 @@ create table if not exists public.pos_ordenes (
   empleado_odoo_id int,
   n_lineas int,
   es_devolucion boolean not null default false,
+  lote_id text,
   unique (tienda, odoo_id),
   constraint pos_ordenes_hora_check check (hora_local between 0 and 23),
   constraint pos_ordenes_dow_check check (dow between 1 and 7)
@@ -69,7 +72,9 @@ create table if not exists public.pos_orden_lineas (
   subtotal_con_itbis numeric(12, 2),
   es_devolucion boolean not null default false,
   odoo_refunded_line_id int,
+  tasa_itbis numeric(4, 2),
   unique (tienda, odoo_id),
+  constraint pos_orden_lineas_tasa_check check (tasa_itbis is null or tasa_itbis in (0, 16, 18)),
   constraint pos_orden_lineas_match_check check (match_estado in ('match', 'sin_match'))
 );
 
@@ -98,6 +103,7 @@ create table if not exists public.resumen_producto_dia (
   nombre text,
   unidades numeric(12, 3) not null,
   venta numeric(12, 2) not null,
+  venta_neta numeric(12, 2) not null default 0,
   n_ordenes int not null,
   primary key (tienda, fecha, codigo_odoo)
 );
@@ -206,13 +212,54 @@ begin
       add column if not exists origen text,
       add column if not exists override_manual boolean not null default false,
       add column if not exists venta_pos numeric(12, 2),
-      add column if not exists pos_actualizada_en timestamptz;
+      add column if not exists pos_actualizada_en timestamptz,
+      add column if not exists alerta_pos boolean not null default false;
+    update public.ventas_diarias
+      set override_manual = true
+      where override_manual is distinct from true;
     alter table public.ventas_diarias drop constraint if exists ventas_diarias_origen_check;
     alter table public.ventas_diarias
       add constraint ventas_diarias_origen_check
       check (origen is null or origen in ('manual', 'pos'));
   end if;
 end $$;
+
+alter table public.products
+  add column if not exists tasa_itbis numeric(4, 2) not null default 18;
+
+alter table public.products drop constraint if exists products_tasa_itbis_check;
+alter table public.products
+  add constraint products_tasa_itbis_check
+  check (tasa_itbis in (0, 16, 18));
+
+comment on column public.products.tasa_itbis is
+  'ITBIS incluido en el precio de venta: 0, 16 o 18. El costo_manual no lo incluye.';
+
+comment on column public.products.costo_manual is
+  'Costo por unidad de venta, sin ITBIS.';
+
+do $$
+begin
+  if to_regclass('public.factura_lineas') is not null then
+    execute $c$comment on column public.factura_lineas.costo_unitario is
+      'Costo por unidad de venta, sin ITBIS. No es el precio de la caja.'$c$;
+  end if;
+end $$;
+
+create table if not exists public.pos_rematch_cola (
+  codigo_odoo text primary key,
+  despues_de bigint not null default 0,
+  encolado_en timestamptz not null default now()
+);
+
+create or replace function public.pos_orden_cuenta(p_estado text)
+returns boolean
+language sql
+immutable
+set search_path = public
+as $$
+  select lower(btrim(coalesce(p_estado, ''))) in ('paid', 'done', 'invoiced')
+$$;
 
 create or replace function public.pos_dia_semana(p_fecha date)
 returns text
@@ -300,6 +347,7 @@ begin
     from public.pos_ordenes o
     join public.pos_orden_lineas l on l.orden_id = o.id
     where o.tienda = p_tienda
+      and public.pos_orden_cuenta(o.estado)
       and o.fecha_operativa >= p_semana
       and o.fecha_operativa < p_semana + 7
       and l.cantidad > 0
@@ -350,7 +398,7 @@ begin
   end if;
 
   delete from public.resumen_producto_dia where tienda = p_tienda and fecha = any (p_fechas);
-  insert into public.resumen_producto_dia (tienda, fecha, codigo_odoo, product_id, nombre, unidades, venta, n_ordenes)
+  insert into public.resumen_producto_dia (tienda, fecha, codigo_odoo, product_id, nombre, unidades, venta, venta_neta, n_ordenes)
   select
     o.tienda,
     o.fecha_operativa,
@@ -359,11 +407,16 @@ begin
     coalesce(max(pr.nombre), max(l.nombre_odoo), l.codigo_odoo),
     round(sum(l.cantidad), 3),
     round(sum(coalesce(l.subtotal_con_itbis, l.subtotal, 0)), 2),
+    round(sum(
+      coalesce(l.subtotal_con_itbis, l.subtotal, 0)
+      / (1 + coalesce(l.tasa_itbis, pr.tasa_itbis, 18) / 100.0)
+    ), 2),
     count(distinct l.orden_id)::int
   from public.pos_orden_lineas l
   join public.pos_ordenes o on o.id = l.orden_id
   left join public.products pr on pr.id = l.product_id
   where o.tienda = p_tienda
+    and public.pos_orden_cuenta(o.estado)
     and o.fecha_operativa = any (p_fechas)
   group by o.tienda, o.fecha_operativa, l.codigo_odoo;
 
@@ -383,10 +436,12 @@ begin
     from public.pos_orden_lineas l
     join public.pos_ordenes o2 on o2.id = l.orden_id
     where o2.tienda = p_tienda
+      and public.pos_orden_cuenta(o2.estado)
       and o2.fecha_operativa = any (p_fechas)
     group by l.orden_id
   ) lu on lu.orden_id = o.id
   where o.tienda = p_tienda
+    and public.pos_orden_cuenta(o.estado)
     and o.fecha_operativa = any (p_fechas)
   group by o.tienda, o.fecha_operativa, o.hora_local, o.dow;
 
@@ -408,6 +463,7 @@ begin
   join public.pos_ordenes o on o.id = l.orden_id
   left join public.products pr on pr.id = l.product_id
   where o.tienda = p_tienda
+    and public.pos_orden_cuenta(o.estado)
     and o.fecha_operativa = any (p_fechas)
   group by 1, 2, 3, 4, 5;
 
@@ -426,6 +482,7 @@ begin
   join public.pos_ordenes o on o.id = l.orden_id
   left join public.products pr on pr.id = l.product_id
   where o.tienda = p_tienda
+    and public.pos_orden_cuenta(o.estado)
     and o.fecha_operativa = any (p_fechas)
   group by o.tienda, o.fecha_operativa, 3;
 
@@ -451,14 +508,18 @@ begin
   left join (
     select fecha_operativa as fecha, count(*)::int as n_ordenes, round(sum(total), 2) as venta
     from public.pos_ordenes
-    where tienda = p_tienda and fecha_operativa = any (p_fechas)
+    where tienda = p_tienda
+      and public.pos_orden_cuenta(estado)
+      and fecha_operativa = any (p_fechas)
     group by fecha_operativa
   ) o on o.fecha = d.fecha
   left join (
     select o2.fecha_operativa as fecha, round(sum(l2.cantidad), 3) as unidades
     from public.pos_orden_lineas l2
     join public.pos_ordenes o2 on o2.id = l2.orden_id
-    where o2.tienda = p_tienda and o2.fecha_operativa = any (p_fechas)
+    where o2.tienda = p_tienda
+      and public.pos_orden_cuenta(o2.estado)
+      and o2.fecha_operativa = any (p_fechas)
     group by o2.fecha_operativa
   ) l on l.fecha = d.fecha
   left join (
@@ -470,6 +531,7 @@ begin
       round(coalesce(sum(pg.monto) filter (where pg.metodo = 'credito'), 0), 2) as credito,
       round(coalesce(sum(pg.monto) filter (where pg.metodo = 'otro'), 0), 2) as otro
     from public.pos_pagos pg
+    join public.pos_ordenes op on op.id = pg.orden_id and public.pos_orden_cuenta(op.estado)
     join public.pos_sesiones s on s.id = pg.sesion_id
     where s.tienda = p_tienda
       and s.fecha_operativa = any (p_fechas)
@@ -491,11 +553,11 @@ begin
     case when count(o.id) = 0 then null else round(coalesce(max(u.unidades), 0) / count(o.id), 3) end,
     coalesce(max(u.unidades), 0)
   from public.pos_sesiones s
-  left join public.pos_ordenes o on o.sesion_id = s.id
+  left join public.pos_ordenes o on o.sesion_id = s.id and public.pos_orden_cuenta(o.estado)
   left join (
     select s2.fecha_operativa, s2.turno, round(sum(l.cantidad), 3) as unidades
     from public.pos_orden_lineas l
-    join public.pos_ordenes o2 on o2.id = l.orden_id
+    join public.pos_ordenes o2 on o2.id = l.orden_id and public.pos_orden_cuenta(o2.estado)
     join public.pos_sesiones s2 on s2.id = o2.sesion_id
     where s2.tienda = p_tienda and s2.fecha_operativa = any (p_fechas)
     group by s2.fecha_operativa, s2.turno
@@ -582,18 +644,107 @@ as $$
 begin
   if tg_op = 'DELETE' then
     if old.codigo_odoo is not null then
-      perform public.rematch_lineas(old.codigo_odoo);
+      insert into public.pos_rematch_cola (codigo_odoo)
+      values (old.codigo_odoo)
+      on conflict (codigo_odoo) do update
+      set despues_de = 0, encolado_en = now();
     end if;
     return old;
   end if;
 
   if tg_op = 'UPDATE' and old.codigo_odoo is distinct from new.codigo_odoo and old.codigo_odoo is not null then
-    perform public.rematch_lineas(old.codigo_odoo);
+    insert into public.pos_rematch_cola (codigo_odoo)
+    values (old.codigo_odoo)
+    on conflict (codigo_odoo) do update
+    set despues_de = 0, encolado_en = now();
   end if;
   if new.codigo_odoo is not null and (tg_op = 'INSERT' or old.codigo_odoo is distinct from new.codigo_odoo) then
-    perform public.rematch_lineas(new.codigo_odoo);
+    insert into public.pos_rematch_cola (codigo_odoo)
+    values (new.codigo_odoo)
+    on conflict (codigo_odoo) do update
+    set despues_de = 0, encolado_en = now();
   end if;
   return new;
+end;
+$$;
+
+create or replace function public.procesar_pos_rematch(p_limite integer)
+returns jsonb
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_limite integer := least(500, greatest(coalesce(p_limite, 500), 1));
+  v_n integer := 0;
+  v_queda integer := 0;
+  v_tienda text;
+  v_fechas date[];
+begin
+  drop table if exists tmp_pos_rematch;
+  create temp table tmp_pos_rematch (
+    id bigint primary key,
+    codigo text not null,
+    orden_id bigint not null
+  ) on commit drop;
+
+  insert into tmp_pos_rematch (id, codigo, orden_id)
+  select l.id, l.codigo_odoo, l.orden_id
+  from public.pos_orden_lineas l
+  join public.pos_rematch_cola c on c.codigo_odoo = l.codigo_odoo
+  where l.id > c.despues_de
+  order by l.id
+  limit v_limite;
+
+  select count(*)::int into v_n from tmp_pos_rematch;
+
+  update public.pos_orden_lineas l
+  set
+    product_id = p.id,
+    match_estado = case when p.id is null then 'sin_match' else 'match' end
+  from tmp_pos_rematch t
+  left join public.products p on p.codigo_odoo = t.codigo
+  where l.id = t.id
+    and (
+      l.product_id is distinct from p.id
+      or l.match_estado is distinct from case when p.id is null then 'sin_match' else 'match' end
+    );
+
+  update public.pos_rematch_cola c
+  set despues_de = m.max_id
+  from (
+    select codigo, max(id) as max_id
+    from tmp_pos_rematch
+    group by codigo
+  ) m
+  where c.codigo_odoo = m.codigo;
+
+  delete from public.pos_rematch_cola c
+  where not exists (
+    select 1
+    from public.pos_orden_lineas l
+    where l.codigo_odoo = c.codigo_odoo
+      and l.id > c.despues_de
+  );
+
+  for v_tienda in
+    select distinct o.tienda
+    from tmp_pos_rematch t
+    join public.pos_ordenes o on o.id = t.orden_id
+  loop
+    select array_agg(distinct o.fecha_operativa)
+    into v_fechas
+    from tmp_pos_rematch t
+    join public.pos_ordenes o on o.id = t.orden_id
+    where o.tienda = v_tienda;
+    perform public.refrescar_resumenes_fechas(v_tienda, v_fechas);
+  end loop;
+
+  select count(*)::int into v_queda
+  from public.pos_orden_lineas l
+  join public.pos_rematch_cola c on c.codigo_odoo = l.codigo_odoo
+  where l.id > c.despues_de;
+
+  return jsonb_build_object('procesadas', v_n, 'pendientes', v_queda);
 end;
 $$;
 
@@ -637,9 +788,17 @@ declare
   v_origen text;
   v_override boolean := false;
   v_hora int;
+  v_modo text := lower(btrim(coalesce(p_payload->>'modo', 'completo')));
+  v_lote text := nullif(btrim(p_payload->>'loteId'), '');
 begin
+  if v_modo not in ('completo', 'parcial', 'final') then
+    raise exception using errcode = '22023', message = 'modo tiene que ser completo, parcial o final', hint = 'modo';
+  end if;
+  if v_modo in ('parcial', 'final') and v_lote is null then
+    raise exception using errcode = '22023', message = 'Una sesión en partes necesita loteId', hint = 'loteId';
+  end if;
   if v_odoo_id is null or v_start is null then
-    raise exception 'Sesión incompleta';
+    raise exception using errcode = '22023', message = 'La sesión necesita odooId y startAt', hint = 'sesion';
   end if;
 
   if v_estado is distinct from 'closed' then
@@ -741,18 +900,30 @@ begin
     coalesce(o->'pagos', '[]'::jsonb)
   from jsonb_array_elements(coalesce(p_payload->'ordenes', '[]'::jsonb)) o;
 
-  with borradas as (
-    delete from public.pos_ordenes
-    where sesion_id = v_sesion_id
-      and odoo_id not in (select odoo_id from tmp_pos_ordenes)
-    returning id
-  )
-  select count(*)::int into v_ordenes_borradas from borradas;
+  if v_modo = 'parcial' then
+    v_ordenes_borradas := 0;
+  elsif v_modo = 'final' then
+    with borradas as (
+      delete from public.pos_ordenes
+      where sesion_id = v_sesion_id
+        and lote_id is distinct from v_lote
+      returning id
+    )
+    select count(*)::int into v_ordenes_borradas from borradas;
+  else
+    with borradas as (
+      delete from public.pos_ordenes
+      where sesion_id = v_sesion_id
+        and odoo_id not in (select odoo_id from tmp_pos_ordenes)
+      returning id
+    )
+    select count(*)::int into v_ordenes_borradas from borradas;
+  end if;
 
   with upserted as (
     insert into public.pos_ordenes (
       tienda, odoo_id, sesion_id, nombre, pos_reference, fecha, fecha_operativa, hora_local, dow,
-      total, impuesto, pagado, cambio, estado, ncf, cliente_odoo_id, empleado_odoo_id, n_lineas, es_devolucion
+      total, impuesto, pagado, cambio, estado, ncf, cliente_odoo_id, empleado_odoo_id, n_lineas, es_devolucion, lote_id
     )
     select
       v_tienda,
@@ -773,7 +944,8 @@ begin
       t.cliente_odoo_id,
       t.empleado_odoo_id,
       t.n_lineas,
-      t.total < 0
+      t.total < 0,
+      v_lote
     from tmp_pos_ordenes t
     on conflict (tienda, odoo_id) do update set
       sesion_id = excluded.sesion_id,
@@ -792,7 +964,8 @@ begin
       cliente_odoo_id = excluded.cliente_odoo_id,
       empleado_odoo_id = excluded.empleado_odoo_id,
       n_lineas = excluded.n_lineas,
-      es_devolucion = excluded.es_devolucion
+      es_devolucion = excluded.es_devolucion,
+      lote_id = excluded.lote_id
     returning (xmax = 0) as inserted
   )
   select
@@ -814,7 +987,8 @@ begin
     descuento numeric(6, 2),
     subtotal numeric(12, 2),
     subtotal_con_itbis numeric(12, 2),
-    odoo_refunded_line_id int
+    odoo_refunded_line_id int,
+    tasa_itbis numeric(4, 2)
   ) on commit drop;
 
   insert into tmp_pos_lineas
@@ -833,7 +1007,8 @@ begin
     round(nullif(l->>'descuento', '')::numeric, 2),
     round(nullif(l->>'subtotal', '')::numeric, 2),
     round(nullif(l->>'subtotalConItbis', '')::numeric, 2),
-    nullif(l->>'odooRefundedLineId', '')::int
+    nullif(l->>'odooRefundedLineId', '')::int,
+    nullif(l->>'tasaItbis', '')::numeric
   from tmp_pos_ordenes t
   cross join lateral jsonb_array_elements(t.lineas) l;
 
@@ -842,6 +1017,7 @@ begin
     using public.pos_ordenes o
     where l.orden_id = o.id
       and o.sesion_id = v_sesion_id
+      and o.odoo_id in (select odoo_id from tmp_pos_ordenes)
       and not exists (
         select 1 from tmp_pos_lineas t
         where t.odoo_id = l.odoo_id
@@ -853,7 +1029,7 @@ begin
   with upserted as (
     insert into public.pos_orden_lineas (
       tienda, odoo_id, orden_id, product_id, odoo_product_id, odoo_tmpl_id, codigo_odoo, nombre_odoo,
-      match_estado, cantidad, precio_unit, descuento, subtotal, subtotal_con_itbis, es_devolucion, odoo_refunded_line_id
+      match_estado, cantidad, precio_unit, descuento, subtotal, subtotal_con_itbis, es_devolucion, odoo_refunded_line_id, tasa_itbis
     )
     select
       v_tienda,
@@ -871,7 +1047,8 @@ begin
       t.subtotal,
       t.subtotal_con_itbis,
       t.cantidad < 0 or t.odoo_refunded_line_id is not null,
-      t.odoo_refunded_line_id
+      t.odoo_refunded_line_id,
+      t.tasa_itbis
     from tmp_pos_lineas t
     join public.pos_ordenes o on o.tienda = v_tienda and o.odoo_id = t.orden_odoo_id
     left join public.products p on p.codigo_odoo = t.codigo_odoo
@@ -889,7 +1066,8 @@ begin
       subtotal = excluded.subtotal,
       subtotal_con_itbis = excluded.subtotal_con_itbis,
       es_devolucion = excluded.es_devolucion,
-      odoo_refunded_line_id = excluded.odoo_refunded_line_id
+      odoo_refunded_line_id = excluded.odoo_refunded_line_id,
+      tasa_itbis = excluded.tasa_itbis
     returning (xmax = 0) as inserted
   )
   select
@@ -930,6 +1108,7 @@ begin
     using public.pos_ordenes o
     where pg.orden_id = o.id
       and o.sesion_id = v_sesion_id
+      and o.odoo_id in (select odoo_id from tmp_pos_ordenes)
       and not exists (
         select 1 from tmp_pos_pagos t where t.odoo_id = pg.odoo_id
       )
@@ -975,14 +1154,18 @@ begin
 
   select round(coalesce(sum(total), 0), 2) into v_suma_ordenes
   from public.pos_ordenes
-  where sesion_id = v_sesion_id;
+  where sesion_id = v_sesion_id
+    and public.pos_orden_cuenta(estado);
 
-  select round(coalesce(sum(monto), 0), 2) into v_suma_pagos
-  from public.pos_pagos
-  where sesion_id = v_sesion_id;
+  select round(coalesce(sum(pg.monto), 0), 2) into v_suma_pagos
+  from public.pos_pagos pg
+  join public.pos_ordenes o on o.id = pg.orden_id
+  where pg.sesion_id = v_sesion_id
+    and public.pos_orden_cuenta(o.estado);
 
   select total_pagos into v_total from public.pos_sesiones where id = v_sesion_id;
-  v_alerta := v_total is not null
+  v_alerta := v_modo <> 'parcial'
+    and v_total is not null
     and (
       abs(v_total - v_suma_ordenes) > 0.01
       or abs(v_total - v_suma_pagos) > 0.01
@@ -1000,23 +1183,28 @@ begin
   where o.sesion_id = v_sesion_id
     and l.match_estado = 'sin_match';
 
-  perform public.refrescar_resumenes(v_tienda, v_fecha);
-  if v_fecha_anterior is not null and v_fecha_anterior is distinct from v_fecha then
-    perform public.refrescar_resumenes(v_tienda, v_fecha_anterior);
+  if v_modo <> 'parcial' then
+    perform public.refrescar_resumenes(v_tienda, v_fecha);
+    if v_fecha_anterior is not null and v_fecha_anterior is distinct from v_fecha then
+      perform public.refrescar_resumenes(v_tienda, v_fecha_anterior);
+    end if;
   end if;
 
   select round(coalesce(sum(total), 0), 2) into v_venta_dia
   from public.pos_ordenes
-  where tienda = v_tienda and fecha_operativa = v_fecha;
+  where tienda = v_tienda
+    and fecha_operativa = v_fecha
+    and public.pos_orden_cuenta(estado);
 
   v_venta_real := v_venta_dia;
   v_origen := 'pos';
   v_override := false;
 
-  if to_regclass('public.ventas_diarias') is not null then
+  if v_modo <> 'parcial' and to_regclass('public.ventas_diarias') is not null then
     update public.ventas_diarias
     set venta_pos = v_venta_dia,
         pos_actualizada_en = now(),
+        alerta_pos = override_manual and abs(venta_real - v_venta_dia) > 500,
         venta_real = case when override_manual then venta_real else v_venta_dia end,
         origen = case when override_manual then coalesce(origen, 'manual') else 'pos' end,
         dia_semana = coalesce(dia_semana, public.pos_dia_semana(v_fecha))
@@ -1025,8 +1213,8 @@ begin
     into v_venta_real, v_origen, v_override;
 
     if not found then
-      insert into public.ventas_diarias (fecha, dia_semana, venta_real, origen, override_manual, venta_pos, pos_actualizada_en)
-      values (v_fecha, public.pos_dia_semana(v_fecha), v_venta_dia, 'pos', false, v_venta_dia, now());
+      insert into public.ventas_diarias (fecha, dia_semana, venta_real, origen, override_manual, venta_pos, pos_actualizada_en, alerta_pos)
+      values (v_fecha, public.pos_dia_semana(v_fecha), v_venta_dia, 'pos', false, v_venta_dia, now(), false);
       v_venta_real := v_venta_dia;
       v_origen := 'pos';
       v_override := false;
@@ -1036,12 +1224,15 @@ begin
       update public.ventas_diarias
       set venta_pos = src.venta,
           pos_actualizada_en = now(),
+          alerta_pos = override_manual and abs(venta_real - src.venta) > 500,
           venta_real = case when override_manual then venta_real else src.venta end,
           origen = case when override_manual then coalesce(origen, 'manual') else 'pos' end
       from (
         select round(coalesce(sum(total), 0), 2) as venta
         from public.pos_ordenes
-        where tienda = v_tienda and fecha_operativa = v_fecha_anterior
+        where tienda = v_tienda
+          and fecha_operativa = v_fecha_anterior
+          and public.pos_orden_cuenta(estado)
       ) src
       where fecha = v_fecha_anterior;
     end if;
@@ -1089,7 +1280,8 @@ returns table (
   venta numeric,
   venta_con_costo numeric,
   margen numeric,
-  unidades numeric
+  unidades numeric,
+  venta_neta_con_costo numeric
 )
 language sql
 stable
@@ -1099,7 +1291,8 @@ as $$
     select
       (array_agg(r.product_id) filter (where r.product_id is not null))[1] as product_id,
       sum(r.unidades) as unidades,
-      sum(r.venta) as venta
+      sum(r.venta) as venta,
+      sum(r.venta_neta) as venta_neta
     from public.resumen_producto_dia r
     where r.tienda = p_tienda
       and r.fecha between p_desde and p_hasta
@@ -1108,9 +1301,9 @@ as $$
   select
     round(coalesce(sum(a.venta), 0), 2),
     round(coalesce(sum(a.venta) filter (where c.costo_unit is not null), 0), 2),
-    -- La venta ya incluye ITBIS 18%. El margen usa la base sin ese impuesto.
-    round(sum(a.venta / 1.18 - a.unidades * c.costo_unit) filter (where c.costo_unit is not null), 2),
-    round(coalesce(sum(a.unidades), 0), 3)
+    round(sum(coalesce(a.venta_neta, 0) - a.unidades * c.costo_unit) filter (where c.costo_unit is not null), 2),
+    round(coalesce(sum(a.unidades), 0), 3),
+    round(coalesce(sum(a.venta_neta) filter (where c.costo_unit is not null), 0), 2)
   from agg a
   left join public.costo_producto_vigente c on c.product_id = a.product_id;
 $$;
@@ -1159,6 +1352,7 @@ as $$
       max(r.nombre) as nombre_resumen,
       sum(r.unidades) as unidades,
       sum(r.venta) as venta,
+      sum(r.venta_neta) as venta_neta,
       sum(r.n_ordenes)::int as n_ordenes
     from public.resumen_producto_dia r
     where r.tienda = p_tienda
@@ -1190,10 +1384,10 @@ as $$
       c.origen as costo_origen,
       c.fecha as costo_fecha,
       c.ref as costo_ref,
-      case when c.costo_unit is null then null else round(a.venta / 1.18 - a.unidades * c.costo_unit, 2) end as margen,
+      case when c.costo_unit is null then null else round(coalesce(a.venta_neta, 0) - a.unidades * c.costo_unit, 2) end as margen,
       case
-        when c.costo_unit is null or a.venta = 0 then null
-        else round((a.venta / 1.18 - a.unidades * c.costo_unit) / (a.venta / 1.18), 4)
+        when c.costo_unit is null or coalesce(a.venta_neta, 0) = 0 then null
+        else round((a.venta_neta - a.unidades * c.costo_unit) / a.venta_neta, 4)
       end as margen_pct,
       round(an.venta, 2) as venta_anterior,
       case
@@ -1489,6 +1683,7 @@ as $$
   from public.pos_orden_lineas l
   join public.pos_ordenes o on o.id = l.orden_id
   where o.tienda = p_tienda
+    and public.pos_orden_cuenta(o.estado)
     and l.codigo_odoo = p_codigo
     and o.fecha_operativa between p_desde and p_hasta
   group by o.hora_local
@@ -1603,7 +1798,8 @@ begin
     'resumen_categoria_dia',
     'resumen_dia',
     'resumen_turno_dia',
-    'resumen_canasta_semana'
+    'resumen_canasta_semana',
+    'pos_rematch_cola'
   ]
   loop
     execute format('revoke all on table public.%I from anon, authenticated, public', tabla);
@@ -1632,6 +1828,7 @@ declare
   firma text;
 begin
   foreach firma in array array[
+    'public.pos_orden_cuenta(text)',
     'public.pos_dia_semana(date)',
     'public.pos_metodo_canon(text)',
     'public.refrescar_canasta(text, date)',
@@ -1649,7 +1846,8 @@ begin
     'public.consumo_producto_horas(text, text, date, date)',
     'public.consumo_categorias(text, date, date)',
     'public.consumo_canasta(text, date, integer, numeric, text, text)',
-    'public.consumo_calidad_conteos(text, date, date)'
+    'public.consumo_calidad_conteos(text, date, date)',
+    'public.procesar_pos_rematch(integer)'
   ]
   loop
     execute format('revoke all on function %s from public, anon, authenticated', firma);

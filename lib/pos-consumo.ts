@@ -5,7 +5,6 @@ import {
   decodeCursor,
   encodeCursor,
   lunesDe,
-  ITBIS_TASA,
   margenConsumo,
   parseDias,
   parseLimit,
@@ -118,12 +117,16 @@ export type ResumenConsumo = {
   categorias: Array<{ categoria: string; venta: number }>;
 };
 
-function kpisDe(dias: DiaConsumo[], margen: { venta: number; ventaConCosto: number; margen: number | null; unidades: number } | null): KpisConsumo {
+function kpisDe(
+  dias: DiaConsumo[],
+  margen: { venta: number; ventaConCosto: number; margen: number | null; unidades: number; ventaNetaConCosto: number } | null,
+): KpisConsumo {
   const venta = dias.reduce((sum, dia) => sum + dia.venta, 0);
   const ordenes = dias.reduce((sum, dia) => sum + dia.ordenes, 0);
   const unidades = margen?.unidades ?? dias.reduce((sum, dia) => sum + dia.unidades, 0);
   const ventaConCosto = margen?.ventaConCosto ?? 0;
   const margenValor = margen?.margen ?? null;
+  const ventaNeta = margen?.ventaNetaConCosto ?? 0;
   return {
     venta: Math.round(venta * 100) / 100,
     ordenes,
@@ -131,10 +134,7 @@ function kpisDe(dias: DiaConsumo[], margen: { venta: number; ventaConCosto: numb
     unidadesPorTicket: ordenes > 0 ? Math.round((unidades / ordenes) * 1000) / 1000 : null,
     unidades,
     margen: margenValor,
-    margenPct:
-      margenValor == null || ventaConCosto === 0
-        ? null
-        : Math.round((margenValor / (ventaConCosto / (1 + ITBIS_TASA))) * 10000) / 10000,
+    margenPct: margenValor == null || ventaNeta === 0 ? null : Math.round((margenValor / ventaNeta) * 10000) / 10000,
     cobertura: (margen?.venta ?? 0) > 0 ? Math.round((ventaConCosto / (margen?.venta ?? 0)) * 10000) / 10000 : null,
     ventaConCosto,
   };
@@ -163,14 +163,34 @@ async function margenPeriodo(tienda: string, desde: string, hasta: string) {
   }
   const row = Array.isArray(data) ? data[0] : null;
   if (!row) {
-    return { venta: 0, ventaConCosto: 0, margen: null as number | null, unidades: 0 };
+    return { venta: 0, ventaConCosto: 0, margen: null as number | null, unidades: 0, ventaNetaConCosto: 0 };
   }
   return {
     venta: num(row.venta),
     ventaConCosto: num(row.venta_con_costo),
     margen: numOrNull(row.margen),
     unidades: num(row.unidades),
+    ventaNetaConCosto: num(row.venta_neta_con_costo),
   };
+}
+
+const PAGINA_RESUMEN = 1000;
+
+async function paginar<T>(
+  fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: RpcError }>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += PAGINA_RESUMEN) {
+    const page = await fetchPage(from, from + PAGINA_RESUMEN - 1);
+    if (page.error) {
+      fallar(page.error);
+    }
+    const chunk = page.data ?? [];
+    rows.push(...chunk);
+    if (chunk.length < PAGINA_RESUMEN) {
+      return rows;
+    }
+  }
 }
 
 function mapProducto(row: Record<string, unknown>): ProductoConsumo {
@@ -238,14 +258,16 @@ export async function cargarResumen(periodo: ConsumoPeriodo, now = Date.now()): 
   const coberturaDesde = [periodo.desde, periodo.anterior.desde, lunesPrevio, mesPrevioDesde].sort()[0];
 
   const [diasTodos, margen, margenAnt, top, horas, calidad, turnos, categorias, frescura] = await Promise.all([
-    supabase
-      .from("resumen_dia")
-      .select("fecha, n_ordenes, venta, ticket_promedio, unidades_por_ticket, unidades, efectivo, banco, tarjeta, credito, otro")
-      .eq("tienda", tienda)
-      .gte("fecha", coberturaDesde)
-      .lte("fecha", periodo.hasta)
-      .order("fecha", { ascending: true })
-      .limit(PERIODO_TOPE),
+    paginar((from, to) =>
+      supabase
+        .from("resumen_dia")
+        .select("fecha, n_ordenes, venta, ticket_promedio, unidades_por_ticket, unidades, efectivo, banco, tarjeta, credito, otro")
+        .eq("tienda", tienda)
+        .gte("fecha", coberturaDesde)
+        .lte("fecha", periodo.hasta)
+        .order("fecha", { ascending: true })
+        .range(from, to),
+    ),
     margenPeriodo(tienda, periodo.desde, periodo.hasta),
     periodo.comparar ? margenPeriodo(tienda, periodo.anterior.desde, periodo.anterior.hasta) : Promise.resolve(null),
     supabase.rpc("consumo_top_productos", {
@@ -269,25 +291,25 @@ export async function cargarResumen(periodo: ConsumoPeriodo, now = Date.now()): 
       p_categoria: null,
     }),
     supabase.rpc("consumo_calidad_conteos", { p_tienda: tienda, p_desde: periodo.desde, p_hasta: periodo.hasta }),
-    supabase
-      .from("resumen_turno_dia")
-      .select("turno, n_ordenes, venta, ticket_promedio, unidades_por_ticket")
-      .eq("tienda", tienda)
-      .gte("fecha", periodo.desde)
-      .lte("fecha", periodo.hasta)
-      .limit(PERIODO_TOPE),
+    paginar((from, to) =>
+      supabase
+        .from("resumen_turno_dia")
+        .select("turno, n_ordenes, venta, ticket_promedio, unidades_por_ticket")
+        .eq("tienda", tienda)
+        .gte("fecha", periodo.desde)
+        .lte("fecha", periodo.hasta)
+        .range(from, to),
+    ),
     supabase.rpc("consumo_categorias", { p_tienda: tienda, p_desde: periodo.desde, p_hasta: periodo.hasta }),
     cargarFrescura(now),
   ]);
 
-  if (diasTodos.error) fallar(diasTodos.error);
   if (top.error) fallar(top.error);
   if (horas.error) fallar(horas.error);
   if (calidad.error) fallar(calidad.error);
-  if (turnos.error) fallar(turnos.error);
   if (categorias.error) fallar(categorias.error);
 
-  const todos = (diasTodos.data ?? []).map((row) => ({ ...mapDia(row), mix: row }));
+  const todos = diasTodos.map((row) => ({ ...mapDia(row), mix: row }));
   const enRango = (desde: string, hasta: string) => todos.filter((row) => row.fecha >= desde && row.fecha <= hasta);
   const dias = enRango(periodo.desde, periodo.hasta);
   const diasAnterior = enRango(periodo.anterior.desde, periodo.anterior.hasta);
@@ -307,7 +329,7 @@ export async function cargarResumen(periodo: ConsumoPeriodo, now = Date.now()): 
   );
   const calidadRow = Array.isArray(calidad.data) ? calidad.data[0] : null;
   const turnosAgg = new Map<"am" | "pm", { venta: number; ordenes: number; unidadesTicket: number; tickets: number }>();
-  for (const row of turnos.data ?? []) {
+  for (const row of turnos) {
     const turno = row.turno === "pm" ? "pm" : "am";
     const current = turnosAgg.get(turno) ?? { venta: 0, ordenes: 0, unidadesTicket: 0, tickets: 0 };
     current.venta += num(row.venta);
@@ -377,8 +399,6 @@ export async function cargarResumen(periodo: ConsumoPeriodo, now = Date.now()): 
   };
 }
 
-const PERIODO_TOPE = 800;
-
 export async function cargarProductos(input: {
   periodo: ConsumoPeriodo;
   orden: OrdenConsumo;
@@ -436,15 +456,17 @@ export async function cargarProducto(codigo: string, periodo: ConsumoPeriodo) {
   const supabase = getSupabaseAdminClient();
   const tienda = TIENDA_DEFAULT;
   const [dias, horas, producto] = await Promise.all([
-    supabase
-      .from("resumen_producto_dia")
-      .select("fecha, unidades, venta, n_ordenes, nombre, product_id")
-      .eq("tienda", tienda)
-      .eq("codigo_odoo", codigo)
-      .gte("fecha", periodo.desde)
-      .lte("fecha", periodo.hasta)
-      .order("fecha", { ascending: true })
-      .limit(PERIODO_TOPE),
+    paginar((from, to) =>
+      supabase
+        .from("resumen_producto_dia")
+        .select("fecha, unidades, venta, venta_neta, n_ordenes, nombre, product_id")
+        .eq("tienda", tienda)
+        .eq("codigo_odoo", codigo)
+        .gte("fecha", periodo.desde)
+        .lte("fecha", periodo.hasta)
+        .order("fecha", { ascending: true })
+        .range(from, to),
+    ),
     supabase.rpc("consumo_producto_horas", {
       p_tienda: tienda,
       p_codigo: codigo,
@@ -453,27 +475,27 @@ export async function cargarProducto(codigo: string, periodo: ConsumoPeriodo) {
     }),
     supabase.from("products").select("id, nombre, marca, categoria, codigo_odoo").eq("codigo_odoo", codigo).limit(1).maybeSingle(),
   ]);
-  if (dias.error) fallar(dias.error);
   if (horas.error) fallar(horas.error);
   if (producto.error) fallar(producto.error);
 
-  const productId = producto.data?.id ? String(producto.data.id) : dias.data?.find((row) => row.product_id)?.product_id ?? null;
+  const productId = producto.data?.id ? String(producto.data.id) : dias.find((row) => row.product_id)?.product_id ?? null;
   const costo = productId
     ? await supabase.from("costo_producto_vigente").select("costo_unit, origen, fecha, ref").eq("product_id", productId).maybeSingle()
     : { data: null, error: null };
   if (costo.error) {
     fallar(costo.error);
   }
-  const serie = (dias.data ?? []).map((row) => ({
+  const serie = dias.map((row) => ({
     fecha: dia(row.fecha),
     unidades: num(row.unidades),
     venta: num(row.venta),
     ordenes: num(row.n_ordenes),
   }));
   const venta = serie.reduce((sum, row) => sum + row.venta, 0);
+  const ventaNeta = dias.reduce((sum, row) => sum + num(row.venta_neta), 0);
   const unidades = serie.reduce((sum, row) => sum + row.unidades, 0);
   const costoUnit = numOrNull(costo.data?.costo_unit);
-  const nombreResumen = dias.data?.find((row) => row.nombre)?.nombre;
+  const nombreResumen = dias.find((row) => row.nombre)?.nombre;
   return {
     codigo,
     productId: productId ? String(productId) : null,
@@ -489,7 +511,7 @@ export async function cargarProducto(codigo: string, periodo: ConsumoPeriodo) {
     costoOrigen: costo.data?.origen ? String(costo.data.origen) : null,
     costoFecha: costo.data?.fecha ? dia(costo.data.fecha) : null,
     costoRef: costo.data?.ref ? String(costo.data.ref) : null,
-    margen: margenConsumo(venta, unidades, costoUnit),
+    margen: costoUnit == null ? null : Math.round((ventaNeta - unidades * costoUnit) * 100) / 100,
     serie,
     horas: ((horas.data ?? []) as Record<string, unknown>[]).map((row) => ({
       hora: num(row.hora),
@@ -509,17 +531,18 @@ export async function cargarHorarios(periodo: ConsumoPeriodo, categoria: string)
       p_hasta: periodo.hasta,
       p_categoria: categoria || null,
     }),
-    supabase
-      .from("resumen_turno_dia")
-      .select("turno, n_ordenes, venta, ticket_promedio, unidades_por_ticket, unidades")
-      .eq("tienda", TIENDA_DEFAULT)
-      .gte("fecha", periodo.desde)
-      .lte("fecha", periodo.hasta)
-      .limit(PERIODO_TOPE),
+    paginar((from, to) =>
+      supabase
+        .from("resumen_turno_dia")
+        .select("turno, n_ordenes, venta, ticket_promedio, unidades_por_ticket, unidades")
+        .eq("tienda", TIENDA_DEFAULT)
+        .gte("fecha", periodo.desde)
+        .lte("fecha", periodo.hasta)
+        .range(from, to),
+    ),
     supabase.rpc("consumo_categorias", { p_tienda: TIENDA_DEFAULT, p_desde: periodo.desde, p_hasta: periodo.hasta }),
   ]);
   if (horas.error) fallar(horas.error);
-  if (turnos.error) fallar(turnos.error);
   if (categorias.error) fallar(categorias.error);
   const celdas = ((horas.data ?? []) as Record<string, unknown>[]).map((row) => ({
     dow: num(row.dow),
@@ -529,7 +552,7 @@ export async function cargarHorarios(periodo: ConsumoPeriodo, categoria: string)
     unidades: num(row.unidades),
   }));
   const porTurno = new Map<string, { venta: number; ordenes: number; unidades: number }>();
-  for (const row of turnos.data ?? []) {
+  for (const row of turnos) {
     const key = String(row.turno);
     const current = porTurno.get(key) ?? { venta: 0, ordenes: 0, unidades: 0 };
     current.venta += num(row.venta);
@@ -731,28 +754,30 @@ export async function cargarConciliacion(periodo: ConsumoPeriodo, cursor: string
 export async function cargarTicket(periodo: ConsumoPeriodo) {
   const supabase = getSupabaseAdminClient();
   const [dias, turnos] = await Promise.all([
-    supabase
-      .from("resumen_dia")
-      .select("fecha, n_ordenes, venta, ticket_promedio, unidades_por_ticket, unidades")
-      .eq("tienda", TIENDA_DEFAULT)
-      .gte("fecha", periodo.desde)
-      .lte("fecha", periodo.hasta)
-      .order("fecha", { ascending: true })
-      .limit(PERIODO_TOPE),
-    supabase
-      .from("resumen_turno_dia")
-      .select("fecha, turno, n_ordenes, venta, ticket_promedio, unidades_por_ticket")
-      .eq("tienda", TIENDA_DEFAULT)
-      .gte("fecha", periodo.desde)
-      .lte("fecha", periodo.hasta)
-      .order("fecha", { ascending: true })
-      .limit(PERIODO_TOPE),
+    paginar((from, to) =>
+      supabase
+        .from("resumen_dia")
+        .select("fecha, n_ordenes, venta, ticket_promedio, unidades_por_ticket, unidades")
+        .eq("tienda", TIENDA_DEFAULT)
+        .gte("fecha", periodo.desde)
+        .lte("fecha", periodo.hasta)
+        .order("fecha", { ascending: true })
+        .range(from, to),
+    ),
+    paginar((from, to) =>
+      supabase
+        .from("resumen_turno_dia")
+        .select("fecha, turno, n_ordenes, venta, ticket_promedio, unidades_por_ticket")
+        .eq("tienda", TIENDA_DEFAULT)
+        .gte("fecha", periodo.desde)
+        .lte("fecha", periodo.hasta)
+        .order("fecha", { ascending: true })
+        .range(from, to),
+    ),
   ]);
-  if (dias.error) fallar(dias.error);
-  if (turnos.error) fallar(turnos.error);
   return {
-    dias: (dias.data ?? []).map((row) => mapDia(row)),
-    turnos: (turnos.data ?? []).map((row) => ({
+    dias: dias.map((row) => mapDia(row)),
+    turnos: turnos.map((row) => ({
       fecha: dia(row.fecha),
       turno: row.turno === "pm" ? "pm" : "am",
       ordenes: num(row.n_ordenes),

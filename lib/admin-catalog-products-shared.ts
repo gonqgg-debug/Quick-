@@ -23,7 +23,9 @@ export type AdminCatalogProduct = {
   marca: string | null;
   categoria: string;
   precio: number;
-  /** Costo que se muestra: el más reciente entre la factura y el costo manual. */
+  /** ITBIS incluido en el precio de venta: 0, 16 o 18. */
+  tasaItbis: number;
+  /** Costo que se muestra: el más reciente entre la factura y el costo manual. El costo no incluye ITBIS. */
   costo: number | null;
   costoEn: string | null;
   costoFuente: CostoFuente | null;
@@ -170,12 +172,16 @@ export function elegirCosto(input: {
   return { costo: factura.costo, en: factura.en, fuente: factura.fuente };
 }
 
-/** (precio − costo) / precio. Null si no hay costo o el precio no alcanza para un margen. */
-export function margenDe(precio: number, costo: number | null): number | null {
+/** (precio sin ITBIS − costo sin ITBIS) / precio sin ITBIS. Null si no hay costo. */
+export function margenDe(precio: number, costo: number | null, tasa = 18): number | null {
   if (costo == null || !(precio > 0)) {
     return null;
   }
-  return Math.round(((precio - costo) / precio) * 1000) / 1000;
+  const neto = precio / (1 + tasa / 100);
+  if (!(neto > 0)) {
+    return null;
+  }
+  return Math.round(((neto - costo) / neto) * 1000) / 1000;
 }
 
 export function formatoMargen(margen: number | null): string {

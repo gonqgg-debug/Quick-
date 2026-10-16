@@ -150,7 +150,7 @@ export async function listAgentCatalogo(search: URLSearchParams) {
   const supabase = getSupabaseAdminClient();
   let query = supabase
     .from("products")
-    .select("id, nombre, marca, categoria, precio, codigo_odoo, codigo_barras, activo")
+    .select("id, nombre, marca, categoria, precio, tasa_itbis, codigo_odoo, codigo_barras, activo")
     .order("id", { ascending: true })
     .limit(PAGE_SIZE + 1);
   if (cursor) {
@@ -167,13 +167,14 @@ export async function listAgentCatalogo(search: URLSearchParams) {
   const page = rows.slice(0, PAGE_SIZE);
   const next = rows.length > PAGE_SIZE ? String(page[page.length - 1]?.id ?? "") : null;
   return {
-    nota: "El catálogo no guarda existencias. activo indica si el producto se ofrece; precio es el de venta.",
+    nota: "El catálogo no guarda existencias. activo indica si el producto se ofrece. precio es el de venta e incluye ITBIS. tasaItbis es 0, 16 o 18. El costo no viaja aquí.",
     productos: page.map((row) => ({
       id: String(row.id),
       nombre: String(row.nombre),
       marca: row.marca ? String(row.marca) : null,
       categoria: String(row.categoria ?? ""),
       precio: toMoney(row.precio),
+      tasaItbis: Number(row.tasa_itbis) === 0 || Number(row.tasa_itbis) === 16 || Number(row.tasa_itbis) === 18 ? Number(row.tasa_itbis) : 18,
       codigoOdoo: row.codigo_odoo ? String(row.codigo_odoo) : null,
       codigoBarras: row.codigo_barras ? String(row.codigo_barras) : null,
       activo: Boolean(row.activo),

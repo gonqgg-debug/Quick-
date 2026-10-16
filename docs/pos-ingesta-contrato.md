@@ -76,9 +76,26 @@ Una sesión por request, y como máximo 1.500 líneas. Si no, `413`.
 
 También se aceptan los nombres de Odoo (`odoo_id`, `start_at`, `amount_total`, `qty`, `price_subtotal_incl`, `payment_method_id`, `is_change`, `full_product_name`).
 
-El precio de la caja ya incluye ITBIS. `precioUnit`, `total` y `subtotalConItbis` son lo que pagó el cliente. No los multipliques por 1.18. `subtotal` es la base sin el impuesto; en el ejemplo, 50 cobrados son 42.37 de base y 7.63 de ITBIS. La venta del día se guarda con el impuesto incluido. El margen resta ese 18% antes de comparar con el costo.
+El mismo cuerpo se acepta con un objeto `sesion` y `ordenes` al nivel de arriba, sin el arreglo `sesiones`. Si vienen las dos formas, la respuesta es `422` y `campo` es `sesiones`.
 
-No mandes `categ_id`, `pos.category`, `standard_price`, `total_cost`, `categoria` ni `costo`. La respuesta es `422`.
+```json
+{
+  "tienda": "quick",
+  "modo": "completo",
+  "sesion": { "odooId": 839, "estado": "closed", "startAt": "2026-10-15T14:00:00Z", "totalPagos": 15310 },
+  "ordenes": []
+}
+```
+
+`modo` es `completo` (el default), `parcial` o `final`. `parcial` y `final` exigen `loteId`, el mismo en todas las partes de esa sesión. `parcial` agrega o actualiza las órdenes que vienen y no borra las que faltan ni recalcula resúmenes ni `ventas_diarias`. `final` borra las órdenes de la sesión cuyo `lote_id` no es ese lote (lo que no llegó en ninguna parte), guarda lo que trae este request y recalcula. `completo` sigue reemplazando lo que no venga en ese único request. El tope de 1.500 líneas es por request. No hay tope por sesión.
+
+El precio de la caja ya incluye ITBIS. `precioUnit`, `total` y `subtotalConItbis` son lo que pagó el cliente. No los multipliques por 1.18. `subtotal` es la base sin el impuesto; en el ejemplo, 50 cobrados son 42.37 de base y 7.63 de ITBIS. La venta del día se guarda con el impuesto incluido.
+
+La tasa no es fija. Cada línea puede traer `tasaItbis` (0, 16 o 18) o `tax_ids` con `amount` (también `0.16` se lee como 16). Si la línea no trae tasa, se usa `products.tasa_itbis`. El default del producto es 18. El margen es `venta_con_itbis / (1 + tasa/100) − unidades × costo_sin_itbis`. `products.costo_manual` y `factura_lineas.costo_unitario` se guardan **sin ITBIS**.
+
+Solo entran en la venta y en los resúmenes las órdenes `paid`, `done` e `invoiced`. `draft` y `cancel` se guardan y se excluyen. Un total negativo (devolución) resta.
+
+No mandes `categ_id`, `pos.category`, `standard_price`, `total_cost`, `categoria` ni `costo`. La respuesta es `422` y `campo` dice cuál sobró. Si la sesión viene mal formada, la respuesta es `422` con `campo` (`sesion.startAt`, `loteId`, `lineas.tasaItbis`, …), no un 500.
 
 `codigoOdoo` es el external id `__export__` de `product.template` (product.product → product.template → `ir.model.data`). La plataforma cruza con `products.codigo_odoo`. Si no hay producto, la línea se guarda como `sin_match`. No se crea el producto.
 
@@ -111,7 +128,9 @@ Reenviar la misma sesión reemplaza órdenes, líneas y pagos que ya no vengan. 
 }
 ```
 
-`alerta` es true si `|totalPagos − sumaOrdenes| > 0.01` o lo mismo contra la suma de pagos. La sesión igual se guarda. `ventaReal` no se pisa si ese día está fijado a mano (`overrideManual`).
+`alerta` es true si `|totalPagos − sumaOrdenes| > 0.01` o lo mismo contra la suma de pagos, contando solo órdenes `paid`, `done` e `invoiced`. En `modo: parcial` siempre es false. La sesión igual se guarda.
+
+`ventaReal` no se pisa si ese día está fijado a mano (`overrideManual`). La migración marca `override_manual` en todas las filas de `ventas_diarias` que ya existían. El POST igual escribe `ventaPos`. Si el monto fijado y la caja difieren en más de RD$500, `alerta_pos` queda en true y el admin lo muestra.
 
 ## GET `/api/agent/pos/sesiones?desde=YYYY-MM-DD&cursor=&limit=`
 
@@ -132,4 +151,17 @@ Todos aceptan `limit` (default 50, máximo 500) y `cursor`. La respuesta trae `r
 - `GET /api/agent/consumo/ticket?desde=&hasta=`
 - `GET /api/agent/consumo/tendencias?hasta=`
 
-Cuando se corrige `products.codigo_odoo`, un trigger re-matchea las líneas de ese código y recalcula solo las fechas afectadas.
+Cuando se corrige `products.codigo_odoo`, el trigger solo encola el código en `pos_rematch_cola`. La importación del catálogo no recalcula en ese momento.
+
+## POST `/api/agent/pos/rematch`
+
+Auth de Rodrigo. Cuerpo opcional `{ "limite": 500 }` (máximo 500). Procesa hasta ese número de líneas de la cola y las fechas que toquen. Responde `{ "procesadas": 120, "pendientes": 40 }`. Hay que llamarlo hasta que `pendientes` sea 0.
+
+## Pruebas
+
+```bash
+npx tsx scripts/check-pos-consumo.ts
+npx tsx scripts/check-pos-consumo-db.ts
+```
+
+La primera no toca la base: parser, margen con tasas 0, 16 y 18, estados, partes y el día de 85.075. La segunda crea la base `quick_pos_test` en el Postgres local, aplica `supabase/migrations/20261016120000_pos_ingesta.sql` y llama `ingestar_pos_sesion`.

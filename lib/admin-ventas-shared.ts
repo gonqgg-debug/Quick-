@@ -9,6 +9,8 @@ export type VentaDiaria = {
   origen: "manual" | "pos" | null;
   overrideManual: boolean;
   difiere: boolean;
+  /** La caja y el monto fijado difieren en más de RD$500. */
+  alertaPos: boolean;
 };
 
 export const VENTAS_DEFAULT_LIMIT = 14;

@@ -27,6 +27,8 @@ function assert(condition: unknown, message: string) {
 function sesion(odooId: number, nombre: string, total: number, startAt: string, ordenOdooId: number, fechaOrden: string, lineas: PosNormalizado["ordenes"][number]["lineas"] = []): PosNormalizado {
   return {
     tienda: "quick",
+    modo: "completo",
+    loteId: null,
     sesion: {
       odooId,
       nombre,
@@ -111,9 +113,10 @@ const conLinea = sesion(841, "POS/00841", 100, "2026-10-15T14:00:00.000Z", 84100
     cantidad: 2,
     precioUnit: 25,
     descuento: 0,
-    subtotal: 50,
-    subtotalConItbis: 59,
+    subtotal: 42.37,
+    subtotalConItbis: 50,
     odooRefundedLineId: null,
+    tasaItbis: null,
   },
 ]);
 const cruce = aplicarSesion(estadoPosVacio(), conLinea, catalogo);
@@ -130,12 +133,52 @@ const factura = costoVigenteConsumo(null, 12);
 assert(factura.origen === "factura" && factura.costo === 12, "sin manual se usa la factura");
 assert(ventaSinItbis(118) === 100, "118 cobrados con ITBIS incluido tienen base 100");
 assert(itbisIncluido(118) === 18, "el ITBIS incluido en 118 es 18");
-assert(margenConsumo(100, 4, factura.costo) === 36.75, "el margen saca el ITBIS incluido antes de restar el costo de 48");
+assert(margenConsumo(100, 4, factura.costo) === 36.75, "el margen saca el ITBIS de 18 antes de restar el costo de 48");
+assert(margenConsumo(100, 4, 12, 0) === 52, "con ITBIS 0 el margen es venta menos costo");
+assert(margenConsumo(116, 1, 100, 16) === 0, "con ITBIS 16, 116 cobrados tienen base 100");
+assert(ventaSinItbis(116, 16) === 100, "116 con tasa 16 tienen base 100");
 
 const sucio = parsePosIngestBody({
   sesiones: [{ sesion: { odooId: 1, startAt: "2026-10-15T14:00:00Z", estado: "closed", standard_price: 10 }, ordenes: [] }],
 });
-assert(!sucio.ok && sucio.ok === false && sucio.status === 422, "standard_price se rechaza");
+assert(!sucio.ok && sucio.status === 422 && sucio.campo === "standard_price", "standard_price se rechaza con el campo");
+
+const objeto = parsePosIngestBody({
+  sesion: { odooId: 1, startAt: "2026-10-15T14:00:00Z", estado: "closed" },
+  ordenes: [],
+});
+assert(objeto.ok && objeto.payload.modo === "completo" && objeto.payload.loteId === null, "el cuerpo acepta un objeto sesion");
+
+const ambas = parsePosIngestBody({
+  sesion: { odooId: 1, startAt: "2026-10-15T14:00:00Z", estado: "closed" },
+  sesiones: [{ sesion: { odooId: 1, startAt: "2026-10-15T14:00:00Z", estado: "closed" }, ordenes: [] }],
+});
+assert(!ambas.ok && ambas.status === 422 && ambas.campo === "sesiones", "sesion y sesiones juntas son 422");
+
+const sinInicio = parsePosIngestBody({ sesion: { odooId: 1 }, ordenes: [] });
+assert(!sinInicio.ok && sinInicio.status === 422 && sinInicio.campo === "sesion.startAt", "falta startAt responde el campo");
+
+const sinLote = parsePosIngestBody({
+  modo: "parcial",
+  sesion: { odooId: 1, startAt: "2026-10-15T14:00:00Z", estado: "closed" },
+  ordenes: [],
+});
+assert(!sinLote.ok && sinLote.status === 422 && sinLote.campo === "loteId", "parcial sin loteId es 422");
+
+const conTax = parsePosIngestBody({
+  sesiones: [{
+    sesion: { odooId: 1, startAt: "2026-10-15T14:00:00Z", estado: "closed" },
+    ordenes: [{
+      odooId: 10,
+      fecha: "2026-10-15T15:00:00Z",
+      total: 50,
+      estado: "paid",
+      lineas: [{ odooId: 1, odooProductId: 1, cantidad: 1, tax_ids: [{ amount: 16 }] }],
+      pagos: [],
+    }],
+  }],
+});
+assert(conTax.ok && conTax.payload.ordenes[0]?.lineas[0]?.tasaItbis === 16, "tax_ids.amount queda como tasa de la línea");
 
 const dos = parsePosIngestBody({
   sesiones: [
@@ -185,4 +228,40 @@ const periodo = resolverPeriodo({ preset: "7d", comparar: "1" }, Date.parse("202
 assert(periodo.hasta === "2026-10-16", "el periodo cierra hoy en Santo Domingo");
 assert(periodo.desde === "2026-10-10", "7 días incluyen hoy");
 
-console.log("pos consumo ok");
+const cancelada = sesion(850, "POS/00850", 1000, "2026-10-13T14:00:00.000Z", 850001, "2026-10-13T15:00:00.000Z");
+cancelada.ordenes[0].estado = "cancel";
+const pagada = sesion(851, "POS/00851", 200, "2026-10-13T14:00:00.000Z", 851001, "2026-10-13T16:00:00.000Z");
+const devuelta = sesion(852, "POS/00852", -30, "2026-10-13T18:00:00.000Z", 852001, "2026-10-13T20:00:00.000Z");
+const borrador = sesion(853, "POS/00853", 40, "2026-10-13T19:00:00.000Z", 853001, "2026-10-13T19:30:00.000Z");
+borrador.ordenes[0].estado = "draft";
+let dia13 = aplicarSesion(estadoPosVacio(), cancelada, new Map()).estado;
+dia13 = aplicarSesion(dia13, pagada, new Map()).estado;
+dia13 = aplicarSesion(dia13, devuelta, new Map()).estado;
+dia13 = aplicarSesion(dia13, borrador, new Map()).estado;
+assert(dia13.ordenes.size === 4, "draft y cancel se guardan");
+assert(ventaDelDia(dia13, "quick", "2026-10-13") === 170, `la cancelada no cuenta y la devolución resta, fue ${ventaDelDia(dia13, "quick", "2026-10-13")}`);
+
+let partes = estadoPosVacio();
+const parteA = sesion(900, "POS/00900", 10000, "2026-10-12T14:00:00.000Z", 9001, "2026-10-12T15:00:00.000Z");
+parteA.modo = "parcial";
+parteA.loteId = "lote-1";
+parteA.sesion.totalPagos = 99999;
+const aplicadaA = aplicarSesion(partes, parteA, new Map());
+assert(aplicadaA.alerta === false, "un parcial no marca descuadre");
+partes = aplicadaA.estado;
+const parteB = sesion(900, "POS/00900", 5000, "2026-10-12T14:00:00.000Z", 9002, "2026-10-12T16:00:00.000Z");
+parteB.modo = "parcial";
+parteB.loteId = "lote-1";
+partes = aplicarSesion(partes, parteB, new Map()).estado;
+const ajena = sesion(900, "POS/00900", 999, "2026-10-12T14:00:00.000Z", 9004, "2026-10-12T17:00:00.000Z");
+ajena.modo = "parcial";
+ajena.loteId = "otro";
+partes = aplicarSesion(partes, ajena, new Map()).estado;
+const cierre = sesion(900, "POS/00900", 310, "2026-10-12T14:00:00.000Z", 9003, "2026-10-12T18:00:00.000Z");
+cierre.modo = "final";
+cierre.loteId = "lote-1";
+cierre.sesion.totalPagos = 15310;
+const cerrada = aplicarSesion(partes, cierre, new Map());
+assert(cerrada.estado.ordenes.has("quick:9001") && cerrada.estado.ordenes.has("quick:9002") && cerrada.estado.ordenes.has("quick:9003"), "el final conserva las partes del mismo lote");
+assert(!cerrada.estado.ordenes.has("quick:9004"), "el final borra lo que llegó con otro lote");
+assert(ventaDelDia(cerrada.estado, "quick", "2026-10-12") === 15310, `las partes suman 15310, fue ${ventaDelDia(cerrada.estado, "quick", "2026-10-12")}`);

@@ -159,6 +159,7 @@ function Editor({
   const [categoriaNueva, setCategoriaNueva] = useState("");
   const [categoriaModo, setCategoriaModo] = useState<"select" | "nueva">("select");
   const [precio, setPrecio] = useState(String(product.precio));
+  const [tasa, setTasa] = useState(product.tasaItbis === 0 || product.tasaItbis === 16 ? String(product.tasaItbis) : "18");
   const [costoManual, setCostoManual] = useState(product.costoManual == null ? "" : String(product.costoManual));
   const [activo, setActivo] = useState(product.activo);
   const [fotoUrl, setFotoUrl] = useState(product.fotoUrl);
@@ -183,7 +184,8 @@ function Editor({
     categoriaResuelta !== categoriaOriginal ||
     (precioNumero == null ? precio.trim() !== String(product.precio) : precioNumero !== product.precio) ||
     activo !== product.activo ||
-    costoDistinto;
+    costoDistinto ||
+    tasa !== (product.tasaItbis === 0 || product.tasaItbis === 16 ? String(product.tasaItbis) : "18");
 
   useEffect(() => {
     return () => {
@@ -330,6 +332,10 @@ function Editor({
       if (!mismoDinero(costoNumero, product.costoManual)) {
         patch.costo = costoNumero;
       }
+      const tasaGuardada = product.tasaItbis === 0 || product.tasaItbis === 16 ? String(product.tasaItbis) : "18";
+      if (tasa !== tasaGuardada) {
+        patch.tasaItbis = Number(tasa);
+      }
       if (activo !== product.activo) {
         patch.activo = activo;
       }
@@ -367,7 +373,12 @@ function Editor({
     manualEn: costoNumero == null ? null : mismoDinero(costoNumero, product.costoManual) ? product.costoManualEn : new Date().toISOString(),
     manualFuente: costoNumero == null ? null : mismoDinero(costoNumero, product.costoManual) ? product.costoManualFuente : "admin",
   });
-  const margenVista = margenDe(precioNumero ?? product.precio, costoManual.trim() && costoNumero == null ? product.costo : costoVigente.costo);
+  const tasaVista = tasa === "0" || tasa === "16" || tasa === "18" ? Number(tasa) : 18;
+  const margenVista = margenDe(
+    precioNumero ?? product.precio,
+    costoManual.trim() && costoNumero == null ? product.costo : costoVigente.costo,
+    tasaVista,
+  );
   const compra = detalle.compra;
 
   return (
@@ -519,6 +530,14 @@ function Editor({
             <Dato label="Margen" value={margenVista == null ? "Sin costo" : formatoMargen(margenVista)} strong />
           </dl>
           <label className={adminLabelClass}>
+            ITBIS incluido
+            <AdminSelect className="mt-1.5" value={tasa} onChange={(event) => { setTasa(event.target.value); setSaved(false); }}>
+              <option value="18">18%</option>
+              <option value="16">16%</option>
+              <option value="0">0% exento</option>
+            </AdminSelect>
+          </label>
+          <label className={adminLabelClass}>
             Costo manual
             <span className="relative mt-1.5 block">
               <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-semibold" style={{ color: brand.orange }}>
@@ -539,7 +558,7 @@ function Editor({
           </label>
         </div>
         <p className="mt-3 text-sm text-brand-muted">
-          Se muestra el más reciente entre la factura
+          El precio de venta ya incluye el ITBIS. El costo, de factura o manual, se guarda sin ITBIS. Se muestra el más reciente entre la factura
           {product.costoFactura == null ? "" : ` (${formatPrice(product.costoFactura)}${product.costoFacturaEn ? `, ${fechaCorta(product.costoFacturaEn)}` : ""})`} y este costo manual. Guardarlo aquí deja la fuente como manual.
         </p>
       </Seccion>

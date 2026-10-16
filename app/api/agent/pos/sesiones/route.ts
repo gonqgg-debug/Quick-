@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
   }
   const parsed = parsePosIngestBody(body);
   if (!parsed.ok) {
-    return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    return NextResponse.json({ error: parsed.error, campo: parsed.campo }, { status: parsed.status });
   }
   try {
     const resultado = await ingestarPosSesion(parsed.payload);

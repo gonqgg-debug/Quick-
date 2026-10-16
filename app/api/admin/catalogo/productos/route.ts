@@ -55,6 +55,7 @@ export async function PATCH(request: NextRequest) {
       categoria?: unknown;
       precio?: unknown;
       costo?: unknown;
+      tasaItbis?: unknown;
       activo?: unknown;
     };
     if (typeof body.id !== "string" || !body.id) {
@@ -68,6 +69,7 @@ export async function PATCH(request: NextRequest) {
       categoria: body.categoria,
       precio: body.precio,
       costo: body.costo,
+      tasaItbis: body.tasaItbis,
       activo: body.activo,
     });
     return NextResponse.json({ product });
