@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { formatNumero, formatPct, formatRd } from "@/lib/pos-domain";
+import { formatPct, formatRd } from "@/lib/pos-domain";
 import { brand } from "@/lib/theme";
 
 export function Dinero({ value, className = "" }: { value: number | null | undefined; className?: string }) {
@@ -107,9 +107,4 @@ export function ErrorPanel({ message }: { message: string }) {
       </button>
     </div>
   );
-}
-
-export function formatUnidades(value: number): string {
-  const digits = Math.abs(value - Math.round(value)) < 0.001 ? 0 : 1;
-  return formatNumero(value, digits);
 }

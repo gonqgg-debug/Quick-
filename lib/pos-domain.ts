@@ -1112,6 +1112,11 @@ export function formatNumero(value: number | null | undefined, digits = 0): stri
   }).format(value);
 }
 
+export function formatUnidades(value: number): string {
+  const digits = Math.abs(value - Math.round(value)) < 0.001 ? 0 : 1;
+  return formatNumero(value, digits);
+}
+
 export function formatPct(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) {
     return "—";

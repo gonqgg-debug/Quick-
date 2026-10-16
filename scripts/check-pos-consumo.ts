@@ -6,6 +6,7 @@ import {
   estadoPosVacio,
   fechaOperativaDe,
   fijarVentaManual,
+  formatUnidades,
   itbisIncluido,
   margenConsumo,
   metodoCanon,
@@ -134,6 +135,8 @@ const manual = costoVigenteConsumo(8, 12);
 assert(manual.origen === "manual" && manual.costo === 8, "el costo manual gana");
 const factura = costoVigenteConsumo(null, 12);
 assert(factura.origen === "factura" && factura.costo === 12, "sin manual se usa la factura");
+assert(formatUnidades(4) === "4", "unidades enteras no llevan decimal");
+assert(formatUnidades(4.5) === "4.5", "unidades con fracción llevan un decimal");
 assert(ventaSinItbis(118) === 100, "118 cobrados con ITBIS incluido tienen base 100");
 assert(itbisIncluido(118) === 18, "el ITBIS incluido en 118 es 18");
 assert(margenConsumo(100, 4, factura.costo) === 36.75, "el margen saca el ITBIS de 18 antes de restar el costo de 48");

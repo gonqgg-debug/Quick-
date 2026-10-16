@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { formatDayKey } from "@/lib/local-day";
-import { formatRd } from "@/lib/pos-domain";
+import { formatRd, formatUnidades } from "@/lib/pos-domain";
 import { DataTable, DataTableCell, DataTableHead, DataTableRow, DataTableTh } from "@/components/admin/DataTable";
-import { Pildora, Vacio, formatUnidades } from "@/components/admin/consumo/ui";
+import { Pildora, Vacio } from "@/components/admin/consumo/ui";
 import { brand } from "@/lib/theme";
 
 const COLAS = [

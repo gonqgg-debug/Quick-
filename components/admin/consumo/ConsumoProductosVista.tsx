@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { formatDayKey } from "@/lib/local-day";
-import { formatPct, formatRd } from "@/lib/pos-domain";
+import { formatPct, formatRd, formatUnidades } from "@/lib/pos-domain";
 import type { ProductoConsumo } from "@/lib/pos-consumo";
 import { DataTable, DataTableCell, DataTableHead, DataTableRow, DataTableTh } from "@/components/admin/DataTable";
-import { Pildora, Vacio, formatUnidades } from "@/components/admin/consumo/ui";
+import { Pildora, Vacio } from "@/components/admin/consumo/ui";
 import { FiltrosProductos } from "@/components/admin/consumo/FiltrosProductos";
 
 export function ConsumoProductosVista({

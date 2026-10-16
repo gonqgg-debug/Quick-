@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { formatDayKey } from "@/lib/local-day";
-import { DEFINICIONES, formatNumero, formatPct, formatRd } from "@/lib/pos-domain";
+import { DEFINICIONES, formatNumero, formatPct, formatRd, formatUnidades } from "@/lib/pos-domain";
 import type { ResumenConsumo } from "@/lib/pos-consumo";
 import { MapaCalor, VentaDiaChart } from "@/components/admin/consumo/charts";
-import { Delta, Dinero, Metrica, Pildora, Vacio, formatUnidades } from "@/components/admin/consumo/ui";
+import { Delta, Dinero, Metrica, Pildora, Vacio } from "@/components/admin/consumo/ui";
 
 export function ConsumoResumenVista({ data }: { data: ResumenConsumo }) {
   const query = `preset=custom&desde=${data.periodo.desde}&hasta=${data.periodo.hasta}`;
