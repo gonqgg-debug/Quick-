@@ -6,6 +6,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const migration = join(root, "supabase/migrations/20261016120000_pos_ingesta.sql");
 const migrationCosto = join(root, "supabase/migrations/20261016190000_costo_con_itbis.sql");
 const migrationMiles = join(root, "supabase/migrations/20261016200000_miles_consumo.sql");
+const migrationVuelto = join(root, "supabase/migrations/20261016210000_pagos_con_vuelto.sql");
 const DB = "quick_pos_test";
 
 function quote(value: string): string {
@@ -116,6 +117,7 @@ values ('2026-10-14', 'miércoles', 90000);
 sqlFile(DB, migration);
 sqlFile(DB, migrationCosto);
 sqlFile(DB, migrationMiles);
+sqlFile(DB, migrationVuelto);
 
 sql(
   DB,
@@ -533,6 +535,42 @@ begin
     when unique_violation then
       null;
   end;
+
+  perform public.ingestar_pos_sesion($json$
+{
+    "tienda":"quick","modo":"completo",
+    "sesion":{"odooId":901,"nombre":"POS/00901","estado":"closed","startAt":"2026-09-01T14:00:00Z","stopAt":"2026-09-01T22:00:00Z","totalPagos":100},
+    "ordenes":[{
+      "odooId":901001,
+      "fecha":"2026-09-01T16:00:00Z",
+      "total":100,
+      "estado":"done",
+      "pagos":[
+        {"odooId":1901001,"metodo":"Efectivo","monto":80,"esCambio":false},
+        {"odooId":1901002,"metodo":"Efectivo","monto":-30,"esCambio":true},
+        {"odooId":1901003,"metodo":"Tarjeta","monto":50,"esCambio":false}
+      ]
+    }]
+  }$json$::jsonb);
+  select round(sum(pg.monto), 2) into venta
+  from public.pos_pagos pg
+  join public.pos_ordenes o on o.id = pg.orden_id
+  where o.fecha_operativa = '2026-09-01' and public.pos_orden_cuenta(o.estado);
+  select round(sum(total), 2) into venta_pos
+  from public.pos_ordenes
+  where fecha_operativa = '2026-09-01' and public.pos_orden_cuenta(estado);
+  if venta is distinct from venta_pos or venta is distinct from 100 then
+    raise exception 'la suma de pagos % no iguala el total de las ordenes %', venta, venta_pos;
+  end if;
+  select efectivo, tarjeta, venta into venta, neta, venta_pos
+  from public.resumen_dia where fecha = '2026-09-01';
+  if venta is distinct from 50 or neta is distinct from 50 or venta_pos is distinct from 100 then
+    raise exception 'el mix del 1 sep debio ser efectivo 50, tarjeta 50 y venta 100; fue % % %', venta, neta, venta_pos;
+  end if;
+  if (select efectivo + banco + tarjeta + credito + otro from public.resumen_dia where fecha = '2026-09-01')
+     is distinct from (select venta from public.resumen_dia where fecha = '2026-09-01') then
+    raise exception 'el mix del dia no suma la venta';
+  end if;
 end
 $test$;
 `,

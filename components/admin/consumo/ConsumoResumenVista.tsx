@@ -74,7 +74,7 @@ export function ConsumoResumenVista({
 
       <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-[#111827]">Mix de pago</h2>
-        <p className="mt-1 text-xs text-brand-muted">El vuelto no entra.</p>
+        <p className="mt-1 text-xs text-brand-muted">El efectivo ya tiene el vuelto restado. La suma de los medios es la venta.</p>
         {mixTotal > 0 ? (
           <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-[#F3F4F6]">
             <Barra ancho={(data.mix.efectivo / mixTotal) * 100} color="#7EB341" />
