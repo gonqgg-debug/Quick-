@@ -1,10 +1,12 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { DEFINICIONES_CONSUMO } from "@/lib/consumo-metricas";
 import { DEFINICIONES, formatNumero, formatRd } from "@/lib/pos-domain";
+import type { CeldaHorario } from "@/lib/pos-consumo";
 import { brand } from "@/lib/theme";
 import { MapaCalor } from "@/components/admin/consumo/charts";
-import { Definicion, Metrica } from "@/components/admin/consumo/ui";
+import { Definicion } from "@/components/admin/consumo/ui";
 
 export function ConsumoHorariosVista({
   celdas,
@@ -12,12 +14,18 @@ export function ConsumoHorariosVista({
   categorias,
   categoria,
   metrica,
+  reloj,
+  desde,
+  hasta,
 }: {
-  celdas: Array<{ dow: number; hora: number; venta: number; ordenes: number; unidades: number }>;
+  celdas: CeldaHorario[];
   turnos: Array<{ turno: "am" | "pm"; venta: number; ordenes: number; ticket: number | null; unidadesPorTicket: number | null }>;
   categorias: string[];
   categoria: string;
-  metrica: "venta" | "ordenes" | "unidades";
+  metrica: "venta" | "ordenes" | "unidades" | "promedio" | "ticket";
+  reloj: "real" | "caja";
+  desde: string;
+  hasta: string;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -36,8 +44,10 @@ export function ConsumoHorariosVista({
       <div className="flex flex-wrap gap-1.5">
         {(
           [
-            ["venta", "Venta"],
-            ["ordenes", "Órdenes"],
+            ["venta", "Total"],
+            ["promedio", "Promedio"],
+            ["ticket", "Ticket"],
+            ["ordenes", "Tickets"],
             ["unidades", "Unidades"],
           ] as const
         ).map(([id, label]) => (
@@ -51,12 +61,20 @@ export function ConsumoHorariosVista({
             {label}
           </button>
         ))}
-        <label className="ml-auto text-xs font-medium text-brand-muted">
+        <button
+          type="button"
+          onClick={() => ir({ reloj: reloj === "real" ? "caja" : "real" })}
+          className="rounded-full px-3 py-1.5 text-sm font-semibold"
+          style={{ backgroundColor: "#F3F4F6", color: brand.ink }}
+        >
+          {reloj === "real" ? "Hora real" : "Día de caja"}
+        </button>
+        <label className="text-xs font-medium text-brand-muted">
           Categoría
           <select
             value={categoria}
             onChange={(event) => ir({ categoria: event.target.value || null })}
-            className="ml-2 rounded-md border border-[#E5E7EB] px-2 py-1.5 text-sm text-brand-ink"
+            className="ml-2 max-w-[220px] rounded-md border border-[#E5E7EB] px-2 py-1.5 text-sm text-brand-ink"
           >
             <option value="">Todas</option>
             {categorias.map((item) => (
@@ -73,20 +91,23 @@ export function ConsumoHorariosVista({
           Hora por día de la semana
           <Definicion texto={DEFINICIONES.hora} />
         </h2>
-        <p className="mt-1 text-xs text-brand-muted">Una venta después de medianoche sigue en el día en que se abrió la caja.</p>
+        <p className="mt-1 text-xs text-brand-muted">{reloj === "real" ? DEFINICIONES_CONSUMO.horaReal : DEFINICIONES_CONSUMO.horaCaja}</p>
         {categoria ? <p className="mt-1 text-xs text-brand-muted">Con categoría, el monto es el de las líneas.</p> : null}
         <div className="mt-4">
-          <MapaCalor celdas={celdas} metrica={metrica} />
+          <MapaCalor celdas={celdas} metrica={metrica} desde={desde} hasta={hasta} />
         </div>
       </section>
 
       <section className="grid gap-3 md:grid-cols-2">
         {turnos.map((turno) => (
-          <div key={turno.turno} className="grid gap-3 sm:grid-cols-3">
-            <Metrica etiqueta={turno.turno === "am" ? "Turno AM" : "Turno PM"} valor={formatRd(turno.venta)} definicion="Antes de las 2:00 p.m. es AM. Desde las 2:00 p.m. es PM, según la apertura de la sesión." detalle={`${formatNumero(turno.ordenes)} órdenes`} />
-            <Metrica etiqueta="Ticket" valor={formatRd(turno.ticket)} definicion={DEFINICIONES.ticket} />
-            <Metrica etiqueta="Uds / ticket" valor={formatNumero(turno.unidadesPorTicket, 2)} definicion={DEFINICIONES.unidadesTicket} />
-          </div>
+          <article key={turno.turno} className="min-w-0 rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-[#111827]">{turno.turno === "am" ? "Turno AM" : "Turno PM"}</h3>
+            <p className="mt-2 break-words text-xl font-semibold tabular-nums text-[#111827]">{formatRd(turno.venta)}</p>
+            <p className="mt-1 text-sm text-brand-muted">
+              {formatNumero(turno.ordenes)} tickets · ticket {formatRd(turno.ticket)} · {formatNumero(turno.unidadesPorTicket, 2)} uds/ticket
+            </p>
+            <p className="mt-2 text-xs text-brand-muted">AM es una caja abierta antes de las 2:00 p.m. PM, desde esa hora. El importe es la venta del turno, con ITBIS.</p>
+          </article>
         ))}
       </section>
     </div>

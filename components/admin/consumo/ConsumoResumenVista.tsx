@@ -1,50 +1,76 @@
 import Link from "next/link";
+import { coberturaDifiere, desgloseVenta, DEFINICIONES_CONSUMO } from "@/lib/consumo-metricas";
 import { formatDayKey } from "@/lib/local-day";
 import { DEFINICIONES, formatNumero, formatPct, formatRd, formatUnidades } from "@/lib/pos-domain";
 import type { ResumenConsumo } from "@/lib/pos-consumo";
 import { MapaCalor, VentaDiaChart } from "@/components/admin/consumo/charts";
 import { Delta, Dinero, Metrica, Pildora, Vacio } from "@/components/admin/consumo/ui";
 
-export function ConsumoResumenVista({ data }: { data: ResumenConsumo }) {
-  const query = `preset=custom&desde=${data.periodo.desde}&hasta=${data.periodo.hasta}`;
+export function ConsumoResumenVista({
+  data,
+  miles,
+}: {
+  data: ResumenConsumo;
+  miles?: { hallazgos: Array<{ id: string; titulo: string; tipo: string; resumen: string }>; recomendaciones: number } | null;
+}) {
+  const query = `preset=custom&desde=${data.periodo.desde}&hasta=${data.periodo.hasta}&comparacion=${data.periodo.comparacion}`;
   const hayVenta = data.kpis.ordenes > 0 || data.kpis.venta !== 0;
   const mixTotal = data.mix.efectivo + data.mix.tarjeta + data.mix.banco + data.mix.credito + data.mix.otro;
+  const estado = data.comparacionEstado;
+  const base = data.kpisComparados ?? data.kpis;
+  const desglose = data.anterior && base.ticket != null && data.anterior.ticket != null
+    ? desgloseVenta({ tickets: base.ordenes, ticket: base.ticket }, { tickets: data.anterior.ordenes, ticket: data.anterior.ticket })
+    : null;
+  const coberturaAviso = coberturaDifiere(base.cobertura, data.anterior?.cobertura ?? null);
 
   return (
     <div className="space-y-6">
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-5">
         <Metrica
           etiqueta="Venta"
           valor={formatRd(data.kpis.venta)}
           definicion={DEFINICIONES.venta}
           detalle="Incluye ITBIS"
-          delta={<Delta actual={data.kpis.venta} anterior={data.anterior?.venta ?? null} />}
+          delta={<Delta estado={estado} actual={base.venta} anterior={data.anterior?.venta ?? null} />}
+        />
+        <Metrica
+          etiqueta="Tickets"
+          valor={formatNumero(data.kpis.ordenes)}
+          definicion={DEFINICIONES.tickets}
+          delta={<Delta estado={estado} formato="num" actual={base.ordenes} anterior={data.anterior?.ordenes ?? null} />}
         />
         <Metrica
           etiqueta="Ticket promedio"
           valor={formatRd(data.kpis.ticket)}
           definicion={DEFINICIONES.ticket}
-          detalle={data.kpis.ordenes ? `${formatNumero(data.kpis.ordenes)} órdenes` : undefined}
-          delta={<Delta actual={data.kpis.ticket} anterior={data.anterior?.ticket ?? null} />}
+          delta={<Delta estado={estado} actual={base.ticket} anterior={data.anterior?.ticket ?? null} />}
         />
         <Metrica
           etiqueta="Unidades por ticket"
           valor={formatNumero(data.kpis.unidadesPorTicket, 2)}
           definicion={DEFINICIONES.unidadesTicket}
-          delta={<Delta actual={data.kpis.unidadesPorTicket} anterior={data.anterior?.unidadesPorTicket ?? null} />}
+          delta={<Delta estado={estado} formato="num" actual={base.unidadesPorTicket} anterior={data.anterior?.unidadesPorTicket ?? null} />}
         />
         <Metrica
-          etiqueta="Margen conocido"
+          etiqueta="Margen calculado"
           valor={data.kpis.margen == null ? "Sin costo" : formatRd(data.kpis.margen)}
           definicion={DEFINICIONES.margen}
-          detalle={
-            data.kpis.cobertura == null
-              ? undefined
-              : `${formatPct(data.kpis.cobertura).replace("+", "")} de la venta tiene costo${data.kpis.margenPct == null ? "" : ` · ${formatPct(data.kpis.margenPct).replace("+", "")} sobre la venta sin ITBIS`}`
-          }
-          delta={<Delta actual={data.kpis.margen} anterior={data.anterior?.margen ?? null} />}
+          detalle={detalleMargen(data)}
+          delta={<Delta estado={estado} actual={base.margen} anterior={data.anterior?.margen ?? null} />}
         />
       </section>
+
+      {desglose && estado === "ok" ? (
+        <p className="text-sm text-brand-muted">
+          El cambio de venta del tramo comparado es {formatRd(desglose.delta)}. {formatRd(desglose.efectoTickets)} vienen de la cantidad de tickets y {formatRd(desglose.efectoTicket)} del ticket promedio. Esos pesos se suman; los porcentajes no.
+        </p>
+      ) : null}
+      {coberturaAviso ? (
+        <p className="text-sm" style={{ color: "#92400E" }}>
+          La cobertura de costo cambió de {formatPct(data.anterior?.cobertura).replace("+", "")} a {formatPct(base.cobertura).replace("+", "")}. Esa diferencia limita leer el cambio de margen como solo precio o costo.
+        </p>
+      ) : null}
+      <p className="text-xs text-brand-muted">{DEFINICIONES_CONSUMO.costo}</p>
 
       <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-[#111827]">Mix de pago</h2>
@@ -116,6 +142,30 @@ export function ConsumoResumenVista({ data }: { data: ResumenConsumo }) {
         </div>
       </section>
 
+      <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-[#111827]">Miles</h2>
+          <Link href="/admin/consumo/miles" className="text-sm font-semibold" style={{ color: "#3F6B1C" }}>
+            Ver análisis
+          </Link>
+        </div>
+        {!miles || miles.hallazgos.length === 0 ? (
+          <p className="mt-3 text-sm text-brand-muted">Miles todavía no ha publicado análisis.</p>
+        ) : (
+          <ul className="mt-3 space-y-3">
+            {miles.hallazgos.map((hallazgo) => (
+              <li key={hallazgo.id}>
+                <Link href={`/admin/consumo/miles/${hallazgo.id}`} className="block">
+                  <span className="text-sm font-semibold text-[#111827]">{hallazgo.titulo}</span>
+                  <span className="mt-0.5 block text-xs text-brand-muted">{hallazgo.tipo} · {hallazgo.resumen}</span>
+                </Link>
+              </li>
+            ))}
+            <li className="text-xs text-brand-muted">{formatNumero(miles.recomendaciones)} recomendaciones pendientes de decisión.</li>
+          </ul>
+        )}
+      </section>
+
       <section className="grid gap-3 md:grid-cols-3">
         <TarjetaCalidad href={`/admin/consumo/calidad?cola=match&${query}`} titulo="Sin match" detalle={`${formatNumero(data.calidad.sinMatchProductos)} productos · ${formatRd(data.calidad.sinMatchVenta)}`} />
         <TarjetaCalidad href={`/admin/consumo/calidad?cola=costo&dias=30`} titulo="Sin costo" detalle={`${formatNumero(data.calidad.sinCostoProductos)} productos · ${formatRd(data.calidad.sinCostoVenta)}`} />
@@ -128,6 +178,20 @@ export function ConsumoResumenVista({ data }: { data: ResumenConsumo }) {
       </section>
     </div>
   );
+}
+
+function detalleMargen(data: ResumenConsumo): string {
+  const partes = ["Costo último disponible. Es una estimación sobre ventas viejas."];
+  if (data.kpis.cobertura != null) {
+    partes.push(`${formatPct(data.kpis.cobertura).replace("+", "")} de la venta tiene costo`);
+  }
+  if (data.kpis.margenPct != null) {
+    partes.push(`${formatPct(data.kpis.margenPct).replace("+", "")} sobre la venta cubierta sin ITBIS`);
+  }
+  if (data.anterior?.cobertura != null) {
+    partes.push(`cobertura comparada ${formatPct(data.anterior.cobertura).replace("+", "")}`);
+  }
+  return partes.join(" · ");
 }
 
 function Barra({ ancho, color }: { ancho: number; color: string }) {

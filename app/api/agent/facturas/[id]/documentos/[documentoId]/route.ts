@@ -5,7 +5,7 @@ import { facturasError, handleGetDocumento } from "@/lib/facturas-http";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest, { params }: { params: { id: string; documentoId: string } }) {
-  const denied = requireAgentApi(request);
+  const denied = await requireAgentApi(request);
   if (denied) {
     return denied;
   }

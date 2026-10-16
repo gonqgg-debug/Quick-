@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  const denied = requireAgentApi(request);
+  const denied = await requireAgentApi(request);
   if (denied) {
     return denied;
   }
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
-  const rol = requireAgentRol(request, ["rodrigo"]);
+  const rol = await requireAgentRol(request, ["rodrigo"]);
   if (rol instanceof NextResponse) {
     return rol;
   }

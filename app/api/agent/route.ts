@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AGENT_EVENT_TYPES } from "@/lib/agent-events";
-import { requireAgentApi } from "@/lib/agent-auth";
+import { agentRolFromRequest, requireAgentApi } from "@/lib/agent-auth";
+import { MILES_AGENT_ENDPOINTS } from "@/lib/miles-api";
 import { EXPANSION_AGENT_ENDPOINTS } from "@/lib/expansion-shared";
 import { FACTURAS_AGENT_ENDPOINTS } from "@/lib/facturas-shared";
 import { OPERACION_AGENT_ENDPOINTS } from "@/lib/operacion-shared";
@@ -9,9 +10,19 @@ import { POS_AGENT_ENDPOINTS } from "@/lib/pos-domain";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const denied = requireAgentApi(request);
+  const denied = await requireAgentApi(request);
   if (denied) {
     return denied;
+  }
+  const rol = await agentRolFromRequest(request);
+  if (rol === "miles") {
+    return NextResponse.json({
+      version: 1,
+      agente: "Miles — Analista Comercial",
+      auth: "Authorization: Bearer <token de Miles>",
+      nota: "Este token solo ve las funciones de Miles. No escribe ventas, costos, precios, inventario ni decisiones humanas.",
+      endpoints: MILES_AGENT_ENDPOINTS,
+    });
   }
 
   return NextResponse.json({

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 export async function GET(request: NextRequest) {
-  const denied = requireAgentApi(request);
+  const denied = await requireAgentApi(request);
   if (denied) {
     return denied;
   }
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = requireAgentApi(request);
+  const denied = await requireAgentApi(request);
   if (denied) {
     return denied;
   }

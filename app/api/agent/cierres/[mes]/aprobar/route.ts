@@ -5,7 +5,7 @@ import { handleAprobar, operacionError } from "@/lib/operacion-http";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest, { params }: { params: { mes: string } }) {
-  const rol = requireAgentRol(request, ["troy"]);
+  const rol = await requireAgentRol(request, ["troy"]);
   if (rol instanceof NextResponse) {
     return rol;
   }

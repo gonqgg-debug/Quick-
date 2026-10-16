@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { formatDayKey } from "@/lib/local-day";
 import type { FrescuraConsumo } from "@/lib/pos-consumo";
+import { resolverPeriodo } from "@/lib/pos-domain";
 import { brand } from "@/lib/theme";
 
 const TABS = [
@@ -11,6 +12,7 @@ const TABS = [
   { href: "/admin/consumo/productos", label: "Productos" },
   { href: "/admin/consumo/horarios", label: "Horarios" },
   { href: "/admin/consumo/canasta", label: "Canasta" },
+  { href: "/admin/consumo/miles", label: "Miles" },
   { href: "/admin/consumo/calidad", label: "Calidad" },
 ];
 
@@ -41,7 +43,14 @@ export function ConsumoEncabezado({ frescura }: { frescura: FrescuraConsumo | nu
   const router = useRouter();
   const muestraPeriodo = pathname === "/admin/consumo" || pathname.startsWith("/admin/consumo/productos") || pathname.startsWith("/admin/consumo/horarios");
   const preset = params.get("preset") ?? (params.get("desde") || params.get("hasta") ? "custom" : "7d");
-  const comparar = params.get("comparar") !== "0";
+  const comparacion = params.get("comparar") === "0" ? "off" : (params.get("comparacion") ?? "anterior");
+  const resuelto = resolverPeriodo({
+    desde: params.get("desde"),
+    hasta: params.get("hasta"),
+    preset,
+    comparar: params.get("comparar"),
+    comparacion: params.get("comparacion"),
+  });
 
   function ir(patch: Record<string, string | null>) {
     router.push(conQuery(pathname, params, patch));
@@ -113,7 +122,10 @@ export function ConsumoEncabezado({ frescura }: { frescura: FrescuraConsumo | nu
             <button
               key={id}
               type="button"
-              onClick={() => ir({ preset: id, desde: null, hasta: null })}
+              onClick={() => {
+                const siguiente = resolverPeriodo({ preset: id, comparar: params.get("comparar"), comparacion: params.get("comparacion") });
+                ir({ preset: id, desde: siguiente.desde, hasta: siguiente.hasta });
+              }}
               className="rounded-full px-3 py-1.5 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
               style={{ backgroundColor: preset === id ? "#111827" : "#F3F4F6", color: preset === id ? "#FFFFFF" : brand.ink }}
             >
@@ -124,7 +136,7 @@ export function ConsumoEncabezado({ frescura }: { frescura: FrescuraConsumo | nu
             Desde
             <input
               type="date"
-              value={params.get("desde") ?? ""}
+              value={params.get("desde") || resuelto.desde}
               onChange={(event) => ir({ preset: "custom", desde: event.target.value || null })}
               className="mt-1 block rounded-md border border-[#E5E7EB] px-2 py-1.5 text-sm text-brand-ink focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/40"
             />
@@ -133,20 +145,44 @@ export function ConsumoEncabezado({ frescura }: { frescura: FrescuraConsumo | nu
             Hasta
             <input
               type="date"
-              value={params.get("hasta") ?? ""}
+              value={params.get("hasta") || resuelto.hasta}
               onChange={(event) => ir({ preset: "custom", hasta: event.target.value || null })}
               className="mt-1 block rounded-md border border-[#E5E7EB] px-2 py-1.5 text-sm text-brand-ink focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/40"
             />
           </label>
-          <button
-            type="button"
-            onClick={() => ir({ comparar: comparar ? "0" : null })}
-            className="rounded-full px-3 py-1.5 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
-            style={{ backgroundColor: comparar ? brand.paleGreen : "#F3F4F6", color: brand.ink }}
-          >
-            {comparar ? "Comparando" : "Sin comparar"}
-          </button>
+          {(
+            [
+              ["anterior", "Periodo anterior"],
+              ["semana", "Mismos días"],
+              ["anio", "Año anterior"],
+              ["off", "Sin comparar"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => ir(id === "off" ? { comparar: "0", comparacion: null } : { comparar: null, comparacion: id })}
+              className="rounded-full px-3 py-1.5 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
+              style={{ backgroundColor: comparacion === id ? brand.paleGreen : "#F3F4F6", color: brand.ink }}
+            >
+              {label}
+            </button>
+          ))}
         </div>
+      ) : null}
+      {muestraPeriodo ? (
+        <p className="mt-3 text-xs text-brand-muted">
+          Periodo principal: {formatDayKey(resuelto.desde)} – {formatDayKey(resuelto.hasta)}.
+          {resuelto.comparar && resuelto.tramo ? (
+            <>
+              {" "}
+              Comparado: {formatDayKey(resuelto.anterior.desde)} – {formatDayKey(resuelto.anterior.hasta)}. {resuelto.algoritmo}
+              {resuelto.recortado ? " El día en curso queda fuera de la comparación." : ""}
+            </>
+          ) : (
+            <> Sin periodo comparado.</>
+          )}
+        </p>
       ) : null}
     </div>
   );

@@ -5,7 +5,7 @@ import { handleQuitarPago, operacionError } from "@/lib/operacion-http";
 export const dynamic = "force-dynamic";
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string; pagoId: string } }) {
-  const rol = requireAgentRol(request, ["fred"]);
+  const rol = await requireAgentRol(request, ["fred"]);
   if (rol instanceof NextResponse) {
     return rol;
   }

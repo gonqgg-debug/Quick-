@@ -7,7 +7,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const rol = requireAgentRol(request, ["rodrigo"]);
+  const rol = await requireAgentRol(request, ["rodrigo"]);
   if (rol instanceof NextResponse) {
     return rol;
   }

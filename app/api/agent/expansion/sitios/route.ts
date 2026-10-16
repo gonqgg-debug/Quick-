@@ -5,7 +5,7 @@ import { expansionError, handleCreateSitio, handleListSitios } from "@/lib/expan
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const denied = requireAgentApi(request);
+  const denied = await requireAgentApi(request);
   if (denied) {
     return denied;
   }
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = requireAgentApi(request);
+  const denied = await requireAgentApi(request);
   if (denied) {
     return denied;
   }

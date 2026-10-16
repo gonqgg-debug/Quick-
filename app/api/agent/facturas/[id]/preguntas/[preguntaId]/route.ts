@@ -5,7 +5,7 @@ import { facturasError, handlePatchPregunta } from "@/lib/facturas-http";
 export const dynamic = "force-dynamic";
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string; preguntaId: string } }) {
-  const denied = requireAgentApi(request);
+  const denied = await requireAgentApi(request);
   if (denied) {
     return denied;
   }

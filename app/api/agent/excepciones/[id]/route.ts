@@ -5,7 +5,7 @@ import { handleResolverExcepcion, operacionError } from "@/lib/operacion-http";
 export const dynamic = "force-dynamic";
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
-  const rol = requireAgentRol(request, ["matt"]);
+  const rol = await requireAgentRol(request, ["matt"]);
   if (rol instanceof NextResponse) {
     return rol;
   }

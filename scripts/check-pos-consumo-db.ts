@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const migration = join(root, "supabase/migrations/20261016120000_pos_ingesta.sql");
 const migrationCosto = join(root, "supabase/migrations/20261016190000_costo_con_itbis.sql");
+const migrationMiles = join(root, "supabase/migrations/20261016200000_miles_consumo.sql");
 const DB = "quick_pos_test";
 
 function quote(value: string): string {
@@ -114,6 +115,7 @@ values ('2026-10-14', 'miércoles', 90000);
 
 sqlFile(DB, migration);
 sqlFile(DB, migrationCosto);
+sqlFile(DB, migrationMiles);
 
 sql(
   DB,
@@ -501,6 +503,36 @@ begin
   if n is distinct from 2 then
     raise exception 'las dos fechas debian quedar en 118, hay %', n;
   end if;
+
+  select public.consumo_venta_alcance('quick', '2026-10-11', '2026-10-11', null, null) into neta;
+  if neta is distinct from 416 then
+    raise exception 'el alcance de venta del 11 debio ser 416, fue %', neta;
+  end if;
+  perform public.consumo_mapa_horas('quick', '2026-10-11', '2026-10-11', null, 'real');
+  select elegibles into n from public.consumo_canasta_par('quick', '2026-10-11', '2026-10-11', 'cod-18', 'cod-16');
+  if n is distinct from 1 then
+    raise exception 'el ticket del 11 debio ser elegible para la canasta, fue %', n;
+  end if;
+  insert into public.miles_hallazgos (
+    idempotency_key, payload_hash, tipo, titulo, resumen, observacion, prioridad, prioridad_justificacion,
+    periodo_desde, periodo_hasta, metricas, evidencia
+  ) values (
+    'h-test', 'abc', 'oportunidad', 'Prueba', 'Resumen', 'Observacion de la prueba aislada', 'baja', 'Solo cubre un ticket de prueba',
+    '2026-10-11', '2026-10-11', '{"venta":416}'::jsonb, '{"consultas":["consumo_venta_alcance"],"filtros":{},"enlaces":[]}'::jsonb
+  );
+  begin
+    insert into public.miles_hallazgos (
+      idempotency_key, payload_hash, tipo, titulo, resumen, observacion, prioridad, prioridad_justificacion,
+      periodo_desde, periodo_hasta, metricas, evidencia
+    ) values (
+      'h-test', 'otro', 'oportunidad', 'Otra', 'Resumen', 'Observacion distinta', 'baja', 'Otra justificacion de prueba',
+      '2026-10-11', '2026-10-11', '{}'::jsonb, '{"consultas":["x"],"filtros":{},"enlaces":[]}'::jsonb
+    );
+    raise exception 'la clave repetida debio chocar';
+  exception
+    when unique_violation then
+      null;
+  end;
 end
 $test$;
 `,

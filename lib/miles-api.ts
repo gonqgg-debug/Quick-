@@ -1,0 +1,17 @@
+export const MILES_AGENT_ENDPOINTS = [
+  { method: "GET", path: "/api/agent/analytics/coverage", describe: "Cobertura de días, costo y calidad del periodo. No rellena días faltantes con cero." },
+  { method: "GET", path: "/api/agent/analytics/summary", describe: "Venta, tickets, ticket, unidades y margen del dashboard. Trae definición, filtros, periodos, zona y cobertura." },
+  { method: "GET", path: "/api/agent/analytics/products", describe: "Productos del periodo. participacion es sobre la venta con ITBIS del periodo, no de la página." },
+  { method: "GET", path: "/api/agent/analytics/hours?reloj=real|caja", describe: "Mapa de horas. real usa la hora de la transacción en America/Santo_Domingo. caja usa el día operativo." },
+  { method: "GET", path: "/api/agent/analytics/baskets?a=&b=", describe: "Dos productos: tickets elegibles, con A, con B, con ambos, proporción y fuerza. Muestra pequeña queda marcada." },
+  { method: "POST", path: "/api/agent/miles/runs", describe: "Abre una ejecución. idempotencyKey. No acepta agent_id." },
+  { method: "PATCH", path: "/api/agent/miles/runs/{id}", describe: "Cierra la ejecución en completada o fallida. Manda version." },
+  { method: "GET", path: "/api/agent/miles/findings", describe: "Hallazgos propios. Filtros tienda, tipo, estado, prioridad, desde, hasta. cursor y limit." },
+  { method: "POST", path: "/api/agent/miles/findings", describe: "Publica un hallazgo con métricas y evidencia. La misma idempotencyKey devuelve el mismo hallazgo; otro contenido es 409." },
+  { method: "GET", path: "/api/agent/miles/findings/{id}", describe: "Hallazgo, snapshot, historial y comentarios humanos." },
+  { method: "PATCH", path: "/api/agent/miles/findings/{id}", describe: "Miles no descarta ni archiva. Solo puede corregir texto propio si la version coincide." },
+  { method: "GET", path: "/api/agent/miles/investigations", describe: "Investigaciones y ampliaciones. estado=pendiente son las que nadie ha tomado." },
+  { method: "PATCH", path: "/api/agent/miles/investigations/{id}", describe: "Tomar (en_analisis), pedir información o responder. No las crea ni las cancela." },
+  { method: "GET", path: "/api/agent/miles/experiments", describe: "Pruebas. estado=pendiente_evaluacion son las que esperan evaluación." },
+  { method: "POST", path: "/api/agent/miles/experiments/{id}/evaluations", describe: "Publica una evaluación. No cambia el estado ni la decisión humana." },
+] as const;

@@ -6,7 +6,7 @@ import { parseVentaInput, upsertVentaDiaria } from "@/lib/admin-ventas";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const denied = requireAgentApi(request);
+  const denied = await requireAgentApi(request);
   if (denied) {
     return denied;
   }
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const rol = requireAgentRol(request, ["rodrigo"]);
+  const rol = await requireAgentRol(request, ["rodrigo"]);
   if (rol instanceof NextResponse) {
     return rol;
   }

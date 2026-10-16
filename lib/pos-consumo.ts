@@ -1,3 +1,4 @@
+import { COSTO_METODO, coberturaDeFechas, estadoComparacion, estadoHora, promedioOcurrencia, type EstadoComparacion, type EstadoHora } from "@/lib/consumo-metricas";
 import { addDaysToDayKey, isDayKey, yesterdayDayKey } from "@/lib/local-day";
 import {
   CONSUMO_PAGE_DEFAULT,
@@ -77,6 +78,8 @@ export type KpisConsumo = {
   margenPct: number | null;
   cobertura: number | null;
   ventaConCosto: number;
+  ventaNetaConCosto: number;
+  metodoCosto: typeof COSTO_METODO;
 };
 
 export type ProductoConsumo = {
@@ -104,11 +107,13 @@ export type ResumenConsumo = {
   frescura: FrescuraConsumo;
   kpis: KpisConsumo;
   anterior: KpisConsumo | null;
+  kpisComparados: KpisConsumo | null;
+  comparacionEstado: EstadoComparacion;
   mix: MixPago;
   dias: DiaConsumo[];
   diasAnterior: DiaConsumo[];
   top: ProductoConsumo[];
-  horas: Array<{ dow: number; hora: number; venta: number; ordenes: number; unidades: number }>;
+  horas: CeldaHorario[];
   turnos: Array<{ turno: "am" | "pm"; venta: number; ordenes: number; ticket: number | null; unidadesPorTicket: number | null }>;
   calidad: { sinMatchProductos: number; sinMatchVenta: number; sinCostoProductos: number; sinCostoVenta: number; descuadradas: number };
   tendencias: {
@@ -138,6 +143,8 @@ function kpisDe(
     margenPct: margenValor == null || ventaNeta === 0 ? null : Math.round((margenValor / ventaNeta) * 10000) / 10000,
     cobertura: (margen?.venta ?? 0) > 0 ? Math.round((ventaConCosto / (margen?.venta ?? 0)) * 10000) / 10000 : null,
     ventaConCosto,
+    ventaNetaConCosto: ventaNeta,
+    metodoCosto: COSTO_METODO,
   };
 }
 
@@ -263,7 +270,7 @@ export async function cargarResumen(periodo: ConsumoPeriodo, now = Date.now()): 
   const mesPrevioDesde = `${mesPrevioHasta.slice(0, 7)}-01`;
   const coberturaDesde = [periodo.desde, periodo.anterior.desde, lunesPrevio, mesPrevioDesde].sort()[0];
 
-  const [diasTodos, margen, margenAnt, top, horas, calidad, turnos, categorias, frescura] = await Promise.all([
+  const [diasTodos, margen, margenTramo, margenAnt, top, horas, calidad, turnos, categorias, frescura] = await Promise.all([
     paginar((from, to) =>
       supabase
         .from("resumen_dia")
@@ -275,6 +282,7 @@ export async function cargarResumen(periodo: ConsumoPeriodo, now = Date.now()): 
         .range(from, to),
     ),
     margenPeriodo(tienda, periodo.desde, periodo.hasta),
+    periodo.tramo ? margenPeriodo(tienda, periodo.tramo.desde, periodo.tramo.hasta) : Promise.resolve(null),
     periodo.comparar ? margenPeriodo(tienda, periodo.anterior.desde, periodo.anterior.hasta) : Promise.resolve(null),
     supabase.rpc("consumo_top_productos", {
       p_tienda: tienda,
@@ -290,11 +298,12 @@ export async function cargarResumen(periodo: ConsumoPeriodo, now = Date.now()): 
       p_cursor_valor: null,
       p_cursor_codigo: null,
     }),
-    supabase.rpc("consumo_horarios", {
+    supabase.rpc("consumo_mapa_horas", {
       p_tienda: tienda,
       p_desde: periodo.desde,
       p_hasta: periodo.hasta,
       p_categoria: null,
+      p_reloj: "real",
     }),
     supabase.rpc("consumo_calidad_conteos", { p_tienda: tienda, p_desde: periodo.desde, p_hasta: periodo.hasta }),
     paginar((from, to) =>
@@ -345,11 +354,27 @@ export async function cargarResumen(periodo: ConsumoPeriodo, now = Date.now()): 
     turnosAgg.set(turno, current);
   }
 
+  const fechas = todos.map((row) => row.fecha);
+  const tramo = periodo.tramo;
+  const coberturaTramo = tramo ? coberturaDeFechas(fechas, tramo.desde, tramo.hasta) : { completa: false, dias: 0, esperados: 0 };
+  const coberturaAnterior = periodo.comparar ? coberturaDeFechas(fechas, periodo.anterior.desde, periodo.anterior.hasta) : { completa: false, dias: 0, esperados: 0 };
+  const diasTramo = tramo ? enRango(tramo.desde, tramo.hasta) : [];
+  const kpisTramo = tramo ? kpisDe(diasTramo, margenTramo) : null;
+  const kpisAnterior = periodo.comparar ? kpisDe(diasAnterior, margenAnt) : null;
+  const comparacionEstado = estadoComparacion({
+    pedida: periodo.comparacion !== "off",
+    coberturaCompleta: Boolean(tramo) && coberturaTramo.completa && coberturaAnterior.completa,
+    base: kpisAnterior?.venta ?? null,
+  });
+  const comparacionVisible = comparacionEstado === "ok" || comparacionEstado === "sin_base";
+
   return {
     periodo,
     frescura,
     kpis: kpisDe(dias, margen),
-    anterior: periodo.comparar ? kpisDe(diasAnterior, margenAnt) : null,
+    anterior: comparacionVisible ? kpisAnterior : null,
+    kpisComparados: comparacionVisible ? kpisTramo : null,
+    comparacionEstado,
     mix: {
       efectivo: Math.round(mix.efectivo * 100) / 100,
       tarjeta: Math.round(mix.tarjeta * 100) / 100,
@@ -360,13 +385,7 @@ export async function cargarResumen(periodo: ConsumoPeriodo, now = Date.now()): 
     dias,
     diasAnterior,
     top: ((top.data ?? []) as Record<string, unknown>[]).map(mapProducto),
-    horas: ((horas.data ?? []) as Record<string, unknown>[]).map((row) => ({
-      dow: num(row.dow),
-      hora: num(row.hora),
-      venta: num(row.venta),
-      ordenes: num(row.n_ordenes),
-      unidades: num(row.unidades),
-    })),
+    horas: ((horas.data ?? []) as Record<string, unknown>[]).map((row) => mapCelda(row)),
     turnos: (["am", "pm"] as const).map((turno) => {
       const item = turnosAgg.get(turno);
       return {
@@ -433,6 +452,26 @@ export async function cargarProductos(input: {
   if (error) {
     fallar(error);
   }
+  const alcance = await supabase.rpc("consumo_venta_alcance", {
+    p_tienda: TIENDA_DEFAULT,
+    p_desde: input.periodo.desde,
+    p_hasta: input.periodo.hasta,
+    p_categoria: input.categoria || null,
+    p_q: input.q || null,
+  });
+  if (alcance.error) {
+    fallar(alcance.error);
+  }
+  const periodoTotal = await supabase.rpc("consumo_venta_alcance", {
+    p_tienda: TIENDA_DEFAULT,
+    p_desde: input.periodo.desde,
+    p_hasta: input.periodo.hasta,
+    p_categoria: null,
+    p_q: null,
+  });
+  if (periodoTotal.error) {
+    fallar(periodoTotal.error);
+  }
   const rows = ((data ?? []) as Record<string, unknown>[]).map(mapProducto);
   const page = rows.slice(0, limite);
   const last = page[page.length - 1];
@@ -446,6 +485,8 @@ export async function cargarProductos(input: {
           : last?.venta;
   return {
     rows: page,
+    ventaPeriodo: num(periodoTotal.data),
+    ventaAlcance: num(alcance.data),
     nextCursor:
       rows.length > limite && last
         ? encodeCursor({
@@ -529,14 +570,47 @@ export async function cargarProducto(codigo: string, periodo: ConsumoPeriodo) {
   };
 }
 
-export async function cargarHorarios(periodo: ConsumoPeriodo, categoria: string) {
+export type CeldaHorario = {
+  dow: number;
+  hora: number;
+  venta: number;
+  ordenes: number;
+  unidades: number;
+  ocurrencias: number;
+  incompletas: number;
+  promedio: number | null;
+  ticket: number | null;
+  estado: EstadoHora;
+};
+
+function mapCelda(row: Record<string, unknown>): CeldaHorario {
+  const venta = num(row.venta);
+  const ordenes = num(row.n_ordenes);
+  const ocurrencias = num(row.ocurrencias);
+  const incompletas = num(row.incompletas);
+  return {
+    dow: num(row.dow),
+    hora: num(row.hora),
+    venta,
+    ordenes,
+    unidades: num(row.unidades),
+    ocurrencias,
+    incompletas,
+    promedio: promedioOcurrencia(venta, ocurrencias),
+    ticket: ordenes > 0 ? Math.round((venta / ordenes) * 100) / 100 : null,
+    estado: estadoHora({ ocurrencias, ordenes, incompletas }),
+  };
+}
+
+export async function cargarHorarios(periodo: ConsumoPeriodo, categoria: string, reloj: "real" | "caja" = "real") {
   const supabase = getSupabaseAdminClient();
   const [horas, turnos, categorias] = await Promise.all([
-    supabase.rpc("consumo_horarios", {
+    supabase.rpc("consumo_mapa_horas", {
       p_tienda: TIENDA_DEFAULT,
       p_desde: periodo.desde,
       p_hasta: periodo.hasta,
       p_categoria: categoria || null,
+      p_reloj: reloj,
     }),
     paginar((from, to) =>
       supabase
@@ -551,13 +625,7 @@ export async function cargarHorarios(periodo: ConsumoPeriodo, categoria: string)
   ]);
   if (horas.error) fallar(horas.error);
   if (categorias.error) fallar(categorias.error);
-  const celdas = ((horas.data ?? []) as Record<string, unknown>[]).map((row) => ({
-    dow: num(row.dow),
-    hora: num(row.hora),
-    venta: num(row.venta),
-    ordenes: num(row.n_ordenes),
-    unidades: num(row.unidades),
-  }));
+  const celdas = ((horas.data ?? []) as Record<string, unknown>[]).map((row) => mapCelda(row));
   const porTurno = new Map<string, { venta: number; ordenes: number; unidades: number }>();
   for (const row of turnos) {
     const key = String(row.turno);
@@ -568,6 +636,7 @@ export async function cargarHorarios(periodo: ConsumoPeriodo, categoria: string)
     porTurno.set(key, current);
   }
   return {
+    reloj,
     celdas,
     turnos: (["am", "pm"] as const).map((turno) => {
       const item = porTurno.get(turno) ?? { venta: 0, ordenes: 0, unidades: 0 };
@@ -580,6 +649,25 @@ export async function cargarHorarios(periodo: ConsumoPeriodo, categoria: string)
       };
     }),
     categorias: ((categorias.data ?? []) as Record<string, unknown>[]).map((row) => String(row.categoria ?? "")),
+  };
+}
+
+export async function cargarAsociacion(periodo: ConsumoPeriodo, codigoA: string, codigoB: string) {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.rpc("consumo_canasta_par", {
+    p_tienda: TIENDA_DEFAULT,
+    p_desde: periodo.desde,
+    p_hasta: periodo.hasta,
+    p_a: codigoA,
+    p_b: codigoB,
+  });
+  if (error) fallar(error);
+  const row = Array.isArray(data) ? data[0] : null;
+  return {
+    elegibles: num(row?.elegibles),
+    conA: num(row?.con_a),
+    conB: num(row?.con_b),
+    conAmbos: num(row?.con_ambos),
   };
 }
 

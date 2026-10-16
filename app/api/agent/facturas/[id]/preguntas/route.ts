@@ -5,7 +5,7 @@ import { facturasError, handlePostPreguntas } from "@/lib/facturas-http";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
-  const rol = requireAgentRol(request, ["phillip", "lectura"]);
+  const rol = await requireAgentRol(request, ["phillip", "lectura"]);
   if (rol instanceof NextResponse) {
     return rol;
   }

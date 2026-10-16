@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
+import { rolPorTokenHash } from "@/lib/miles-store";
 
 function digest(value: string): Buffer {
   return createHash("sha256").update(value).digest();
@@ -11,11 +12,11 @@ export function bearerMatches(header: string | null, token: string): boolean {
   return timingSafeEqual(digest(received), digest(expected));
 }
 
-export const AGENT_ROLES = ["lectura", "rodrigo", "phillip", "boris", "fred", "hans", "matt", "troy", "robert"] as const;
+export const AGENT_ROLES = ["lectura", "rodrigo", "phillip", "boris", "fred", "hans", "matt", "troy", "robert", "miles"] as const;
 
 export type AgentRol = (typeof AGENT_ROLES)[number];
 
-const ROLE_ENV: Record<Exclude<AgentRol, "lectura">, string> = {
+const ROLE_ENV: Record<Exclude<AgentRol, "lectura" | "miles">, string> = {
   rodrigo: "AGENT_TOKEN_RODRIGO",
   phillip: "AGENT_TOKEN_PHILLIP",
   boris: "AGENT_TOKEN_BORIS",
@@ -33,10 +34,10 @@ export function agentApiConfigurada(): boolean {
   return Object.values(ROLE_ENV).some((key) => Boolean(process.env[key]?.trim()));
 }
 
-export function agentRolFromRequest(request: NextRequest): AgentRol | null {
+export async function agentRolFromRequest(request: NextRequest): Promise<AgentRol | null> {
   const header = request.headers.get("authorization");
   const pairs: Array<[AgentRol, string]> = [];
-  for (const [rol, envName] of Object.entries(ROLE_ENV) as Array<[Exclude<AgentRol, "lectura">, string]>) {
+  for (const [rol, envName] of Object.entries(ROLE_ENV) as Array<[Exclude<AgentRol, "lectura" | "miles">, string]>) {
     const token = process.env[envName]?.trim();
     if (token) {
       pairs.push([rol, token]);
@@ -51,26 +52,43 @@ export function agentRolFromRequest(request: NextRequest): AgentRol | null {
       return rol;
     }
   }
-  return null;
+  const received = header?.trim() ?? "";
+  if (!received.toLowerCase().startsWith("bearer ")) {
+    return null;
+  }
+  const token = received.slice(7).trim();
+  if (!token) {
+    return null;
+  }
+  try {
+    return await rolPorTokenHash(token);
+  } catch {
+    return null;
+  }
 }
 
-export function requireAgentApi(request: NextRequest): NextResponse | null {
+export async function requireAgentApi(request: NextRequest): Promise<NextResponse | null> {
   if (!agentApiConfigurada()) {
-    return NextResponse.json({ error: "La API del agente no está configurada" }, { status: 503 });
+    const miles = await agentRolFromRequest(request);
+    if (miles !== "miles") {
+      return NextResponse.json({ error: "La API del agente no está configurada" }, { status: 503 });
+    }
   }
-  if (!agentRolFromRequest(request)) {
+  if (!(await agentRolFromRequest(request))) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
   return null;
 }
 
-export function requireAgentRol(request: NextRequest, allowed: readonly AgentRol[]): AgentRol | NextResponse {
-  const denied = requireAgentApi(request);
-  if (denied) {
-    return denied;
+export async function requireAgentRol(request: NextRequest, allowed: readonly AgentRol[]): Promise<AgentRol | NextResponse> {
+  const rol = await agentRolFromRequest(request);
+  if (!rol) {
+    if (!agentApiConfigurada()) {
+      return NextResponse.json({ error: "La API del agente no está configurada" }, { status: 503 });
+    }
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
-  const rol = agentRolFromRequest(request);
-  if (!rol || !allowed.includes(rol)) {
+  if (!allowed.includes(rol)) {
     return NextResponse.json({ error: "Este acceso no puede escribir esa parte" }, { status: 403 });
   }
   return rol;

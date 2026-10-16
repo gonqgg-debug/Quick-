@@ -5,7 +5,7 @@ import { facturasError, handleAsignarProducto } from "@/lib/facturas-http";
 export const dynamic = "force-dynamic";
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string; lineaId: string } }) {
-  const rol = requireAgentRol(request, ["phillip"]);
+  const rol = await requireAgentRol(request, ["phillip"]);
   if (rol instanceof NextResponse) {
     return rol;
   }

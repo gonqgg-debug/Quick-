@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { formatDayKey } from "@/lib/local-day";
+import { codigoVisible, participacion } from "@/lib/consumo-metricas";
 import { formatPct, formatRd, formatUnidades } from "@/lib/pos-domain";
 import type { ProductoConsumo } from "@/lib/pos-consumo";
 import { DataTable, DataTableCell, DataTableHead, DataTableRow, DataTableTh } from "@/components/admin/DataTable";
@@ -16,6 +17,8 @@ export function ConsumoProductosVista({
   desde,
   hasta,
   cursor,
+  ventaPeriodo,
+  ventaAlcance,
 }: {
   rows: ProductoConsumo[];
   nextCursor: string | null;
@@ -26,11 +29,14 @@ export function ConsumoProductosVista({
   desde: string;
   hasta: string;
   cursor: string | null;
+  ventaPeriodo: number;
+  ventaAlcance: number;
 }) {
   const base = new URLSearchParams({ preset: "custom", desde, hasta, orden });
   if (categoria) base.set("categoria", categoria);
   if (q) base.set("q", q);
-  const ventaTotal = rows.reduce((sum, row) => sum + row.venta, 0);
+  const ventaPagina = rows.reduce((sum, row) => sum + row.venta, 0);
+  const filtrado = Boolean(categoria || q);
   const esVariacion = orden === "variacion" || orden === "variacion_asc";
   const secundaria = "hidden md:table-cell";
 
@@ -64,8 +70,8 @@ export function ConsumoProductosVista({
                       {row.nombre}
                     </Link>
                     <span className="mt-0.5 block text-xs text-brand-muted">
-                      {row.marca ? `${row.marca} · ` : ""}
-                      {row.codigo}
+                      {row.marca ? `${row.marca}` : ""}
+                      {codigoVisible(row.codigo) ? `${row.marca ? " · " : ""}${codigoVisible(row.codigo)}` : ""}
                     </span>
                   </DataTableCell>
                   <DataTableCell className={secundaria}>
@@ -73,7 +79,14 @@ export function ConsumoProductosVista({
                   </DataTableCell>
                   <DataTableCell numeric>{formatUnidades(row.unidades)}</DataTableCell>
                   <DataTableCell numeric>{formatRd(row.venta)}</DataTableCell>
-                  <DataTableCell numeric className={secundaria}>{ventaTotal > 0 ? formatPct(row.venta / ventaTotal).replace("+", "") : "—"}</DataTableCell>
+                  <DataTableCell numeric className={secundaria}>
+                    {formatPct(participacion(row.venta, ventaPeriodo)).replace("+", "")}
+                    {filtrado ? (
+                      <span className="mt-0.5 block text-xs text-brand-muted">
+                        {formatPct(participacion(row.venta, ventaAlcance)).replace("+", "")} del filtro
+                      </span>
+                    ) : null}
+                  </DataTableCell>
                   <DataTableCell numeric className={secundaria}>
                     {row.costo == null ? (
                       "—"
@@ -98,7 +111,7 @@ export function ConsumoProductosVista({
       )}
       <div className="mt-4 flex items-center justify-between text-sm">
         <p className="text-brand-muted">
-          {rows.length} filas · venta de esta página {formatRd(ventaTotal)}
+          {rows.length} filas · esta página {formatRd(ventaPagina)} · % venta sobre {formatRd(ventaPeriodo)} del periodo, con ITBIS
         </p>
         {nextCursor ? (
           <Link

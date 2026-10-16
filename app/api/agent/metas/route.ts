@@ -5,7 +5,7 @@ import { loadAgentMetaFecha, loadAgentMetaMes, parseAgentMetaQuery } from "@/lib
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const denied = requireAgentApi(request);
+  const denied = await requireAgentApi(request);
   if (denied) {
     return denied;
   }

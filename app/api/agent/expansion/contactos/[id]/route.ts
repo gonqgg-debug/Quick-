@@ -5,7 +5,7 @@ import { expansionError, handleGetContacto, handlePatchContacto } from "@/lib/ex
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  const denied = requireAgentApi(request);
+  const denied = await requireAgentApi(request);
   if (denied) {
     return denied;
   }
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
-  const denied = requireAgentApi(request);
+  const denied = await requireAgentApi(request);
   if (denied) {
     return denied;
   }

@@ -16,14 +16,21 @@ export default async function ConsumoHorariosPage({
 }) {
   const params = paramsDe(searchParams);
   try {
-    const data = await cargarHorarios(periodoDesdeParams(params), (params.get("categoria") ?? "").slice(0, 80));
+    const periodo = periodoDesdeParams(params);
+    const reloj = params.get("reloj") === "caja" ? "caja" : "real";
+    const metricaRaw = params.get("metrica");
+    const metrica = metricaRaw === "promedio" || metricaRaw === "ticket" ? metricaRaw : parseMetrica(metricaRaw);
+    const data = await cargarHorarios(periodo, (params.get("categoria") ?? "").slice(0, 80), reloj);
     return (
       <ConsumoHorariosVista
         celdas={data.celdas}
         turnos={data.turnos}
         categorias={data.categorias}
         categoria={params.get("categoria") ?? ""}
-        metrica={parseMetrica(params.get("metrica"))}
+        metrica={metrica}
+        reloj={reloj}
+        desde={periodo.desde}
+        hasta={periodo.hasta}
       />
     );
   } catch (error) {

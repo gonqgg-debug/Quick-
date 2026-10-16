@@ -5,7 +5,7 @@ import { handleVerificacion, operacionError } from "@/lib/operacion-http";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
-  const rol = requireAgentRol(request, ["boris"]);
+  const rol = await requireAgentRol(request, ["boris"]);
   if (rol instanceof NextResponse) {
     return rol;
   }

@@ -117,6 +117,7 @@ export const ADMIN_CONSUMO_NAV: AdminNavItem[] = [
   { href: "/admin/consumo/productos", label: "Productos", icon: "products", status: "live" },
   { href: "/admin/consumo/horarios", label: "Horarios", icon: "history", status: "live" },
   { href: "/admin/consumo/canasta", label: "Canasta", icon: "catalog", status: "live" },
+  { href: "/admin/consumo/miles", label: "Miles", icon: "goals", status: "live" },
   { href: "/admin/consumo/calidad", label: "Calidad", icon: "exceptions", status: "live" },
 ];
 

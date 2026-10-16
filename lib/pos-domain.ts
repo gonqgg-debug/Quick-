@@ -1,3 +1,4 @@
+import { resolverComparacion, type ModoComparacion } from "@/lib/consumo-metricas";
 import { addDaysToDayKey, diffDayKeys, isDayKey, isoWeekdayMonday1, localDayKey, todayDayKey, STAFF_TIMEZONE } from "@/lib/local-day";
 
 export const POS_MAX_LINEAS = 1500;
@@ -252,7 +253,11 @@ export type ConsumoPeriodo = {
   hasta: string;
   comparar: boolean;
   preset: PresetPeriodo;
+  comparacion: ModoComparacion | "off";
   anterior: { desde: string; hasta: string };
+  tramo: { desde: string; hasta: string } | null;
+  algoritmo: string;
+  recortado: boolean;
 };
 
 export type CursorConsumo = { n: number; v: number | null; id: string; orden: string };
@@ -991,8 +996,18 @@ export function ventaDelDia(estado: EstadoPos, tienda: string, fecha: string): n
   return round2(suma);
 }
 
+export function parseComparacion(raw: string | null | undefined, comparar?: string | null): ModoComparacion | "off" {
+  if (comparar === "0" || comparar === "false" || raw === "off") {
+    return "off";
+  }
+  if (raw === "semana" || raw === "anio" || raw === "anterior") {
+    return raw;
+  }
+  return "anterior";
+}
+
 export function resolverPeriodo(
-  input: { desde?: string | null; hasta?: string | null; preset?: string | null; comparar?: string | null },
+  input: { desde?: string | null; hasta?: string | null; preset?: string | null; comparar?: string | null; comparacion?: string | null },
   now = Date.now(),
 ): ConsumoPeriodo {
   const hoy = todayDayKey(now);
@@ -1019,15 +1034,19 @@ export function resolverPeriodo(
   if (diffDayKeys(desde, hasta) > PERIODO_MAX_DIAS) {
     desde = addDaysToDayKey(hasta, -PERIODO_MAX_DIAS);
   }
-  const dias = diffDayKeys(desde, hasta);
-  const hastaAnterior = addDaysToDayKey(desde, -1);
-  const desdeAnterior = addDaysToDayKey(hastaAnterior, -dias);
+  const comparacion = parseComparacion(input.comparacion, input.comparar);
+  const comparado = resolverComparacion(desde, hasta, comparacion, now);
+  const anterior = comparado.anterior ?? { desde, hasta };
   return {
     desde,
     hasta,
-    comparar: input.comparar !== "0" && input.comparar !== "false",
+    comparar: comparacion !== "off" && comparado.anterior != null,
     preset,
-    anterior: { desde: desdeAnterior, hasta: hastaAnterior },
+    comparacion,
+    anterior,
+    tramo: comparado.tramo,
+    algoritmo: comparado.algoritmo,
+    recortado: comparado.recortado,
   };
 }
 
@@ -1131,11 +1150,12 @@ export function formatPct(value: number | null | undefined): string {
 }
 
 export const DEFINICIONES = {
-  venta: "Lo que pagó el cliente, con las devoluciones ya restadas. El ITBIS ya va incluido: no se suma encima. Solo entran órdenes paid, done e invoiced.",
-  ticket: "Venta dividida entre el número de órdenes del periodo. El ITBIS ya va incluido.",
-  unidadesTicket: "Unidades vendidas divididas entre el número de órdenes.",
-  margen: "Venta y costo traen ITBIS. Se les quita el de la línea (o el del producto: 0, 16 o 18) y se restan. Si no hay costo, no se calcula: no es cero.",
-  cobertura: "Parte de la venta que tiene costo, manual o de la última factura.",
-  lift: "Cuántas veces más se llevan juntos de lo que se esperaría por separado.",
-  hora: "Una venta después de medianoche sigue en el día en que se abrió la caja.",
+  venta: "Lo que pagó el cliente, con las devoluciones ya restadas. El ITBIS ya va incluido: no se suma encima. Solo entran órdenes paid, done e invoiced. ventas_diarias no se suma otra vez.",
+  tickets: "Órdenes paid, done e invoiced del periodo.",
+  ticket: "Venta con ITBIS dividida entre el número de tickets del periodo.",
+  unidadesTicket: "Unidades vendidas divididas entre el número de tickets.",
+  margen: "Solo cubre ventas con costo. Venta y costo traen ITBIS y se les quita la misma tasa. No se reparte sobre la venta sin costo y un faltante no es cero.",
+  cobertura: "Venta con ITBIS que tiene costo, dividida entre la venta con ITBIS del periodo.",
+  lift: "Cuántas veces más se llevan juntos de lo que se esperaría por separado. Con menos de 5 órdenes el par no se publica.",
+  hora: "Por defecto es la hora real de la transacción en America/Santo_Domingo. El día de caja es otra opción: después de medianoche sigue en el día en que se abrió.",
 } as const;

@@ -2,22 +2,39 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { formatPct, formatRd } from "@/lib/pos-domain";
+import { formatNumero, formatPct, formatRd } from "@/lib/pos-domain";
 import { brand } from "@/lib/theme";
 
 export function Dinero({ value, className = "" }: { value: number | null | undefined; className?: string }) {
   return <span className={`tabular-nums ${className}`}>{formatRd(value)}</span>;
 }
 
-export function Delta({ actual, anterior }: { actual: number | null; anterior: number | null }) {
-  if (actual == null || anterior == null || anterior === 0) {
+export function Delta({
+  actual,
+  anterior,
+  estado = "ok",
+  formato = "rd",
+}: {
+  actual: number | null;
+  anterior: number | null;
+  estado?: "ok" | "off" | "no_disponible" | "sin_base";
+  formato?: "rd" | "num";
+}) {
+  if (estado === "off") {
     return <span className="text-xs text-brand-muted">Sin comparación</span>;
+  }
+  if (estado === "no_disponible" || actual == null || anterior == null) {
+    return <span className="text-xs text-brand-muted">Comparación no disponible</span>;
+  }
+  if (estado === "sin_base" || anterior === 0) {
+    const texto = formato === "num" ? formatNumero(actual, 2) : formatRd(actual);
+    return <span className="text-xs text-brand-muted">Sin base anterior · ahora {texto}</span>;
   }
   const pct = (actual - anterior) / Math.abs(anterior);
   const color = Math.abs(pct) < 0.005 ? brand.muted : pct > 0 ? "#166534" : brand.error;
   return (
     <span className="text-xs font-semibold tabular-nums" style={{ color }}>
-      {formatPct(pct)} vs periodo anterior
+      {formatPct(pct)} vs periodo comparado
     </span>
   );
 }
@@ -72,12 +89,12 @@ export function Metrica({
   delta?: React.ReactNode;
 }) {
   return (
-    <article className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+    <article className="min-w-0 rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
       <p className="flex items-center text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-muted">
         {etiqueta}
         <Definicion texto={definicion} />
       </p>
-      <p className="mt-2 text-2xl font-semibold tabular-nums text-[#111827]">{valor}</p>
+      <p className="mt-2 break-words text-xl font-semibold tabular-nums leading-tight text-[#111827] sm:text-2xl">{valor}</p>
       {detalle ? <p className="mt-1 text-xs text-brand-muted">{detalle}</p> : null}
       {delta ? <div className="mt-2">{delta}</div> : null}
     </article>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { brand } from "@/lib/theme";
 
@@ -24,6 +25,12 @@ export function FiltrosProductos({
   const router = useRouter();
   const params = useSearchParams();
   const esVariacion = orden === "variacion" || orden === "variacion_asc";
+  const [busquedaCategoria, setBusquedaCategoria] = useState("");
+  const categoriasVisibles = useMemo(() => {
+    const q = busquedaCategoria.trim().toLowerCase();
+    if (!q) return categorias;
+    return categorias.filter((item) => item.toLowerCase().includes(q));
+  }, [busquedaCategoria, categorias]);
 
   function ir(patch: Record<string, string | null>) {
     const next = new URLSearchParams(params);
@@ -66,16 +73,27 @@ export function FiltrosProductos({
           </Chip>
         </div>
       ) : null}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        <Chip activo={!categoria} onClick={() => ir({ categoria: null })}>
-          Todas
-        </Chip>
-        {categorias.map((item) => (
-          <Chip key={item} activo={categoria === item} onClick={() => ir({ categoria: item })}>
-            {item}
-          </Chip>
-        ))}
-      </div>
+      <label className="block max-w-xs text-xs font-medium text-brand-muted">
+        Categoría
+        <input
+          value={busquedaCategoria}
+          onChange={(event) => setBusquedaCategoria(event.target.value)}
+          placeholder="Buscar categoría"
+          className="mt-1 block w-full rounded-md border border-[#E5E7EB] px-3 py-2 text-sm text-brand-ink focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/40"
+        />
+        <select
+          value={categoria}
+          onChange={(event) => ir({ categoria: event.target.value || null })}
+          className="mt-1 block w-full rounded-md border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-brand-ink focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/40"
+        >
+          <option value="">Todas</option>
+          {categoriasVisibles.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
+      </label>
       <form
         className="max-w-sm"
         onSubmit={(event) => {

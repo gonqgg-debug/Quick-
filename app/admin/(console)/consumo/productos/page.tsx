@@ -40,6 +40,8 @@ export default async function ConsumoProductosPage({
         desde={periodo.desde}
         hasta={periodo.hasta}
         cursor={params.get("cursor")}
+        ventaPeriodo={lista.ventaPeriodo}
+        ventaAlcance={lista.ventaAlcance}
       />
     );
   } catch (error) {

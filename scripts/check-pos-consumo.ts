@@ -19,6 +19,8 @@ import {
   ventaSinItbis,
   type PosNormalizado,
 } from "../lib/pos-domain";
+import { anioAnterior, asociacionCanasta, coberturaDeFechas, desgloseVenta, estadoComparacion, estadoHora, participacion, promedioOcurrencia, resolverComparacion, variacionPct } from "../lib/consumo-metricas";
+import { MilesError, hashPayload, parseHallazgo } from "../lib/miles-domain";
 
 function assert(condition: unknown, message: string) {
   if (!condition) {
@@ -295,6 +297,44 @@ assert(metodoCanon("Cuenta de cliente") === "credito", "cuenta de cliente es cr�
 const periodo = resolverPeriodo({ preset: "7d", comparar: "1" }, Date.parse("2026-10-16T12:00:00Z"));
 assert(periodo.hasta === "2026-10-16", "el periodo cierra hoy en Santo Domingo");
 assert(periodo.desde === "2026-10-10", "7 días incluyen hoy");
+assert(periodo.tramo?.hasta === "2026-10-15" && periodo.anterior.desde === "2026-10-04" && periodo.anterior.hasta === "2026-10-09", "la comparación de un periodo en curso usa días completos");
+const semana = resolverComparacion("2026-10-10", "2026-10-15", "semana", Date.parse("2026-10-16T12:00:00Z"));
+assert(semana.anterior?.desde === "2026-10-03" && semana.anterior.hasta === "2026-10-08", "mismos días de la semana corren 7 días");
+assert(anioAnterior("2024-02-29") === "2023-02-28", "el 29 de febrero cae en el 28");
+assert(variacionPct(10, 0) === null && estadoComparacion({ pedida: true, coberturaCompleta: true, base: 0 }) === "sin_base", "base cero no da un porcentaje infinito");
+assert(estadoComparacion({ pedida: true, coberturaCompleta: false, base: 10 }) === "no_disponible", "sin cobertura no hay comparación");
+assert(!coberturaDeFechas(["2026-10-01"], "2026-10-01", "2026-10-02").completa, "un día sin fila no cuenta como cero");
+const efectos = desgloseVenta({ tickets: 12, ticket: 110 }, { tickets: 10, ticket: 100 });
+assert(efectos.efectoTickets === 200 && efectos.efectoTicket === 120 && efectos.delta === 320, "tickets y ticket promedio se desglosan en pesos");
+assert(participacion(85700, 1123656) != null && Math.round((participacion(85700, 1123656) ?? 0) * 1000) / 10 === 7.6, "la participación usa la venta del periodo");
+assert(promedioOcurrencia(100, 4) === 25 && promedioOcurrencia(0, 2) === 0 && promedioOcurrencia(10, 0) === null, "el promedio horario incluye ocurrencias en cero y no divide entre nada");
+assert(estadoHora({ ocurrencias: 0, ordenes: 0, incompletas: 0 }) === "sin_datos", "sin sesión no es cerrado");
+assert(estadoHora({ ocurrencias: 3, ordenes: 0, incompletas: 0 }) === "abierto_sin_ventas", "hora abierta sin ventas no es cerrada");
+const cesta = asociacionCanasta({ elegibles: 10, conA: 4, conB: 3, conAmbos: 2 });
+assert(cesta.muestraPequena && cesta.dadoA === 0.5, "una canasta chica no se presenta como conclusión");
+const hallazgo = {
+  idempotencyKey: "h1",
+  tipo: "oportunidad",
+  titulo: "Cerveza de noche",
+  resumen: "Sube el ticket",
+  observacion: "Los viernes después de las 8 sube la venta.",
+  interpretacion: "Puede ser el partido.",
+  recomendacion: "Probar un combo.",
+  prioridad: "media",
+  prioridadJustificacion: "El cambio cabe en una semana y la cobertura de costo es alta.",
+  periodo: { desde: "2026-10-01", hasta: "2026-10-07" },
+  metricas: { venta: 100 },
+  evidencia: { consultas: ["consumo_margen_periodo"], filtros: { desde: "2026-10-01" }, enlaces: [{ pantalla: "productos", query: "desde=2026-10-01&hasta=2026-10-07" }] },
+};
+assert(parseHallazgo(hallazgo).tienda === "quick", "el hallazgo queda en la tienda autorizada");
+assert(hashPayload(hallazgo) === hashPayload(hallazgo), "el hash de la publicación es estable");
+let rechazo = false;
+try {
+  parseHallazgo({ ...hallazgo, agent_id: "otro" });
+} catch (error) {
+  rechazo = error instanceof MilesError;
+}
+assert(rechazo, "Miles no acepta un agent_id en el cuerpo");
 
 const cancelada = sesion(850, "POS/00850", 1000, "2026-10-13T14:00:00.000Z", 850001, "2026-10-13T15:00:00.000Z");
 cancelada.ordenes[0].estado = "cancel";
