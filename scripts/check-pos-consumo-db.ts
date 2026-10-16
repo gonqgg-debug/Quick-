@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const migration = join(root, "supabase/migrations/20261016120000_pos_ingesta.sql");
+const migrationCosto = join(root, "supabase/migrations/20261016190000_costo_con_itbis.sql");
 const DB = "quick_pos_test";
 
 function quote(value: string): string {
@@ -112,6 +113,7 @@ values ('2026-10-14', 'miércoles', 90000);
 );
 
 sqlFile(DB, migration);
+sqlFile(DB, migrationCosto);
 
 sql(
   DB,
@@ -295,24 +297,24 @@ begin
   }$json$::jsonb);
 
   select venta_neta into neta from public.resumen_producto_dia where fecha = '2026-10-11' and codigo_odoo = 'cod-18';
-  select round(r.venta_neta - r.unidades * p.costo_manual, 2) into margen
+  select round(r.venta_neta - p.costo_manual * r.unidades_sin_itbis, 2) into margen
   from public.resumen_producto_dia r
   join public.products p on p.id = r.product_id
   where r.fecha = '2026-10-11' and r.codigo_odoo = 'cod-18';
-  if neta is distinct from 84.75 or margen is distinct from 36.75 then
+  if neta is distinct from 84.75 or margen is distinct from 44.07 then
     raise exception 'tasa 18: neta % margen %', neta, margen;
   end if;
 
   select venta_neta into neta from public.resumen_producto_dia where fecha = '2026-10-11' and codigo_odoo = 'cod-16';
-  select round(r.venta_neta - r.unidades * p.costo_manual, 2) into margen
+  select round(r.venta_neta - p.costo_manual * r.unidades_sin_itbis, 2) into margen
   from public.resumen_producto_dia r join public.products p on p.id = r.product_id
   where r.fecha = '2026-10-11' and r.codigo_odoo = 'cod-16';
-  if neta is distinct from 100 or margen is distinct from 0 then
+  if neta is distinct from 100 or margen is distinct from 13.79 then
     raise exception 'tasa 16: neta % margen %', neta, margen;
   end if;
 
   select venta_neta into neta from public.resumen_producto_dia where fecha = '2026-10-11' and codigo_odoo = 'cod-0';
-  select round(r.venta_neta - r.unidades * p.costo_manual, 2) into margen
+  select round(r.venta_neta - p.costo_manual * r.unidades_sin_itbis, 2) into margen
   from public.resumen_producto_dia r join public.products p on p.id = r.product_id
   where r.fecha = '2026-10-11' and r.codigo_odoo = 'cod-0';
   if neta is distinct from 100 or margen is distinct from 52 then
@@ -326,11 +328,29 @@ begin
   if neta is distinct from 0 then
     raise exception 'la linea no guardo tasa 0, fue %', neta;
   end if;
-  select round(r.venta_neta - r.unidades * p.costo_manual, 2) into margen
+  select round(r.venta_neta - p.costo_manual * r.unidades_sin_itbis, 2) into margen
   from public.resumen_producto_dia r join public.products p on p.id = r.product_id
   where r.fecha = '2026-10-11' and r.codigo_odoo = 'cod-linea';
   if margen is distinct from 88 then
     raise exception 'la tasa de la linea debio ganar sobre la del producto, margen %', margen;
+  end if;
+
+  select t.margen into margen
+  from public.consumo_top_productos(
+    'quick', '2026-10-11', '2026-10-11', null, null, 'venta', null, null, 20, null, null, null
+  ) t
+  where t.codigo_odoo = 'cod-18';
+  if margen is distinct from 44.07 then
+    raise exception 'el listado no quita el ITBIS del costo, margen %', margen;
+  end if;
+  select m.margen into margen from public.consumo_margen_periodo('quick', '2026-10-11', '2026-10-11') m;
+  if margen is distinct from (
+    select round(sum(r.venta_neta - p.costo_manual * r.unidades_sin_itbis), 2)
+    from public.resumen_producto_dia r
+    join public.products p on p.id = r.product_id
+    where r.fecha = '2026-10-11' and p.costo_manual is not null
+  ) then
+    raise exception 'el margen del periodo no quita el ITBIS del costo, fue %', margen;
   end if;
 
   select match_estado into match from public.pos_orden_lineas where codigo_odoo = 'cod-18';

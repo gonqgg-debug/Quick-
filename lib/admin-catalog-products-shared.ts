@@ -172,16 +172,18 @@ export function elegirCosto(input: {
   return { costo: factura.costo, en: factura.en, fuente: factura.fuente };
 }
 
-/** (precio sin ITBIS − costo sin ITBIS) / precio sin ITBIS. Null si no hay costo. */
+/** (precio sin ITBIS − costo sin ITBIS) / precio sin ITBIS. Precio y costo traen el mismo ITBIS. Null si no hay costo. */
 export function margenDe(precio: number, costo: number | null, tasa = 18): number | null {
   if (costo == null || !(precio > 0)) {
     return null;
   }
-  const neto = precio / (1 + tasa / 100);
+  const factor = 1 + tasa / 100;
+  const neto = precio / factor;
+  const costoNeto = costo / factor;
   if (!(neto > 0)) {
     return null;
   }
-  return Math.round(((neto - costo) / neto) * 1000) / 1000;
+  return Math.round(((neto - costoNeto) / neto) * 1000) / 1000;
 }
 
 export function formatoMargen(margen: number | null): string {

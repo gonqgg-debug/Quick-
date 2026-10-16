@@ -91,7 +91,7 @@ El mismo cuerpo se acepta con un objeto `sesion` y `ordenes` al nivel de arriba,
 
 El precio de la caja ya incluye ITBIS. `precioUnit`, `total` y `subtotalConItbis` son lo que pagó el cliente. No los multipliques por 1.18. `subtotal` es la base sin el impuesto; en el ejemplo, 50 cobrados son 42.37 de base y 7.63 de ITBIS. La venta del día se guarda con el impuesto incluido.
 
-La tasa no es fija. Cada línea puede traer `tasaItbis` (0, 16 o 18; `0.16` se lee como 16). `tax_ids` son ids de `account.tax`, no el porcentaje: un `18` ahí es el id del registro, no 18%. Esos ids se resuelven con `impuestos` en el mismo request, una lista `{ "id": 5, "tasa": 16 }`. Si la línea no trae `tasaItbis` y algún id está en ese mapa, se usa esa tasa. Si no, se usa `products.tasa_itbis`. El default del producto es 18. Un id sin mapa no rechaza la sesión. `tasaItbis` explícito, incluido el 0, gana sobre el mapa. El margen es `venta_con_itbis / (1 + tasa/100) − unidades × costo_sin_itbis`. `products.costo_manual` y `factura_lineas.costo_unitario` se guardan **sin ITBIS**.
+La tasa no es fija. Cada línea puede traer `tasaItbis` (0, 16 o 18; `0.16` se lee como 16). `tax_ids` son ids de `account.tax`, no el porcentaje: un `18` ahí es el id del registro, no 18%. Esos ids se resuelven con `impuestos` en el mismo request, una lista `{ "id": 5, "tasa": 16 }`. Si la línea no trae `tasaItbis` y algún id está en ese mapa, se usa esa tasa. Si no, se usa `products.tasa_itbis`. El default del producto es 18. Un id sin mapa no rechaza la sesión. `tasaItbis` explícito, incluido el 0, gana sobre el mapa. El margen es `(venta_con_itbis − unidades × costo_con_itbis) / (1 + tasa/100)`. `products.costo_manual` y `factura_lineas.costo_unitario` se guardan **con ITBIS**, el mismo de esa venta.
 
 `GET /api/agent/catalogo` devuelve esa tasa en `tasaItbis` y en `tasa_itbis`. El precio del catálogo ya la incluye.
 
@@ -170,4 +170,4 @@ npx tsx scripts/check-pos-consumo.ts
 npx tsx scripts/check-pos-consumo-db.ts
 ```
 
-La primera no toca la base: parser, margen con tasas 0, 16 y 18, estados, partes y el día de 85.075. La segunda crea la base `quick_pos_test` en el Postgres local, aplica `supabase/migrations/20261016120000_pos_ingesta.sql` y llama `ingestar_pos_sesion`. Si existen `PGHOST`, `PGPORT`, `PGUSER` y `PGPASSWORD`, usa ese servidor en vez del Postgres local. La GitHub Action `POS consumo` corre las dos en cada push y en cada pull request.
+La primera no toca la base: parser, margen con tasas 0, 16 y 18, estados, partes y el día de 85.075. La segunda crea la base `quick_pos_test` en el Postgres local, aplica `supabase/migrations/20261016120000_pos_ingesta.sql` y `supabase/migrations/20261016190000_costo_con_itbis.sql`, y llama `ingestar_pos_sesion`. Si existen `PGHOST`, `PGPORT`, `PGUSER` y `PGPASSWORD`, usa ese servidor en vez del Postgres local. La GitHub Action `POS consumo` corre las dos en cada push y en cada pull request.

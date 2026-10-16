@@ -558,7 +558,7 @@ function Editor({
           </label>
         </div>
         <p className="mt-3 text-sm text-brand-muted">
-          El precio de venta ya incluye el ITBIS. El costo, de factura o manual, se guarda sin ITBIS. Se muestra el más reciente entre la factura
+          El precio de venta ya incluye el ITBIS. El costo, de factura o manual, también lo incluye. Se muestra el más reciente entre la factura
           {product.costoFactura == null ? "" : ` (${formatPrice(product.costoFactura)}${product.costoFacturaEn ? `, ${fechaCorta(product.costoFacturaEn)}` : ""})`} y este costo manual. Guardarlo aquí deja la fuente como manual.
         </p>
       </Seccion>

@@ -139,9 +139,9 @@ assert(formatUnidades(4) === "4", "unidades enteras no llevan decimal");
 assert(formatUnidades(4.5) === "4.5", "unidades con fracción llevan un decimal");
 assert(ventaSinItbis(118) === 100, "118 cobrados con ITBIS incluido tienen base 100");
 assert(itbisIncluido(118) === 18, "el ITBIS incluido en 118 es 18");
-assert(margenConsumo(100, 4, factura.costo) === 36.75, "el margen saca el ITBIS de 18 antes de restar el costo de 48");
+assert(margenConsumo(100, 4, factura.costo) === 44.07, "el margen saca el ITBIS de 18 de la venta y del costo de 48");
 assert(margenConsumo(100, 4, 12, 0) === 52, "con ITBIS 0 el margen es venta menos costo");
-assert(margenConsumo(116, 1, 100, 16) === 0, "con ITBIS 16, 116 cobrados tienen base 100");
+assert(margenConsumo(116, 1, 100, 16) === 13.79, "con ITBIS 16, 116 cobrados y costo 100 dejan 13.79");
 assert(ventaSinItbis(116, 16) === 100, "116 con tasa 16 tienen base 100");
 
 const sucio = parsePosIngestBody({

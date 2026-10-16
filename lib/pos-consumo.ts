@@ -465,7 +465,7 @@ export async function cargarProducto(codigo: string, periodo: ConsumoPeriodo) {
     paginar((from, to) =>
       supabase
         .from("resumen_producto_dia")
-        .select("fecha, unidades, venta, venta_neta, n_ordenes, nombre, product_id")
+        .select("fecha, unidades, venta, venta_neta, unidades_sin_itbis, n_ordenes, nombre, product_id")
         .eq("tienda", tienda)
         .eq("codigo_odoo", codigo)
         .gte("fecha", periodo.desde)
@@ -499,6 +499,7 @@ export async function cargarProducto(codigo: string, periodo: ConsumoPeriodo) {
   }));
   const venta = serie.reduce((sum, row) => sum + row.venta, 0);
   const ventaNeta = dias.reduce((sum, row) => sum + num(row.venta_neta), 0);
+  const unidadesSinItbis = dias.reduce((sum, row) => sum + num(row.unidades_sin_itbis), 0);
   const unidades = serie.reduce((sum, row) => sum + row.unidades, 0);
   const costoUnit = numOrNull(costo.data?.costo_unit);
   const nombreResumen = dias.find((row) => row.nombre)?.nombre;
@@ -517,7 +518,7 @@ export async function cargarProducto(codigo: string, periodo: ConsumoPeriodo) {
     costoOrigen: costo.data?.origen ? String(costo.data.origen) : null,
     costoFecha: costo.data?.fecha ? dia(costo.data.fecha) : null,
     costoRef: costo.data?.ref ? String(costo.data.ref) : null,
-    margen: costoUnit == null ? null : Math.round((ventaNeta - unidades * costoUnit) * 100) / 100,
+    margen: costoUnit == null ? null : Math.round((ventaNeta - costoUnit * unidadesSinItbis) * 100) / 100,
     serie,
     horas: ((horas.data ?? []) as Record<string, unknown>[]).map((row) => ({
       hora: num(row.hora),

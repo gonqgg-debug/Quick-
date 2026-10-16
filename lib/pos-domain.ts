@@ -358,11 +358,12 @@ export function tasaCatalogo(value: unknown): number | null {
   return 18;
 }
 
+/** Venta y costo traen ITBIS. El margen es (venta − unidades × costo) / (1 + tasa/100). */
 export function margenConsumo(venta: number, unidades: number, costo: number | null, tasa = 18): number | null {
   if (costo == null) {
     return null;
   }
-  return round2(venta / (1 + tasa / 100) - unidades * costo);
+  return round2((venta - unidades * costo) / (1 + tasa / 100));
 }
 
 export function ordenCuenta(estado: string | null | undefined): boolean {
@@ -1133,7 +1134,7 @@ export const DEFINICIONES = {
   venta: "Lo que pagó el cliente, con las devoluciones ya restadas. El ITBIS ya va incluido: no se suma encima. Solo entran órdenes paid, done e invoiced.",
   ticket: "Venta dividida entre el número de órdenes del periodo. El ITBIS ya va incluido.",
   unidadesTicket: "Unidades vendidas divididas entre el número de órdenes.",
-  margen: "Venta sin el ITBIS de la línea (o el del producto: 0, 16 o 18), menos unidades por el costo sin ITBIS. Si no hay costo, no se calcula: no es cero.",
+  margen: "Venta y costo traen ITBIS. Se les quita el de la línea (o el del producto: 0, 16 o 18) y se restan. Si no hay costo, no se calcula: no es cero.",
   cobertura: "Parte de la venta que tiene costo, manual o de la última factura.",
   lift: "Cuántas veces más se llevan juntos de lo que se esperaría por separado.",
   hora: "Una venta después de medianoche sigue en el día en que se abrió la caja.",
