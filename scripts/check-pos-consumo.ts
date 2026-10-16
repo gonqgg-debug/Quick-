@@ -21,6 +21,7 @@ import {
 } from "../lib/pos-domain";
 import { anioAnterior, asociacionCanasta, coberturaDeFechas, desgloseVenta, estadoComparacion, estadoHora, participacion, promedioOcurrencia, resolverComparacion, variacionPct } from "../lib/consumo-metricas";
 import { MilesError, hashPayload, parseHallazgo } from "../lib/miles-domain";
+import { clasificarHallazgo, formatoDiaComercial, formatoInstante, graficoAlcanza, leerVisual, recomendacionActual, visualCoherente } from "../lib/miles-presentacion";
 
 function assert(condition: unknown, message: string) {
   if (!condition) {
@@ -335,6 +336,26 @@ try {
   rechazo = error instanceof MilesError;
 }
 assert(rechazo, "Miles no acepta un agent_id en el cuerpo");
+const grafico = leerVisual({
+  tipo: "comparacion",
+  metrica: { nombre: "venta", valor: 100, unidad: "rd" },
+  serie: [
+    { etiqueta: "Antes", valor: 80 },
+    { etiqueta: "Ahora", valor: 100 },
+  ],
+});
+assert(grafico.visual?.tipo === "comparacion" && parseHallazgo({ ...hallazgo, visual: grafico.visual }).visual?.metrica?.valor === 100, "el hallazgo acepta una visual declarativa");
+assert(leerVisual({ tipo: "tendencia", html: "<b>x</b>", serie: [{ etiqueta: "Lun", valor: 1 }, { etiqueta: "Mar", valor: 2 }] }).error != null, "la visual rechaza HTML");
+assert(leerVisual({ tipo: "tendencia", serie: [{ etiqueta: "Lun", valor: 1 }, { etiqueta: "javascript:alert(1)", valor: 2 }] }).error != null, "la visual rechaza javascript");
+assert(visualCoherente(grafico.visual, { venta: 100 }).ok && !visualCoherente(grafico.visual, { venta: 50 }).ok, "la visual tiene que coincidir con el snapshot");
+assert(graficoAlcanza(leerVisual({ tipo: "tendencia", serie: [{ etiqueta: "Lun", valor: 1 }] }).visual) === false, "un solo punto no alcanza para una tendencia");
+const contradictorio = { estado: "vigente", limitaciones: "RESUELTO: la mezcla ya incluye el vuelto.", recomendacion: "No uses la mezcla de pagos." };
+assert(clasificarHallazgo(contradictorio) === "requiere_revision", "sin resolución estructurada el hallazgo contradictorio pide revisión");
+assert(recomendacionActual(contradictorio) == null, "la instrucción contradictoria deja de mostrarse como recomendación actual");
+assert(clasificarHallazgo({ ...contradictorio, resolucion: "resuelta", recomendacion_estado: "obsoleta" }) === "resuelto", "la resolución estructurada cierra la alerta");
+assert(recomendacionActual({ ...contradictorio, resolucion: "resuelta", recomendacion_estado: "obsoleta" }) == null, "la recomendación resuelta deja de ser la instrucción actual");
+assert(formatoDiaComercial("2026-10-15").includes("15") && formatoDiaComercial("2026-10-15").includes("2026"), "el día comercial no se corre de fecha");
+assert(formatoInstante("2026-10-16T04:30:00Z").includes("12:30"), "un timestamp se muestra una sola vez en Santo Domingo");
 
 const cancelada = sesion(850, "POS/00850", 1000, "2026-10-13T14:00:00.000Z", 850001, "2026-10-13T15:00:00.000Z");
 cancelada.ordenes[0].estado = "cancel";

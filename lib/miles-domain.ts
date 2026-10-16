@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { isDayKey } from "@/lib/local-day";
+import { leerVisual, type VisualMiles } from "@/lib/miles-presentacion";
 
 export const MILES_ROL = "miles" as const;
 export const MILES_NOMBRE = "Miles — Analista Comercial";
@@ -14,7 +15,7 @@ export const MILES_ESTADOS_MILES_INVESTIGACION = ["en_analisis", "requiere_infor
 
 export const PANTALLAS_EVIDENCIA = ["resumen", "productos", "horarios", "canasta"] as const;
 
-const PROHIBIDOS = new Set(["agent_id", "agentId", "autor", "confianza", "confidence"]);
+const PROHIBIDOS = new Set(["agent_id", "agentId", "autor", "confianza", "confidence", "estado", "resolucion", "recomendacionEstado", "recomendacion_estado"]);
 
 export class MilesError extends Error {
   status: number;
@@ -147,6 +148,7 @@ export type HallazgoInput = {
   limitaciones: string | null;
   evidencia: EvidenciaMiles;
   corte: string | null;
+  visual: VisualMiles | null;
 };
 
 export function parseHallazgo(body: unknown): HallazgoInput {
@@ -166,6 +168,8 @@ export function parseHallazgo(body: unknown): HallazgoInput {
   if (tienda !== MILES_TIENDA) {
     throw new MilesError(403, "Miles no tiene esa tienda");
   }
+  const visual = leerVisual(raw.visual);
+  if (visual.error) throw new MilesError(400, visual.error);
   const periodoDesde = fecha(periodo.desde, "periodo.desde");
   const periodoHasta = fecha(periodo.hasta, "periodo.hasta");
   if (periodoDesde > periodoHasta) {
@@ -195,6 +199,7 @@ export function parseHallazgo(body: unknown): HallazgoInput {
     limitaciones: opcional(raw.limitaciones, "limitaciones", 2000),
     evidencia: parseEvidencia(raw.evidencia),
     corte: opcional(raw.corte, "corte", 120),
+    visual: visual.visual,
   };
 }
 

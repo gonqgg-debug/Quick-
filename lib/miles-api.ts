@@ -7,7 +7,7 @@ export const MILES_AGENT_ENDPOINTS = [
   { method: "POST", path: "/api/agent/miles/runs", describe: "Abre una ejecución. idempotencyKey. No acepta agent_id." },
   { method: "PATCH", path: "/api/agent/miles/runs/{id}", describe: "Cierra la ejecución en completada o fallida. Manda version." },
   { method: "GET", path: "/api/agent/miles/findings", describe: "Hallazgos propios. Filtros tienda, tipo, estado, prioridad, desde, hasta. cursor y limit." },
-  { method: "POST", path: "/api/agent/miles/findings", describe: "Publica un hallazgo con métricas y evidencia. La misma idempotencyKey devuelve el mismo hallazgo; otro contenido es 409." },
+  { method: "POST", path: "/api/agent/miles/findings", describe: "Publica un hallazgo con métricas, evidencia y visual opcional. visual es un objeto declarativo, sin HTML. La misma idempotencyKey devuelve el mismo hallazgo; otro contenido es 409." },
   { method: "GET", path: "/api/agent/miles/findings/{id}", describe: "Hallazgo, snapshot, historial y comentarios humanos." },
   { method: "PATCH", path: "/api/agent/miles/findings/{id}", describe: "Miles no descarta ni archiva. Solo puede corregir texto propio si la version coincide." },
   { method: "GET", path: "/api/agent/miles/investigations", describe: "Investigaciones y ampliaciones. estado=pendiente son las que nadie ha tomado." },

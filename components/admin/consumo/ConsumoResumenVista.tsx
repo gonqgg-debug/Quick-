@@ -155,13 +155,13 @@ export function ConsumoResumenVista({
           <ul className="mt-3 space-y-3">
             {miles.hallazgos.map((hallazgo) => (
               <li key={hallazgo.id}>
-                <Link href={`/admin/consumo/miles/${hallazgo.id}`} className="block">
+                <Link href={`/admin/consumo/miles?vista=hallazgos&hallazgo=${hallazgo.id}`} className="block">
                   <span className="text-sm font-semibold text-[#111827]">{hallazgo.titulo}</span>
                   <span className="mt-0.5 block text-xs text-brand-muted">{hallazgo.tipo} · {hallazgo.resumen}</span>
                 </Link>
               </li>
             ))}
-            <li className="text-xs text-brand-muted">{formatNumero(miles.recomendaciones)} recomendaciones pendientes de decisión.</li>
+            <li className="text-xs text-brand-muted">Abre Miles para ver qué sigue vigente y qué ya tiene resolución.</li>
           </ul>
         )}
       </section>

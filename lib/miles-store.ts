@@ -229,6 +229,7 @@ export async function publicarHallazgo(input: HallazgoInput) {
       limitaciones: input.limitaciones,
       evidencia: input.evidencia,
       corte: input.corte,
+      ...(input.visual ? { visual: input.visual } : {}),
     })
     .select("*")
     .single();
@@ -270,13 +271,21 @@ export async function leerHallazgo(id: string) {
   const hallazgo = await supabase.from("miles_hallazgos").select("*").eq("id", id).maybeSingle();
   if (hallazgo.error) fallar(hallazgo.error);
   if (!hallazgo.data) return null;
-  const [eventos, comentarios] = await Promise.all([
+  const [eventos, comentarios, investigaciones] = await Promise.all([
     supabase.from("miles_eventos").select("*").eq("recurso_tipo", "hallazgo").eq("recurso_id", id).order("en", { ascending: true }),
     supabase.from("miles_comentarios").select("*").eq("recurso_tipo", "hallazgo").eq("recurso_id", id).order("creado_en", { ascending: true }),
+    supabase.from("miles_investigaciones").select("*").eq("hallazgo_id", id).order("creada_en", { ascending: true }),
   ]);
   if (eventos.error) fallar(eventos.error);
   if (comentarios.error) fallar(comentarios.error);
-  return { hallazgo: hallazgo.data, eventos: eventos.data ?? [], comentarios: comentarios.data ?? [] };
+  if (investigaciones.error) fallar(investigaciones.error);
+  return { hallazgo: hallazgo.data, eventos: eventos.data ?? [], comentarios: comentarios.data ?? [], investigaciones: investigaciones.data ?? [] };
+}
+
+export async function listarEjecuciones(limit = 20) {
+  const { data, error } = await client().from("miles_ejecuciones").select("*").order("iniciada_en", { ascending: false }).limit(limit);
+  if (error) fallar(error);
+  return data ?? [];
 }
 
 export async function crearInvestigacion(input: {

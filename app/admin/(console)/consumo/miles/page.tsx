@@ -1,6 +1,7 @@
 import { MilesVista } from "@/components/admin/consumo/MilesVista";
 import { ErrorPanel } from "@/components/admin/consumo/ui";
-import { credencialMilesActiva, listarHallazgos, listarInvestigaciones, listarPruebas, resumenMiles } from "@/lib/miles-store";
+import { credencialMilesActiva, leerHallazgo, listarEjecuciones, listarHallazgos, listarInvestigaciones, listarPruebas, resumenMiles } from "@/lib/miles-store";
+import { cargarFrescura } from "@/lib/pos-consumo";
 
 export const dynamic = "force-dynamic";
 
@@ -16,32 +17,38 @@ export default async function MilesPage({
     return Array.isArray(value) ? value[0] ?? "" : value ?? "";
   };
   try {
-    const [hallazgos, investigaciones, pruebas, credencial, miles] = await Promise.all([
-      listarHallazgos({
-        tienda: uno("tienda") || null,
-        tipo: uno("tipo") || null,
-        estado: uno("estado") || null,
-        prioridad: uno("prioridad") || null,
-        desde: uno("desde") || null,
-        hasta: uno("hasta") || null,
-        limit: 50,
-        cursor: null,
-      }),
+    const hallazgoId = uno("hallazgo");
+    const [hallazgos, investigaciones, pruebas, ejecuciones, credencial, miles, frescura, detalle] = await Promise.all([
+      listarHallazgos({ tienda: null, tipo: null, estado: null, prioridad: null, desde: null, hasta: null, limit: 100, cursor: null }),
       listarInvestigaciones(null, 50),
       listarPruebas(null),
+      listarEjecuciones(20),
       credencialMilesActiva(),
       resumenMiles(),
+      cargarFrescura().catch(() => null),
+      hallazgoId ? leerHallazgo(hallazgoId) : Promise.resolve(null),
     ]);
     return (
       <MilesVista
         vista={uno("vista") || "hallazgos"}
-        filtros={{ tipo: uno("tipo"), estado: uno("estado"), prioridad: uno("prioridad"), desde: uno("desde"), hasta: uno("hasta") }}
+        filtros={{
+          tipo: uno("tipo"),
+          estado: uno("estado"),
+          prioridad: uno("prioridad"),
+          desde: uno("desde"),
+          hasta: uno("hasta"),
+          q: uno("q"),
+          rapido: uno("rapido"),
+        }}
         hallazgos={hallazgos}
         investigaciones={investigaciones}
         pruebas={pruebas}
+        ejecuciones={ejecuciones}
         credencial={credencial}
         ultima={miles.ultima}
-        recomendaciones={miles.recomendaciones}
+        frescura={frescura}
+        detalle={detalle}
+        origen={uno("origen")}
       />
     );
   } catch (error) {

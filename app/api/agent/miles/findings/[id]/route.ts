@@ -25,8 +25,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   if (rol instanceof NextResponse) return rol;
   try {
     const body = await request.json();
-    if (body.estado || body.descarteMotivo || body.decision) {
-      throw new MilesError(403, "Miles no descarta, no archiva y no decide");
+    if (body.estado || body.descarteMotivo || body.decision || body.resolucion || body.recomendacion_estado || body.recomendacionEstado) {
+      throw new MilesError(403, "Miles no descarta, no archiva, no resuelve y no decide");
     }
     const version = body.version;
     if (typeof version !== "number") throw new MilesError(400, "version es obligatoria");

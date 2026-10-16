@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
 import { MilesError } from "@/lib/miles-domain";
 import { respuestaMiles } from "@/lib/miles-http";
-import { cambiarHallazgo, crearInvestigacion } from "@/lib/miles-store";
+import { cambiarHallazgo, comentar, crearInvestigacion } from "@/lib/miles-store";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +23,27 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (body.accion === "archivar") {
       const row = await cambiarHallazgo(params.id, version, { estado: "archivado" }, admin.email ?? "admin", "archivo");
       return NextResponse.json({ id: row.id, estado: row.estado, version: row.version });
+    }
+    if (body.accion === "resolver") {
+      const row = await cambiarHallazgo(
+        params.id,
+        version,
+        { resolucion: "resuelta", recomendacion_estado: "obsoleta" },
+        admin.email ?? "admin",
+        "resolucion",
+      );
+      return NextResponse.json({ id: row.id, estado: row.estado, resolucion: row.resolucion, version: row.version, aviso: "La recomendación quedó como anterior. El hallazgo no se reescribió por el texto." });
+    }
+    if (body.accion === "comentario") {
+      const cuerpo = typeof body.cuerpo === "string" ? body.cuerpo.trim() : "";
+      if (cuerpo.length < 2) throw new MilesError(400, "El comentario está vacío");
+      const creado = await comentar({
+        recursoTipo: "hallazgo",
+        recursoId: params.id,
+        autor: admin.email ?? "admin",
+        cuerpo: cuerpo.slice(0, 2000),
+      });
+      return NextResponse.json({ id: creado.id, aviso: "Comentario guardado." });
     }
     if (body.accion === "ampliacion") {
       const pregunta = typeof body.pregunta === "string" ? body.pregunta.trim() : "";

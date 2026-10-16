@@ -7,6 +7,7 @@ const migration = join(root, "supabase/migrations/20261016120000_pos_ingesta.sql
 const migrationCosto = join(root, "supabase/migrations/20261016190000_costo_con_itbis.sql");
 const migrationMiles = join(root, "supabase/migrations/20261016200000_miles_consumo.sql");
 const migrationVuelto = join(root, "supabase/migrations/20261016210000_pagos_con_vuelto.sql");
+const migrationVisual = join(root, "supabase/migrations/20261016220000_miles_visual.sql");
 const DB = "quick_pos_test";
 
 function quote(value: string): string {
@@ -118,6 +119,7 @@ sqlFile(DB, migration);
 sqlFile(DB, migrationCosto);
 sqlFile(DB, migrationMiles);
 sqlFile(DB, migrationVuelto);
+sqlFile(DB, migrationVisual);
 
 sql(
   DB,
@@ -533,6 +535,18 @@ begin
     raise exception 'la clave repetida debio chocar';
   exception
     when unique_violation then
+      null;
+  end;
+  update public.miles_hallazgos
+  set visual = '{"tipo":"calidad","numerador":1,"denominador":2}'::jsonb,
+      resolucion = 'resuelta',
+      recomendacion_estado = 'obsoleta'
+  where idempotency_key = 'h-test';
+  begin
+    update public.miles_hallazgos set resolucion = 'inventada' where idempotency_key = 'h-test';
+    raise exception 'una resolucion fuera del catalogo debio fallar';
+  exception
+    when check_violation then
       null;
   end;
 

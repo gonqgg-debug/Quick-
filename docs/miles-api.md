@@ -72,6 +72,29 @@ Authorization: Bearer <token de Miles>
 
 La misma clave con el mismo cuerpo devuelve el hallazgo. La misma clave con otro cuerpo responde 409. Otra semana del mismo `patronClave` crea un hallazgo nuevo y apunta al anterior.
 
+`visual` es opcional. Si no viene, el hallazgo se muestra como texto. No se leen cifras del párrafo para dibujar un gráfico.
+
+```json
+"visual": {
+  "tipo": "comparacion",
+  "metrica": { "nombre": "venta", "valor": 85075, "unidad": "rd" },
+  "comparacion": { "valor": 78000, "periodo": "8 al 14 oct 2026", "metodo": "mismos días" },
+  "serie": [
+    { "etiqueta": "8–14 oct", "valor": 78000 },
+    { "etiqueta": "15–21 oct", "valor": 85075 }
+  ],
+  "fuente": "resumen_dia",
+  "corte": "2026-10-21",
+  "explorar": { "pantalla": "resumen", "query": "preset=custom&desde=2026-10-15&hasta=2026-10-21" }
+}
+```
+
+`tipo` puede ser `tendencia`, `comparacion`, `horarios`, `concentracion`, `canasta` o `calidad`. `unidad` es `rd`, `numero` o `pct`. En `pct`, un valor entre 0 y 1 es una proporción; un valor mayor que 1 ya está en puntos porcentuales. `concentracion` y `calidad` usan `numerador` y `denominador`. `canasta` usa `muestra`, `numerador` y `categorias` con los dos productos. `tendencia` necesita al menos dos puntos en `serie`. `horarios` usa `categorias` con la etiqueta del día o la franja y su valor. `explorar.query` solo lleva filtros del dashboard, por ejemplo `preset=custom&desde=2026-10-15&hasta=2026-10-21`.
+
+No se acepta HTML, JavaScript, URLs ni campos `html`, `script`, `style`, `component` o `srcdoc`. Si el nombre de `metrica` coincide con una cifra de `metricas` y el valor difiere, la pantalla avisa y no usa el gráfico como conclusión. Si no hay `visual`, se muestra el texto y el snapshot; no se extraen cifras del párrafo para fabricar una serie.
+
+Un hallazgo viejo sin `visual` sigue siendo válido. Si el cuerpo no trae `visual`, la publicación no escribe esa columna. `resolucion` y `recomendacion_estado` los escribe una persona desde el panel, no Miles. `pendiente` o una limitación antigua que dice `RESUELTO` sin esos campos se muestra como «Requiere revisión». `resuelta` u `obsoleta` deja la recomendación escrita como anterior y saca el hallazgo de las alertas activas. El `estado` del registro no se reescribe buscando palabras.
+
 ## Consultar investigaciones
 
 ```http
@@ -103,4 +126,4 @@ La respuesta va con `"estado": "completada"` y `respuesta`. Miles no puede cance
 
 ## Migración
 
-`supabase/migrations/20261016200000_miles_consumo.sql`. Hace falta en cada entorno antes de abrir Miles o el mapa de horas nuevo. No se aplica a producción como parte de este cambio.
+`supabase/migrations/20261016200000_miles_consumo.sql` crea las tablas de Miles. `20261016220000_miles_visual.sql` agrega `visual`, `resolucion` y `recomendacion_estado`. Hay que aplicarla en cada entorno antes de publicar hallazgos visuales o registrar una resolución. Este cambio no la aplica en producción.
