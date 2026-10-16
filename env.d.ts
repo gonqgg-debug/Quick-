@@ -25,6 +25,7 @@ declare namespace NodeJS {
     AGENT_TOKEN_MATT?: string;
     AGENT_TOKEN_TROY?: string;
     AGENT_TOKEN_ROBERT?: string;
+    AGENT_TOKEN_MILES?: string;
     AGENT_WEBHOOK_URL?: string;
     AGENT_WEBHOOK_SECRET?: string;
     AGENT_WEBHOOK_KEY?: string;

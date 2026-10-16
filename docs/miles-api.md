@@ -27,6 +27,7 @@ Cada entorno emite el suyo. No se copia el de desarrollo a producción y no se c
 3. Cópialo en ese momento. La pantalla no lo vuelve a mostrar. En la base solo queda el hash SHA-256.
 4. Rotar revoca el anterior. Revocar también se puede con `POST /api/admin/miles/token` y `{ "revocar": true, "id": "..." }` desde una sesión de admin.
 5. Miles se identifica solo por `Authorization: Bearer <token>`. Un `agent_id` en el cuerpo se rechaza.
+6. En Vercel el valor va en `AGENT_TOKEN_MILES`, el token solo, sin el prefijo `Bearer`. El hash de `agent_credenciales` sigue valiendo si la variable no está.
 
 `GET /api/agent` con ese token devuelve solo las funciones de Miles.
 

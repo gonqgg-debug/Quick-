@@ -16,7 +16,7 @@ export const AGENT_ROLES = ["lectura", "rodrigo", "phillip", "boris", "fred", "h
 
 export type AgentRol = (typeof AGENT_ROLES)[number];
 
-const ROLE_ENV: Record<Exclude<AgentRol, "lectura" | "miles">, string> = {
+const ROLE_ENV: Record<Exclude<AgentRol, "lectura">, string> = {
   rodrigo: "AGENT_TOKEN_RODRIGO",
   phillip: "AGENT_TOKEN_PHILLIP",
   boris: "AGENT_TOKEN_BORIS",
@@ -25,6 +25,7 @@ const ROLE_ENV: Record<Exclude<AgentRol, "lectura" | "miles">, string> = {
   matt: "AGENT_TOKEN_MATT",
   troy: "AGENT_TOKEN_TROY",
   robert: "AGENT_TOKEN_ROBERT",
+  miles: "AGENT_TOKEN_MILES",
 };
 
 export function agentApiConfigurada(): boolean {
@@ -37,7 +38,7 @@ export function agentApiConfigurada(): boolean {
 export async function agentRolFromRequest(request: NextRequest): Promise<AgentRol | null> {
   const header = request.headers.get("authorization");
   const pairs: Array<[AgentRol, string]> = [];
-  for (const [rol, envName] of Object.entries(ROLE_ENV) as Array<[Exclude<AgentRol, "lectura" | "miles">, string]>) {
+  for (const [rol, envName] of Object.entries(ROLE_ENV) as Array<[Exclude<AgentRol, "lectura">, string]>) {
     const token = process.env[envName]?.trim();
     if (token) {
       pairs.push([rol, token]);
