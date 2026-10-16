@@ -16,13 +16,13 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireAdminApi();
   if (auth instanceof NextResponse) {
     return auth;
   }
   try {
-    return await handleBorrarFactura(params.id, "admin");
+    return await handleBorrarFactura(params.id, "admin", request);
   } catch (error) {
     return facturasError(error, "No pudimos borrar la factura", "[admin] factura delete");
   }

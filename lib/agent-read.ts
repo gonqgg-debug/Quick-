@@ -1,3 +1,5 @@
+import { parseCompraMedio } from "@/lib/admin-compras-shared";
+import { isUuid } from "@/lib/facturas-shared";
 import { isDayKey, todayDayKey, diffDayKeys } from "@/lib/local-day";
 import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
@@ -55,7 +57,7 @@ export async function listAgentCompras(range: AgentRange) {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("compras")
-    .select("id, proveedor_id, monto, fecha, due_date, pagado, pagado_en, rnc, ncf, captura_path, proveedores ( nombre )")
+    .select("id, proveedor_id, monto, fecha, due_date, pagado, pagado_en, medio_pago, ledger_id, movimiento_id, rnc, ncf, captura_path, proveedores ( nombre )")
     .gte("fecha", range.from)
     .lte("fecha", range.to)
     .order("fecha", { ascending: true })
@@ -74,6 +76,9 @@ export async function listAgentCompras(range: AgentRange) {
       dueDate: String(row.due_date).slice(0, 10),
       pagado: Boolean(row.pagado),
       pagadoEn: row.pagado_en ? String(row.pagado_en).slice(0, 10) : null,
+      medioPago: parseCompraMedio(row.medio_pago),
+      ledgerId: typeof row.ledger_id === "string" && isUuid(row.ledger_id) ? row.ledger_id : null,
+      movimientoId: typeof row.movimiento_id === "string" && isUuid(row.movimiento_id) ? row.movimiento_id : null,
       rnc: typeof row.rnc === "string" && row.rnc.trim() ? row.rnc.trim() : null,
       ncf: typeof row.ncf === "string" && row.ncf.trim() ? row.ncf.trim() : null,
       tieneCaptura: Boolean(row.captura_path),

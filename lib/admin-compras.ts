@@ -2,17 +2,23 @@ import { publishAgentEvent } from "@/lib/agent-events";
 import { parsePrice } from "@/lib/catalog-import";
 import { removeCompraCaptura, storeCompraCaptura, type CompraCapturaFile } from "@/lib/compra-captura";
 import { COMPRA_NCF_DUPLICADO, parseNcf, parseRnc } from "@/lib/compra-fiscal";
-import { isDayKey, todayDayKey } from "@/lib/local-day";
+import { isUuid } from "@/lib/facturas-shared";
+import { calendarDayKey, isDayKey, todayDayKey } from "@/lib/local-day";
 import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import {
   COMPRAS_PAGE_SIZE,
+  cambiosEntreCompras,
   dueDateFromCredit,
+  medioDesdeCaja,
+  parseCompraMedio,
   parseFormaPago,
   saldoCompra,
   sortProveedores,
   summarizePendientes,
   type Compra,
+  type CompraCambio,
+  type CompraMedioPago,
   type ComprasList,
   type Proveedor,
 } from "@/lib/admin-compras-shared";
@@ -25,7 +31,7 @@ const LIST_MAX = 1000;
 
 const PROVEEDOR_SELECT = "id, nombre, rnc, tiene_credito, dias_credito, forma_pago, notas";
 const COMPRA_SELECT =
-  "id, proveedor_id, monto, notas_credito, fecha, due_date, pagado, pagado_en, rnc, ncf, captura_path, proveedores ( id, nombre )";
+  "id, proveedor_id, monto, notas_credito, fecha, due_date, pagado, pagado_en, medio_pago, ledger_id, movimiento_id, rnc, ncf, captura_path, proveedores ( id, nombre )";
 
 type ProveedorRow = {
   id: unknown;
@@ -48,6 +54,9 @@ type CompraRow = {
   due_date: unknown;
   pagado: unknown;
   pagado_en: unknown;
+  medio_pago?: unknown;
+  ledger_id?: unknown;
+  movimiento_id?: unknown;
   rnc: unknown;
   ncf: unknown;
   captura_path: unknown;
@@ -134,6 +143,9 @@ function mapCompra(row: CompraRow): CompraStored | null {
     dueDate,
     pagado: Boolean(row.pagado),
     pagadoEn: pagadoEn && isDayKey(pagadoEn) ? pagadoEn : null,
+    medioPago: parseCompraMedio(row.medio_pago),
+    ledgerId: typeof row.ledger_id === "string" && isUuid(row.ledger_id) ? row.ledger_id : null,
+    movimientoId: typeof row.movimiento_id === "string" && isUuid(row.movimiento_id) ? row.movimiento_id : null,
     rnc: fiscalText(row.rnc),
     ncf: fiscalText(row.ncf),
     tieneCaptura: Boolean(capturaPath),
@@ -153,6 +165,9 @@ function publicCompra(compra: CompraStored): Compra {
     dueDate: compra.dueDate,
     pagado: compra.pagado,
     pagadoEn: compra.pagadoEn,
+    medioPago: compra.medioPago,
+    ledgerId: compra.ledgerId,
+    movimientoId: compra.movimientoId,
     rnc: compra.rnc,
     ncf: compra.ncf,
     tieneCaptura: compra.tieneCaptura,
@@ -203,6 +218,15 @@ export function parseProveedorInput(body: ProveedorBody): { ok: true; data: Omit
   };
 }
 
+export type EmpaqueProveedor = {
+  productoId: string;
+  productoNombre: string;
+  presentacion: string;
+  unidades: number;
+};
+
+export type ProveedorAgente = Proveedor & { empaques: EmpaqueProveedor[] };
+
 export async function listProveedores(): Promise<Proveedor[]> {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase.from("proveedores").select(PROVEEDOR_SELECT).limit(LIST_MAX);
@@ -211,6 +235,50 @@ export async function listProveedores(): Promise<Proveedor[]> {
   }
   const proveedores = (data ?? []).map((row) => mapProveedor(row as ProveedorRow)).filter((row): row is Proveedor => Boolean(row));
   return sortProveedores(proveedores);
+}
+
+export async function listProveedoresAgente(busqueda = ""): Promise<ProveedorAgente[]> {
+  const proveedores = await listProveedores();
+  const needle = busqueda.trim().toLowerCase();
+  const digits = busqueda.replace(/\D/g, "");
+  const filtrados = needle
+    ? proveedores.filter(
+        (proveedor) =>
+          proveedor.nombre.toLowerCase().includes(needle) ||
+          (digits.length >= 3 && proveedor.rnc != null && proveedor.rnc.includes(digits))
+      )
+    : proveedores;
+  const ids = filtrados.map((proveedor) => proveedor.id);
+  const empaques = new Map<string, EmpaqueProveedor[]>();
+  if (ids.length) {
+    const supabase = getSupabaseAdminClient();
+    const { data, error } = await supabase
+      .from("producto_presentaciones")
+      .select("producto_id, proveedor_id, presentacion, unidades, products ( nombre )")
+      .in("proveedor_id", ids)
+      .limit(LIST_MAX);
+    if (error) {
+      throw error;
+    }
+    for (const row of data ?? []) {
+      const proveedorId = typeof row.proveedor_id === "string" ? row.proveedor_id : "";
+      const productoId = typeof row.producto_id === "string" ? row.producto_id : "";
+      const unidades = Number(row.unidades);
+      if (!proveedorId || !productoId || !(unidades > 0)) {
+        continue;
+      }
+      const embed = Array.isArray(row.products) ? row.products[0] : row.products;
+      const lista = empaques.get(proveedorId) ?? [];
+      lista.push({
+        productoId,
+        productoNombre: String(embed?.nombre ?? "").trim() || productoId,
+        presentacion: String(row.presentacion ?? ""),
+        unidades,
+      });
+      empaques.set(proveedorId, lista);
+    }
+  }
+  return filtrados.map((proveedor) => ({ ...proveedor, empaques: empaques.get(proveedor.id) ?? [] }));
 }
 
 export async function createProveedor(input: Omit<Proveedor, "id">): Promise<Proveedor> {
@@ -472,6 +540,11 @@ async function resolveProveedor(input: { proveedorId?: unknown; proveedorNombre?
   throw new Error("Elige o escribe un proveedor");
 }
 
+export async function getCompraPublica(id: string): Promise<Compra | null> {
+  const compra = await getCompraById(id);
+  return compra ? publicCompra(compra) : null;
+}
+
 async function getCompraById(id: string): Promise<CompraStored | null> {
   if (!id) {
     return null;
@@ -534,10 +607,109 @@ export type CompraInput = {
   dueDate?: unknown;
   pagado?: unknown;
   pagadoEn?: unknown;
+  medioPago?: unknown;
+  medio?: unknown;
+  ledgerId?: unknown;
+  movimientoId?: unknown;
   rnc?: unknown;
   ncf?: unknown;
   captura?: CompraCapturaFile;
 };
+
+export type CompraActualizada = { compra: Compra; cambios: CompraCambio[] };
+
+export type CompraCambioRegistrado = CompraCambio & { actor: string; creadoEn: string };
+
+function textoId(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function pidePago(input: CompraInput): boolean {
+  return hasOwn(input, "medioPago") || hasOwn(input, "medio") || hasOwn(input, "ledgerId") || hasOwn(input, "movimientoId");
+}
+
+async function resolverMedioPago(input: CompraInput): Promise<{
+  medio: CompraMedioPago;
+  ledgerId: string | null;
+  movimientoId: string | null;
+  fecha: string;
+}> {
+  const ledgerId = textoId(input.ledgerId);
+  const movimientoId = textoId(input.movimientoId);
+  if (ledgerId && movimientoId) {
+    throw new Error("El pago es de caja o del banco, no de los dos");
+  }
+  if (!ledgerId && !movimientoId) {
+    throw new Error("Manda el movimiento de caja (ledgerId) o del banco (movimientoId)");
+  }
+  const medioPedido = parseCompraMedio(input.medioPago ?? input.medio);
+  const medioEnviado = hasOwn(input, "medioPago") ? input.medioPago : hasOwn(input, "medio") ? input.medio : undefined;
+  if (medioEnviado != null && medioEnviado !== "" && !medioPedido) {
+    throw new Error("El medio tiene que ser caja chica, caja fuerte o transferencia");
+  }
+  const supabase = getSupabaseAdminClient();
+  if (ledgerId) {
+    if (!isUuid(ledgerId)) {
+      throw new Error("No encontramos ese movimiento de caja");
+    }
+    const { data, error } = await supabase.from("caja_ledger").select("id, fecha, caja, tipo").eq("id", ledgerId).maybeSingle();
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No encontramos ese movimiento de caja");
+    }
+    if (data.tipo !== "Salida") {
+      throw new Error("El movimiento tiene que ser una salida de caja");
+    }
+    const medio = medioDesdeCaja(String(data.caja ?? ""));
+    if (!medio) {
+      throw new Error("El movimiento tiene que ser de caja chica o caja fuerte");
+    }
+    if (medioPedido && medioPedido !== medio) {
+      throw new Error(medio === "caja_fuerte" ? "Ese movimiento es de caja fuerte" : "Ese movimiento es de caja chica");
+    }
+    const fecha = calendarDayKey(data.fecha);
+    return { medio, ledgerId, movimientoId: null, fecha: isDayKey(fecha) ? fecha : todayDayKey() };
+  }
+  if (!isUuid(movimientoId)) {
+    throw new Error("No encontramos ese movimiento del banco");
+  }
+  const { data, error } = await supabase.from("banco_movimientos").select("id, fecha, tipo").eq("id", movimientoId).maybeSingle();
+  if (error) {
+    throw error;
+  }
+  if (!data) {
+    throw new Error("No encontramos ese movimiento del banco");
+  }
+  if (data.tipo !== "debito") {
+    throw new Error("El movimiento del banco tiene que ser un débito");
+  }
+  if (medioPedido && medioPedido !== "transferencia") {
+    throw new Error("Ese movimiento es una transferencia");
+  }
+  const fecha = calendarDayKey(data.fecha);
+  return { medio: "transferencia", ledgerId: null, movimientoId, fecha: isDayKey(fecha) ? fecha : todayDayKey() };
+}
+
+async function registrarCambios(compraId: string, actor: string, cambios: CompraCambio[]): Promise<void> {
+  if (!cambios.length) {
+    return;
+  }
+  const supabase = getSupabaseAdminClient();
+  const { error } = await supabase.from("compra_cambios").insert(
+    cambios.map((cambio) => ({
+      compra_id: compraId,
+      actor,
+      campo: cambio.campo,
+      antes: cambio.antes,
+      despues: cambio.despues,
+    }))
+  );
+  if (error) {
+    throw error;
+  }
+}
 
 export async function createCompra(input: CompraInput): Promise<Compra> {
   const fecha = parseDayField(input.fecha, "La fecha de compra no es válida");
@@ -586,7 +758,7 @@ export async function createCompra(input: CompraInput): Promise<Compra> {
   return compra;
 }
 
-export async function updateCompra(id: string, input: CompraInput): Promise<Compra> {
+export async function updateCompra(id: string, input: CompraInput, actor = "admin"): Promise<CompraActualizada> {
   if (!id) {
     throw new Error("Falta la compra");
   }
@@ -602,6 +774,9 @@ export async function updateCompra(id: string, input: CompraInput): Promise<Comp
     due_date?: string;
     pagado?: boolean;
     pagado_en?: string | null;
+    medio_pago?: string | null;
+    ledger_id?: string | null;
+    movimiento_id?: string | null;
     rnc?: string;
     ncf?: string;
     captura_path?: string;
@@ -625,18 +800,21 @@ export async function updateCompra(id: string, input: CompraInput): Promise<Comp
     next.due_date = parseDayField(input.dueDate, "La fecha de vencimiento no es válida");
   }
 
+  const marcarPagada = pidePago(input);
   const nextPagado = hasOwn(input, "pagado")
     ? input.pagado === true
       ? true
       : input.pagado === false
         ? false
         : null
-    : current.pagado;
+    : marcarPagada
+      ? true
+      : current.pagado;
   if (nextPagado == null) {
     throw new Error("El estado de pago no es válido");
   }
 
-  if (hasOwn(input, "pagado") && nextPagado !== current.pagado) {
+  if ((hasOwn(input, "pagado") || marcarPagada) && nextPagado !== current.pagado) {
     next.pagado = nextPagado;
   }
 
@@ -647,12 +825,24 @@ export async function updateCompra(id: string, input: CompraInput): Promise<Comp
       } else {
         next.pagado_en = parseDayField(input.pagadoEn, "La fecha de pago no es válida");
       }
-    } else if (!current.pagado) {
+    } else if (!current.pagado && !marcarPagada) {
       next.pagado_en = todayDayKey();
     }
-  } else if (current.pagado || current.pagadoEn) {
+    if (marcarPagada) {
+      const pago = await resolverMedioPago(input);
+      next.medio_pago = pago.medio;
+      next.ledger_id = pago.ledgerId;
+      next.movimiento_id = pago.movimientoId;
+      if (!hasOwn(input, "pagadoEn")) {
+        next.pagado_en = pago.fecha;
+      }
+    }
+  } else if (current.pagado || current.pagadoEn || current.medioPago || current.ledgerId || current.movimientoId) {
     next.pagado = false;
     next.pagado_en = null;
+    next.medio_pago = null;
+    next.ledger_id = null;
+    next.movimiento_id = null;
   }
 
   if (hasOwn(input, "rnc") || hasOwn(input, "ncf")) {
@@ -676,7 +866,7 @@ export async function updateCompra(id: string, input: CompraInput): Promise<Comp
   }
 
   if (Object.keys(next).length === 0) {
-    return publicCompra(current);
+    return { compra: publicCompra(current), cambios: [] };
   }
 
   const supabase = getSupabaseAdminClient();
@@ -702,12 +892,38 @@ export async function updateCompra(id: string, input: CompraInput): Promise<Comp
     await removeCompraCaptura(current.capturaPath);
   }
   const compra = publicCompra(mapped);
-  await publishAgentEvent("compra.actualizada", { ...compra });
-  return compra;
+  const cambios = cambiosEntreCompras(publicCompra(current), compra);
+  await registrarCambios(id, actor, cambios);
+  await publishAgentEvent("compra.actualizada", { ...compra, cambios });
+  return { compra, cambios };
+}
+
+export async function listarCambiosCompra(id: string): Promise<CompraCambioRegistrado[]> {
+  if (!id) {
+    throw new Error("Falta la compra");
+  }
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("compra_cambios")
+    .select("actor, campo, antes, despues, creado_en")
+    .eq("compra_id", id)
+    .order("creado_en", { ascending: true })
+    .limit(200);
+  if (error) {
+    throw error;
+  }
+  return (data ?? []).map((row) => ({
+    actor: String(row.actor ?? ""),
+    campo: String(row.campo ?? ""),
+    antes: row.antes == null ? null : String(row.antes),
+    despues: row.despues == null ? null : String(row.despues),
+    creadoEn: String(row.creado_en ?? ""),
+  }));
 }
 
 export async function markCompraPagada(id: string): Promise<Compra> {
-  return updateCompra(id, { pagado: true });
+  const { compra } = await updateCompra(id, { pagado: true });
+  return compra;
 }
 
 export function compraFailure(error: unknown, fallback: string): { status: number; error: string; compra?: Compra } {
@@ -715,6 +931,9 @@ export function compraFailure(error: unknown, fallback: string): { status: numbe
     return { status: 409, error: error.message, compra: error.compra };
   }
   const message = error instanceof Error ? error.message : fallback;
+  if (/does not exist|schema cache/i.test(message)) {
+    return { status: 500, error: "Falta aplicar la migración de compras en Supabase." };
+  }
   return { status: message.includes("No encontramos") ? 404 : 400, error: message };
 }
 

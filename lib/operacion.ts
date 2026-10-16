@@ -388,7 +388,16 @@ export async function publicarConciliacion(
   }
   if (resultado === "pagada") {
     if (factura.compraId) {
-      await updateCompra(factura.compraId, { pagado: true, pagadoEn: fecha ?? todayDayKey() });
+      await updateCompra(
+        factura.compraId,
+        {
+          pagado: true,
+          pagadoEn: fecha ?? todayDayKey(),
+          ...(typeof ledgerId === "string" && ledgerId ? { ledgerId } : {}),
+          ...(typeof movimientoId === "string" && movimientoId ? { movimientoId } : {}),
+        },
+        actor
+      );
     }
     await limpiarProblema(factura.id);
     const { error: updateError } = await supabase.from("facturas").update({ estado: "conciliada" }).eq("id", factura.id);

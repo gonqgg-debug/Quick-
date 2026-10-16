@@ -1,8 +1,9 @@
 import { diaSemanaFromFecha } from "@/lib/admin-ventas-shared";
 import {
-  getMetaDelDia,
+  getPromediosPonderadosPorDiaSemana,
   getVentasDiariasMes,
   isoWeekdayIndex,
+  sumaPromediosPonderados,
   type DiaSemanaISO,
   type MesActivo,
   type VentaDiaria,
@@ -14,7 +15,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase";
 const WEEKDAYS: DiaSemanaISO[] = [0, 1, 2, 3, 4, 5, 6];
 
 const NOTA =
-  "metaDelDia es la misma cifra que Hoy: reparte la meta del mes según el día de la semana, con el promedio ponderado de los tres meses anteriores. Si no hay historial, la reparte en partes iguales. ventaReal es null cuando ese día no tiene venta guardada.";
+  "metaDelDia es la misma cifra que Hoy: reparte la meta del mes según el día de la semana, con el promedio ponderado de los tres meses anteriores. Si no hay historial, la reparte en partes iguales. ventaReal es la venta guardada de ese día y aparece en cuanto se guarda; es null si ese día todavía no tiene fila. metaAcumulada suma la meta de cada día desde el 1 hasta la fecha (hoy, si pides el mes). deficit es metaAcumulada menos las ventas hasta esa fecha: positivo si va por debajo. diferencia sigue siendo venta menos meta del día.";
 
 export type AgentMetaDia = {
   fecha: string;
@@ -24,7 +25,13 @@ export type AgentMetaDia = {
   diferencia: number | null;
 };
 
-export type AgentMetaMes = {
+export type AgentMetaAcumulada = {
+  metaAcumulada: number | null;
+  ventasALaFecha: number;
+  deficit: number | null;
+};
+
+export type AgentMetaMes = AgentMetaAcumulada & {
   mes: string;
   diasEnMes: number;
   metaMensual: number | null;
@@ -58,6 +65,30 @@ export function parseAgentMetaQuery(
     return { ok: true, kind: "mes", mes };
   }
   return { ok: true, kind: "fecha", fecha: today };
+}
+
+export function corteAcumulado(mes: string, diasEnMes: number, today: string): string | null {
+  const inicio = `${mes}-01`;
+  const fin = `${mes}-${pad2(diasEnMes)}`;
+  if (!isDayKey(today) || today < inicio) {
+    return null;
+  }
+  return today > fin ? fin : today;
+}
+
+export function acumuladoALaFecha(dias: AgentMetaDia[], hasta: string | null): AgentMetaAcumulada {
+  if (!hasta) {
+    return { metaAcumulada: null, ventasALaFecha: 0, deficit: null };
+  }
+  const corte = dias.filter((dia) => dia.fecha <= hasta);
+  const metas = corte.map((dia) => dia.metaDelDia).filter((meta): meta is number => meta != null);
+  const metaAcumulada = metas.length ? toMoney(metas.reduce((sum, meta) => sum + meta, 0)) : null;
+  const ventasALaFecha = toMoney(corte.reduce((sum, dia) => sum + (dia.ventaReal ?? 0), 0));
+  return {
+    metaAcumulada,
+    ventasALaFecha,
+    deficit: metaAcumulada == null ? null : toMoney(metaAcumulada - ventasALaFecha),
+  };
 }
 
 export function agentMetaDia(fecha: string, metasPorSemana: number[] | null, ventaReal: number | null): AgentMetaDia {
@@ -138,29 +169,65 @@ async function metaMensualDelMes(mes: MesActivo): Promise<number | null> {
 }
 
 async function metasPorSemana(mes: MesActivo, meta: number | null): Promise<number[] | null> {
-  if (meta == null) {
+  if (meta == null || !(mes.diasEnMes > 0)) {
     return null;
   }
-  return Promise.all(WEEKDAYS.map((dia) => getMetaDelDia(dia, mes)));
+  const promedios = await getPromediosPonderadosPorDiaSemana(mes);
+  const suma = sumaPromediosPonderados(promedios);
+  return WEEKDAYS.map((dia) => (suma === 0 ? meta / mes.diasEnMes : (meta * (promedios[dia] / suma) * 7) / mes.diasEnMes));
+}
+
+async function ventaExacta(fecha: string): Promise<number | null> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.from("ventas_diarias").select("fecha, venta_real").eq("fecha", fecha).limit(5);
+  if (error) {
+    throw error;
+  }
+  const rows = (data ?? [])
+    .map((row) => ({ fecha: String(row.fecha ?? "").slice(0, 10), ventaReal: toMoney(row.venta_real) }))
+    .filter((row) => row.fecha === fecha);
+  if (!rows.length) {
+    return null;
+  }
+  return toMoney(rows.reduce((sum, row) => sum + row.ventaReal, 0));
+}
+
+function conVenta(dias: AgentMetaDia[], fecha: string, ventaReal: number): AgentMetaDia[] {
+  return dias.map((dia) => {
+    if (dia.fecha !== fecha) {
+      return dia;
+    }
+    return {
+      ...dia,
+      ventaReal,
+      diferencia: dia.metaDelDia == null ? null : ventaReal - dia.metaDelDia,
+    };
+  });
 }
 
 async function loadMes(mes: MesActivo): Promise<AgentMetaMes> {
   const [meta, ventas] = await Promise.all([metaMensualDelMes(mes), getVentasDiariasMes(mes)]);
   const metas = await metasPorSemana(mes, meta);
-  const ventasAcumuladas = ventas.reduce((sum, venta) => sum + venta.ventaReal, 0);
   const dias: AgentMetaDia[] = [];
   let fecha = `${monthKey(mes)}-01`;
-  const hasta = `${monthKey(mes)}-${pad2(mes.diasEnMes)}`;
-  while (fecha <= hasta) {
+  const ultimo = `${monthKey(mes)}-${pad2(mes.diasEnMes)}`;
+  while (fecha <= ultimo) {
     dias.push(agentMetaDia(fecha, metas, ventaDelDia(ventas, fecha)));
     fecha = addDaysToDayKey(fecha, 1);
   }
+  return cerrarMes(mes, meta, dias);
+}
+
+function cerrarMes(mes: MesActivo, meta: number | null, dias: AgentMetaDia[]): AgentMetaMes {
+  const ventasAcumuladas = toMoney(dias.reduce((sum, dia) => sum + (dia.ventaReal ?? 0), 0));
+  const acumulado = acumuladoALaFecha(dias, corteAcumulado(monthKey(mes), mes.diasEnMes, todayDayKey()));
   return {
     mes: monthKey(mes),
     diasEnMes: mes.diasEnMes,
     metaMensual: meta,
     ventasAcumuladas,
-    diferenciaMeta: meta == null ? null : ventasAcumuladas - meta,
+    diferenciaMeta: meta == null ? null : toMoney(ventasAcumuladas - meta),
+    ...acumulado,
     nota: NOTA,
     dias,
   };
@@ -169,22 +236,27 @@ async function loadMes(mes: MesActivo): Promise<AgentMetaMes> {
 export async function loadAgentMetaFecha(fecha: string): Promise<AgentMetaFecha> {
   const mes = mesActivoFromFecha(fecha);
   const reporte = await loadMes(mes);
-  const dia = reporte.dias.find((item) => item.fecha === fecha);
+  const exacta = await ventaExacta(fecha);
+  const dias = exacta == null ? reporte.dias : conVenta(reporte.dias, fecha, exacta);
+  const cerrado = cerrarMes(mes, reporte.metaMensual, dias);
+  const dia = cerrado.dias.find((item) => item.fecha === fecha);
   if (!dia) {
     throw new Error("La fecha no es válida");
   }
+  const acumulado = acumuladoALaFecha(cerrado.dias, fecha);
   return {
     fecha: dia.fecha,
     diaSemana: dia.diaSemana,
     metaDelDia: dia.metaDelDia,
     ventaReal: dia.ventaReal,
     diferencia: dia.diferencia,
-    mes: reporte.mes,
-    diasEnMes: reporte.diasEnMes,
-    metaMensual: reporte.metaMensual,
-    ventasAcumuladas: reporte.ventasAcumuladas,
-    diferenciaMeta: reporte.diferenciaMeta,
-    nota: reporte.nota,
+    mes: cerrado.mes,
+    diasEnMes: cerrado.diasEnMes,
+    metaMensual: cerrado.metaMensual,
+    ventasAcumuladas: cerrado.ventasAcumuladas,
+    diferenciaMeta: cerrado.diferenciaMeta,
+    ...acumulado,
+    nota: cerrado.nota,
   };
 }
 

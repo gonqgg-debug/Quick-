@@ -23,6 +23,38 @@ export function parseFormaPago(value: unknown): ProveedorFormaPago | null {
   return PROVEEDOR_FORMAS_PAGO.find((item) => item.id === text)?.id ?? null;
 }
 
+export const COMPRA_MEDIOS_PAGO = [
+  { id: "caja_chica", label: "Caja chica" },
+  { id: "caja_fuerte", label: "Caja fuerte" },
+  { id: "transferencia", label: "Transferencia" },
+] as const;
+
+export type CompraMedioPago = (typeof COMPRA_MEDIOS_PAGO)[number]["id"];
+
+export function parseCompraMedio(value: unknown): CompraMedioPago | null {
+  const text = typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, "_") : "";
+  if (text === "cajachica" || text === "chica") {
+    return "caja_chica";
+  }
+  if (text === "cajafuerte" || text === "fuerte") {
+    return "caja_fuerte";
+  }
+  if (text === "banco") {
+    return "transferencia";
+  }
+  return COMPRA_MEDIOS_PAGO.find((item) => item.id === text)?.id ?? null;
+}
+
+export function medioDesdeCaja(caja: string): CompraMedioPago | null {
+  if (caja === "Chica") {
+    return "caja_chica";
+  }
+  if (caja === "Fuerte") {
+    return "caja_fuerte";
+  }
+  return null;
+}
+
 export type Compra = {
   id: string;
   proveedorId: string;
@@ -36,10 +68,44 @@ export type Compra = {
   dueDate: string;
   pagado: boolean;
   pagadoEn: string | null;
+  medioPago: CompraMedioPago | null;
+  ledgerId: string | null;
+  movimientoId: string | null;
   rnc: string | null;
   ncf: string | null;
   tieneCaptura: boolean;
 };
+
+export type CompraCambio = {
+  campo: string;
+  antes: string | null;
+  despues: string | null;
+};
+
+const CAMPOS_AUDITABLES: Array<{ campo: string; valor: (compra: Compra) => string | null }> = [
+  { campo: "proveedor", valor: (compra) => compra.proveedorNombre },
+  { campo: "monto", valor: (compra) => String(compra.monto) },
+  { campo: "fecha", valor: (compra) => compra.fecha },
+  { campo: "rnc", valor: (compra) => compra.rnc },
+  { campo: "ncf", valor: (compra) => compra.ncf },
+  { campo: "pagado", valor: (compra) => (compra.pagado ? "sí" : "no") },
+  { campo: "pagadoEn", valor: (compra) => compra.pagadoEn },
+  { campo: "medioPago", valor: (compra) => compra.medioPago },
+  { campo: "ledgerId", valor: (compra) => compra.ledgerId },
+  { campo: "movimientoId", valor: (compra) => compra.movimientoId },
+];
+
+export function cambiosEntreCompras(antes: Compra, despues: Compra): CompraCambio[] {
+  const cambios: CompraCambio[] = [];
+  for (const item of CAMPOS_AUDITABLES) {
+    const previo = item.valor(antes);
+    const siguiente = item.valor(despues);
+    if (previo !== siguiente) {
+      cambios.push({ campo: item.campo, antes: previo, despues: siguiente });
+    }
+  }
+  return cambios;
+}
 
 export type ComprasSummary = {
   totalPendiente: number;

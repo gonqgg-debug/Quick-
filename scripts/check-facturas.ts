@@ -46,6 +46,7 @@ import {
   diferenciaPagos,
   diferenciaRecepcion,
   efectoCuentaAlBorrar,
+  leerMotivoDescarte,
   leerRecepcion,
   normalizarDescripcion,
   resumenRecepcion,
@@ -512,7 +513,24 @@ assert(pendientesDe({ ...pendienteBase, lineasConAlerta: 2 }, opciones)[0]?.duen
 
 assert(FACTURAS_AGENT_USO.includes("movimientoId") && FACTURAS_AGENT_USO.includes("alertas"), "el texto de uso explica banco y alertas");
 assert(FACTURAS_AGENT_USO.includes("facturaOrigen") && FACTURAS_AGENT_USO.includes("/api/agent/pendientes"), "el texto de uso explica notas y pendientes");
-assert(FACTURAS_AGENT_ENDPOINTS.length === 16, "el directorio del agente lista las rutas de facturas");
+assert(FACTURAS_AGENT_ENDPOINTS.length === 18, "el directorio del agente lista las rutas de facturas");
+assert(
+  FACTURAS_AGENT_ENDPOINTS.some((item) => item.method === "POST" && item.path === "/api/agent/facturas/{id-o-clave}/compra"),
+  "hay una ruta para ligar la ficha con su compra"
+);
+assert(
+  FACTURAS_AGENT_ENDPOINTS.some((item) => item.method === "GET" && item.path.startsWith("/api/agent/presentaciones")),
+  "la tabla de equivalencias se puede leer"
+);
+assert(FACTURAS_AGENT_USO.includes("motivo"), "el texto de uso pide el motivo al borrar");
+assert(leerMotivoDescarte("  duplicada de Rica  ") === "duplicada de Rica", "el motivo se guarda limpio");
+let motivoCorto = false;
+try {
+  leerMotivoDescarte("ok");
+} catch (error) {
+  motivoCorto = error instanceof Error && error.message.startsWith("Manda el motivo");
+}
+assert(motivoCorto, "borrar sin motivo no pasa");
 assert(
   FACTURAS_AGENT_ENDPOINTS.some((item) => item.method === "DELETE" && item.path === "/api/agent/facturas/{id-o-clave}"),
   "Rodrigo tiene ruta para borrar una factura"

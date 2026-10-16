@@ -204,6 +204,7 @@ async function listVentasDiarias(from: string, to: string): Promise<VentaDiaria[
     .select(VENTA_SELECT)
     .gte("fecha", from)
     .lte("fecha", to)
+    .order("fecha", { ascending: true })
     .limit(QUERY_LIMIT);
   if (error) {
     throw error;

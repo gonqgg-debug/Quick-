@@ -16,6 +16,7 @@ export function FacturaEncabezado({ factura, enviar, nav }: { factura: FacturaDe
   const [saving, setSaving] = useState(false);
   const [borrando, setBorrando] = useState(false);
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
+  const [motivo, setMotivo] = useState("");
   const [error, setError] = useState<string | null>(null);
   const bloqueo = bloqueoRegistro(factura);
   const registrable = bloqueo === null;
@@ -24,7 +25,12 @@ export function FacturaEncabezado({ factura, enviar, nav }: { factura: FacturaDe
     setBorrando(true);
     setError(null);
     try {
-      const response = await fetch(`/api/admin/facturas/${factura.id}`, { method: "DELETE", credentials: "include" });
+      const response = await fetch(`/api/admin/facturas/${factura.id}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo: motivo.trim() }),
+      });
       const body = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
         throw new Error(body.error || "No pudimos borrar la factura");
@@ -91,9 +97,15 @@ export function FacturaEncabezado({ factura, enviar, nav }: { factura: FacturaDe
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {confirmarBorrado ? (
           <>
-            <p className="text-sm text-brand-muted">
-              Se borra esta factura, su foto y, si era la única y no está pagada, la cuenta por pagar. No se puede deshacer.
+            <p className="w-full text-sm text-brand-muted">
+              Se borra esta factura, su foto y, si era la única y no está pagada, la cuenta por pagar. El motivo queda registrado.
             </p>
+            <input
+              value={motivo}
+              onChange={(event) => setMotivo(event.target.value)}
+              placeholder="Motivo, por ejemplo duplicada de Rica"
+              className="min-w-[16rem] flex-1 rounded-full border border-[#E5E7EB] bg-white px-3 py-1.5 text-sm"
+            />
             <button
               type="button"
               disabled={borrando}
@@ -104,7 +116,7 @@ export function FacturaEncabezado({ factura, enviar, nav }: { factura: FacturaDe
             </button>
             <button
               type="button"
-              disabled={borrando}
+              disabled={borrando || motivo.trim().length < 3}
               onClick={() => void borrar()}
               className="rounded-full px-3 py-1.5 text-sm font-bold text-white disabled:opacity-50"
               style={{ backgroundColor: brand.error }}

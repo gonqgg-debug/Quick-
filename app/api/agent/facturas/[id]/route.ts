@@ -22,7 +22,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     return rol;
   }
   try {
-    return await handleBorrarFactura(params.id, rol);
+    return await handleBorrarFactura(params.id, rol, request);
   } catch (error) {
     return facturasError(error, "No pudimos borrar la factura", "[agent] factura delete");
   }

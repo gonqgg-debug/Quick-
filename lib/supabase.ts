@@ -27,6 +27,10 @@ function getSupabaseServiceRoleKey(): string {
 let browserClient: SupabaseClient | undefined;
 let adminClient: SupabaseClient | undefined;
 
+function fetchSinCache(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return fetch(input, { ...init, cache: "no-store" });
+}
+
 /** Public client for browser / client components. Uses the anon key. */
 export function getSupabaseBrowserClient(): SupabaseClient {
   if (!browserClient) {
@@ -42,6 +46,9 @@ export function getSupabaseAdminClient(): SupabaseClient {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
+      },
+      global: {
+        fetch: fetchSinCache,
       },
     });
   }

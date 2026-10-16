@@ -10,6 +10,9 @@ export type CompraRequestBody = {
   dueDate?: unknown;
   pagado?: unknown;
   pagadoEn?: unknown;
+  medioPago?: unknown;
+  ledgerId?: unknown;
+  movimientoId?: unknown;
   rnc?: unknown;
   ncf?: unknown;
   captura?: CompraCapturaFile;
@@ -49,7 +52,7 @@ async function readMultipart(request: NextRequest): Promise<CompraRequestBody> {
     throw new Error("El formulario no es válido");
   }
   const body: CompraRequestBody = {};
-  const text = (key: "proveedorId" | "proveedorNombre" | "monto" | "fecha" | "dueDate" | "pagadoEn" | "rnc" | "ncf") => {
+  const text = (key: "proveedorId" | "proveedorNombre" | "monto" | "fecha" | "dueDate" | "pagadoEn" | "medioPago" | "ledgerId" | "movimientoId" | "rnc" | "ncf") => {
     const value = form.get(key);
     if (typeof value === "string") {
       body[key] = value;
@@ -61,8 +64,17 @@ async function readMultipart(request: NextRequest): Promise<CompraRequestBody> {
   text("fecha");
   text("dueDate");
   text("pagadoEn");
+  text("medioPago");
+  text("ledgerId");
+  text("movimientoId");
   text("rnc");
   text("ncf");
+  if (!body.proveedorNombre && typeof form.get("proveedor") === "string") {
+    body.proveedorNombre = form.get("proveedor");
+  }
+  if (!body.medioPago && typeof form.get("medio") === "string") {
+    body.medioPago = form.get("medio");
+  }
   if (form.has("pagado")) {
     body.pagado = coercePagado(form.get("pagado"));
   }
@@ -99,17 +111,32 @@ export async function readCompraBody(request: NextRequest): Promise<CompraReques
         ? body.captura
         : "";
   const requestBody: CompraRequestBody = {};
-  const copy = (key: "proveedorId" | "proveedorNombre" | "monto" | "fecha" | "dueDate" | "pagadoEn" | "rnc" | "ncf") => {
+  const copy = (key: "proveedorId" | "proveedorNombre" | "monto" | "fecha" | "dueDate" | "pagadoEn" | "medioPago" | "ledgerId" | "movimientoId" | "rnc" | "ncf") => {
     if (Object.prototype.hasOwnProperty.call(body, key)) {
       requestBody[key] = body[key];
     }
   };
   copy("proveedorId");
   copy("proveedorNombre");
+  if (!Object.prototype.hasOwnProperty.call(body, "proveedorNombre") && Object.prototype.hasOwnProperty.call(body, "proveedor")) {
+    requestBody.proveedorNombre = body.proveedor;
+  }
   copy("monto");
   copy("fecha");
   copy("dueDate");
   copy("pagadoEn");
+  copy("medioPago");
+  if (!Object.prototype.hasOwnProperty.call(body, "medioPago") && Object.prototype.hasOwnProperty.call(body, "medio")) {
+    requestBody.medioPago = body.medio;
+  }
+  copy("ledgerId");
+  if (!Object.prototype.hasOwnProperty.call(body, "ledgerId") && Object.prototype.hasOwnProperty.call(body, "ledger_id")) {
+    requestBody.ledgerId = body.ledger_id;
+  }
+  copy("movimientoId");
+  if (!Object.prototype.hasOwnProperty.call(body, "movimientoId") && Object.prototype.hasOwnProperty.call(body, "movimiento_id")) {
+    requestBody.movimientoId = body.movimiento_id;
+  }
   copy("rnc");
   copy("ncf");
   if (Object.prototype.hasOwnProperty.call(body, "pagado")) {

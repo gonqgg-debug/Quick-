@@ -17,6 +17,7 @@ export const AGENT_EVENT_TYPES = [
   "meta.guardada",
   "parametros.actualizados",
   "factura.recordatorio",
+  "factura.descartada",
   "linea.confirmada",
 ] as const;
 
@@ -29,8 +30,44 @@ export function signAgentPayload(secret: string, timestamp: number, body: string
   return createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex");
 }
 
+export const AGENT_SIGNATURE_HEADER = "X-Quick-Signature";
+
 export function agentSignatureHeader(secret: string, timestamp: number, body: string): string {
   return `t=${timestamp},v1=${signAgentPayload(secret, timestamp, body)}`;
+}
+
+export function agentWebhookRequest(input: {
+  url: string;
+  secret: string;
+  bearer: string;
+  tipo: AgentEventType;
+  recurso: Record<string, unknown>;
+  id: string;
+  ocurridoEn: string;
+  timestamp: number;
+}): { url: string; body: string; headers: Record<string, string> } {
+  const body = JSON.stringify({
+    version: 1,
+    id: input.id,
+    tipo: input.tipo,
+    ocurridoEn: input.ocurridoEn,
+    mes: mesFromRecurso(input.recurso),
+    recurso: input.recurso,
+  });
+  const firma = agentSignatureHeader(input.secret, input.timestamp, body);
+  if (!firma.startsWith("t=") || !firma.includes(",v1=")) {
+    throw new Error("La firma del webhook no se armó");
+  }
+  return {
+    url: input.url,
+    body,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${input.bearer}`,
+      "User-Agent": "Quick-Agent-Webhook",
+      [AGENT_SIGNATURE_HEADER]: firma,
+    },
+  };
 }
 
 function mesFromRecurso(recurso: Record<string, unknown>): string | null {
@@ -76,27 +113,27 @@ export async function publishAgentEvent(tipo: AgentEventType, recurso: Record<st
   if (!target) {
     return;
   }
-  const body = JSON.stringify({
-    version: 1,
-    id: randomUUID(),
+  const preparado = agentWebhookRequest({
+    url: target.url,
+    secret: target.secret,
+    bearer: target.bearer,
     tipo,
-    ocurridoEn: new Date().toISOString(),
-    mes: mesFromRecurso(recurso),
     recurso,
+    id: randomUUID(),
+    ocurridoEn: new Date().toISOString(),
+    timestamp: Math.floor(Date.now() / 1000),
   });
-  const timestamp = Math.floor(Date.now() / 1000);
+  if (!preparado.headers[AGENT_SIGNATURE_HEADER]) {
+    console.error("[agent] el webhook no trae X-Quick-Signature; no se envió", tipo);
+    return;
+  }
   try {
-    const response = await fetch(target.url, {
+    const response = await fetch(preparado.url, {
       method: "POST",
       redirect: "manual",
       signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${target.bearer}`,
-        "User-Agent": "Quick-Agent-Webhook",
-        "X-Quick-Signature": agentSignatureHeader(target.secret, timestamp, body),
-      },
-      body,
+      headers: preparado.headers,
+      body: preparado.body,
     });
     if (response.status < 200 || response.status >= 300) {
       console.error("[agent] webhook respondió", response.status, tipo);

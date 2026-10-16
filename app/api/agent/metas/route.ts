@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   }
   try {
     const body = parsed.kind === "fecha" ? await loadAgentMetaFecha(parsed.fecha) : await loadAgentMetaMes(parsed.mes);
-    return NextResponse.json(body);
+    return NextResponse.json(body, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "No pudimos leer la meta del día";
     console.error("[agent] metas", error);

@@ -12,8 +12,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 
   try {
-    const compra = await updateCompra(params.id, await readCompraBody(request));
-    return NextResponse.json({ compra });
+    const { compra, cambios } = await updateCompra(params.id, await readCompraBody(request), "admin");
+    return NextResponse.json({ compra, cambios });
   } catch (error) {
     console.error("[admin] compras update", error);
     const failure = compraFailure(error, "No pudimos guardar la compra");

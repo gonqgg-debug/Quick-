@@ -38,6 +38,7 @@ import {
   diferenciaRecepcion,
   resumenRecepcion,
   efectoCuentaAlBorrar,
+  leerMotivoDescarte,
   explicacionDuplicado,
   facturaTieneIdentidad,
   isUuid,
@@ -1561,16 +1562,34 @@ async function borrarArchivosDeFactura(id: string): Promise<void> {
   await borrarArchivos(paths);
 }
 
-/** Borra la ficha de Contabilidad. Rodrigo y el admin pueden. La cuenta por pagar se quita solo si esta factura era la única y no está pagada. */
-export async function borrarFactura(idOrClave: string, actor: Actor): Promise<{ id: string; referencia: string }> {
+/** Borra la ficha de Contabilidad. Rodrigo y el admin pueden. El motivo queda guardado. La cuenta por pagar se quita solo si esta factura era la única y no está pagada. */
+export async function borrarFactura(
+  idOrClave: string,
+  actor: Actor,
+  motivoRaw: unknown
+): Promise<{ id: string; referencia: string; motivo: string }> {
   if (actor !== "admin" && actor !== "rodrigo") {
     throw new Error("Solo Rodrigo puede borrar una factura");
   }
+  const motivo = leerMotivoDescarte(motivoRaw);
   const factura = await getFactura(idOrClave);
   if (!factura) {
     throw new Error("No encontramos esa factura");
   }
   const supabase = getSupabaseAdminClient();
+  const { error: descarteError } = await supabase.from("factura_descartes").insert({
+    factura_id: factura.id,
+    referencia: factura.referencia,
+    proveedor: factura.proveedor,
+    ncf: factura.ncf,
+    numero_factura: factura.numeroFactura,
+    total: factura.total,
+    motivo,
+    por: actor,
+  });
+  if (descarteError) {
+    throw descarteError;
+  }
   if (factura.compraId) {
     const [{ count, error: countError }, compraResult] = await Promise.all([
       supabase.from("facturas").select("id", { count: "exact", head: true }).eq("compra_id", factura.compraId).neq("id", factura.id),
@@ -1629,7 +1648,50 @@ export async function borrarFactura(idOrClave: string, actor: Actor): Promise<{ 
     }
   }
   resumenCache = null;
-  return { id: factura.id, referencia: factura.referencia };
+  await publishAgentEvent("factura.descartada", {
+    id: factura.id,
+    referencia: factura.referencia,
+    motivo,
+    por: actor,
+  });
+  return { id: factura.id, referencia: factura.referencia, motivo };
+}
+
+export async function ligarFacturaCompra(
+  idOrClave: string,
+  compraIdRaw: unknown,
+  actor: Actor
+): Promise<{ id: string; referencia: string; compraId: string | null }> {
+  if (actor !== "admin" && actor !== "rodrigo" && actor !== "boris") {
+    throw new Error("Solo Rodrigo o Boris pueden ligar la factura con su compra");
+  }
+  const factura = await getFactura(idOrClave);
+  if (!factura) {
+    throw new Error("No encontramos esa factura");
+  }
+  let compraId: string | null = null;
+  if (compraIdRaw != null && compraIdRaw !== "") {
+    const texto = typeof compraIdRaw === "string" ? compraIdRaw.trim() : "";
+    if (!isUuid(texto)) {
+      throw new Error("No encontramos esa compra");
+    }
+    compraId = texto;
+  }
+  const supabase = getSupabaseAdminClient();
+  if (compraId) {
+    const { data, error } = await supabase.from("compras").select("id").eq("id", compraId).maybeSingle();
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No encontramos esa compra");
+    }
+  }
+  const { error } = await supabase.from("facturas").update({ compra_id: compraId }).eq("id", factura.id);
+  if (error) {
+    throw error;
+  }
+  return { id: factura.id, referencia: factura.referencia, compraId };
 }
 
 export async function updateFactura(

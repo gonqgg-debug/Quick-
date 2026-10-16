@@ -304,6 +304,67 @@ export async function completarUnidades(facturaId: string): Promise<void> {
   }
 }
 
+export type PresentacionListada = {
+  id: string;
+  productoId: string;
+  productoNombre: string;
+  proveedorId: string | null;
+  proveedorNombre: string | null;
+  presentacion: FacturaPresentacion;
+  unidades: number;
+  confirmadoPor: string | null;
+};
+
+export async function listarPresentaciones(filtro: { q?: string; proveedorId?: string; productoId?: string }): Promise<PresentacionListada[]> {
+  const supabase = getSupabaseAdminClient();
+  let query = supabase
+    .from("producto_presentaciones")
+    .select("id, producto_id, proveedor_id, presentacion, unidades, confirmado_por, products ( nombre ), proveedores ( nombre )")
+    .order("updated_at", { ascending: false })
+    .limit(1000);
+  if (filtro.productoId && isUuid(filtro.productoId)) {
+    query = query.eq("producto_id", filtro.productoId);
+  }
+  if (filtro.proveedorId && isUuid(filtro.proveedorId)) {
+    query = query.eq("proveedor_id", filtro.proveedorId);
+  }
+  const { data, error } = await query;
+  if (error) {
+    throw error;
+  }
+  const needle = (filtro.q ?? "").trim().toLowerCase();
+  const filas: PresentacionListada[] = [];
+  for (const row of data ?? []) {
+    const id = typeof row.id === "string" ? row.id : "";
+    const productoId = typeof row.producto_id === "string" ? row.producto_id : "";
+    const presentacion = FACTURA_PRESENTACIONES.some((item) => item.id === row.presentacion) ? (row.presentacion as FacturaPresentacion) : null;
+    const unidades = num(row.unidades);
+    if (!id || !productoId || !presentacion || presentacion === "unidad" || unidades == null || !(unidades > 0)) {
+      continue;
+    }
+    const producto = Array.isArray(row.products) ? row.products[0] : row.products;
+    const proveedor = Array.isArray(row.proveedores) ? row.proveedores[0] : row.proveedores;
+    const item: PresentacionListada = {
+      id,
+      productoId,
+      productoNombre: String(producto?.nombre ?? "").trim() || productoId,
+      proveedorId: typeof row.proveedor_id === "string" ? row.proveedor_id : null,
+      proveedorNombre: proveedor?.nombre ? String(proveedor.nombre).trim() : null,
+      presentacion,
+      unidades,
+      confirmadoPor: typeof row.confirmado_por === "string" ? row.confirmado_por : null,
+    };
+    if (needle) {
+      const texto = `${item.productoNombre} ${item.proveedorNombre ?? ""}`.toLowerCase();
+      if (!texto.includes(needle)) {
+        continue;
+      }
+    }
+    filas.push(item);
+  }
+  return filas;
+}
+
 const PRESENTACIONES_GUARDABLES: FacturaPresentacion[] = ["paquete", "caja", "fardo", "otro"];
 
 export type PresentacionGuardada = {
@@ -316,8 +377,8 @@ export type PresentacionGuardada = {
 
 /** Guarda cuántas unidades trae una presentación y completa las líneas abiertas de ese producto. */
 export async function guardarPresentacion(body: Record<string, unknown>, actor: Actor): Promise<PresentacionGuardada> {
-  if (actor !== "phillip" && actor !== "admin") {
-    throw new Error("Solo Phillip guarda las presentaciones del catálogo");
+  if (actor !== "phillip" && actor !== "rodrigo" && actor !== "admin") {
+    throw new Error("Solo Phillip o Rodrigo guardan las unidades por empaque");
   }
   const productoId = typeof body.productoId === "string" ? body.productoId.trim() : "";
   if (!isUuid(productoId)) {

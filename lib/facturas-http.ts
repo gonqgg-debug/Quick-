@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { abrirDocumento, leerPeticionFactura } from "@/lib/factura-documentos";
-import { guardarPresentacion } from "@/lib/factura-catalogo";
+import { guardarPresentacion, listarPresentaciones } from "@/lib/factura-catalogo";
 import {
   aceptarPropuestas,
   asignarProductoLinea,
   candidatosLineas,
   confirmarUnidadesEnLinea,
   borrarFactura,
+  ligarFacturaCompra,
   createFactura,
   filtroDesdeParams,
   getFactura,
@@ -178,9 +179,42 @@ export async function handleGetFactura(idOrClave: string) {
   return NextResponse.json({ factura });
 }
 
-export async function handleBorrarFactura(idOrClave: string, actor: Actor) {
-  const borrada = await borrarFactura(idOrClave, actor);
+export async function handleBorrarFactura(idOrClave: string, actor: Actor, request: NextRequest) {
+  let motivo: unknown = request.nextUrl.searchParams.get("motivo");
+  try {
+    const body = (await request.json()) as { motivo?: unknown };
+    if (body && typeof body === "object" && "motivo" in body) {
+      motivo = body.motivo;
+    }
+  } catch {
+    motivo = request.nextUrl.searchParams.get("motivo");
+  }
+  const borrada = await borrarFactura(idOrClave, actor, motivo);
   return NextResponse.json({ ok: true, ...borrada });
+}
+
+export async function handleLigarFacturaCompra(idOrClave: string, request: NextRequest, actor: Actor) {
+  let body: { compraId?: unknown; compra_id?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    throw new Error("El cuerpo no es un JSON válido");
+  }
+  if (!body || typeof body !== "object" || !("compraId" in body || "compra_id" in body)) {
+    throw new Error("Manda compraId de la compra, o null para quitar el ligue");
+  }
+  const ligado = await ligarFacturaCompra(idOrClave, "compraId" in body ? body.compraId : body.compra_id, actor);
+  return NextResponse.json({ ok: true, ...ligado });
+}
+
+export async function handleListarPresentaciones(request: NextRequest) {
+  const params = request.nextUrl.searchParams;
+  const presentaciones = await listarPresentaciones({
+    q: params.get("q") ?? "",
+    proveedorId: params.get("proveedorId") ?? "",
+    productoId: params.get("productoId") ?? "",
+  });
+  return NextResponse.json({ presentaciones });
 }
 
 export async function handlePatchFactura(idOrClave: string, request: NextRequest, actor: Actor = "lectura") {
