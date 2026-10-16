@@ -20,6 +20,12 @@ function run(bin: string[], args: string[], input?: string) {
 
 function psqlBin(): string[] {
   const probe = ["-d", "postgres", "-v", "ON_ERROR_STOP=1", "-c", "select 1"];
+  const host = process.env.PGHOST;
+  if (host) {
+    const prefix = ["psql", "-h", host, "-p", process.env.PGPORT ?? "5432", "-U", process.env.PGUSER ?? "postgres"];
+    run(prefix, probe);
+    return prefix;
+  }
   try {
     run(["psql"], probe);
     return ["psql"];
@@ -234,6 +240,12 @@ begin
   if venta is distinct from 999 then
     raise exception 'el parcial recalculo la venta, fue %', venta;
   end if;
+  if not exists (
+    select 1 from public.pos_sesiones
+    where odoo_id = 901 and ingesta = 'parcial' and lote_abierto = 'lote-1'
+  ) then
+    raise exception 'el parcial no quedo abierto';
+  end if;
   perform public.ingestar_pos_sesion($json$
 {
     "tienda":"quick","modo":"parcial","loteId":"lote-1",
@@ -262,6 +274,12 @@ begin
   select venta_real into venta from public.ventas_diarias where fecha = '2026-10-12';
   if venta is distinct from 15310 then
     raise exception 'las partes debian sumar 15310, fue %', venta;
+  end if;
+  if not exists (
+    select 1 from public.pos_sesiones
+    where odoo_id = 901 and ingesta = 'cerrada' and lote_abierto is null
+  ) then
+    raise exception 'el final no cerro la sesion';
   end if;
 
   perform public.ingestar_pos_sesion($json$
@@ -350,6 +368,119 @@ begin
         raise;
       end if;
   end;
+
+  insert into public.products (nombre, categoria, precio, codigo_odoo, costo_manual, costo_manual_fuente, costo_manual_en, tasa_itbis)
+  values
+    ('Mapa', 'Bebidas', 116, 'cod-map', 10, 'admin', now(), 0),
+    ('Sin mapa', 'Bebidas', 118, 'cod-unmap', 10, 'admin', now(), 0),
+    ('Explicita', 'Bebidas', 100, 'cod-explicita', 10, 'admin', now(), 18),
+    ('Crudo', 'Bebidas', 118, 'cod-crudo', 10, 'admin', now(), 0),
+    ('Fechas', 'Bebidas', 118, 'cod-fechas', 10, 'admin', now(), 18);
+
+  perform public.ingestar_pos_sesion($json$
+{
+    "tienda":"quick","modo":"completo",
+    "impuestos":[{"id":5,"tasa":16},{"id":5,"tasa":"no"},{"id":99,"tasa":0}],
+    "sesion":{"odooId":812,"nombre":"POS/00812","estado":"closed","startAt":"2026-10-09T14:00:00Z","totalPagos":452},
+    "ordenes":[{"odooId":812001,"fecha":"2026-10-09T15:00:00Z","total":452,"estado":"done","lineas":[
+      {"odooId":50,"odooProductId":2,"codigoOdoo":"cod-map","nombreOdoo":"Mapa","cantidad":1,"subtotalConItbis":116,"impuestoOdooIds":[5]},
+      {"odooId":51,"odooProductId":3,"codigoOdoo":"cod-unmap","nombreOdoo":"Sin mapa","cantidad":1,"subtotalConItbis":118,"impuestoOdooIds":[18]},
+      {"odooId":52,"odooProductId":4,"codigoOdoo":"cod-explicita","nombreOdoo":"Explicita","cantidad":1,"subtotalConItbis":100,"tasaItbis":0,"impuestoOdooIds":[5]},
+      {"odooId":53,"odooProductId":5,"codigoOdoo":"cod-crudo","nombreOdoo":"Crudo","cantidad":1,"subtotalConItbis":118,"tax_ids":[18]}
+    ],"pagos":[]}]
+  }$json$::jsonb);
+
+  select l.tasa_itbis, r.venta_neta into neta, margen
+  from public.pos_orden_lineas l
+  join public.resumen_producto_dia r on r.codigo_odoo = l.codigo_odoo and r.fecha = '2026-10-09'
+  where l.codigo_odoo = 'cod-map';
+  if neta is distinct from 16 or margen is distinct from 100 then
+    raise exception 'el id 5 debio mapear a 16 y la neta a 100, tasa % neta %', neta, margen;
+  end if;
+
+  select l.tasa_itbis, r.venta_neta into neta, margen
+  from public.pos_orden_lineas l
+  join public.resumen_producto_dia r on r.codigo_odoo = l.codigo_odoo and r.fecha = '2026-10-09'
+  where l.codigo_odoo = 'cod-unmap';
+  if neta is not null or margen is distinct from 118 then
+    raise exception 'un id sin mapa no es tasa, tasa % neta %', neta, margen;
+  end if;
+
+  select l.tasa_itbis, r.venta_neta into neta, margen
+  from public.pos_orden_lineas l
+  join public.resumen_producto_dia r on r.codigo_odoo = l.codigo_odoo and r.fecha = '2026-10-09'
+  where l.codigo_odoo = 'cod-explicita';
+  if neta is distinct from 0 or margen is distinct from 100 then
+    raise exception 'tasaItbis 0 debio ganar sobre el mapa, tasa % neta %', neta, margen;
+  end if;
+
+  select l.tasa_itbis, r.venta_neta into neta, margen
+  from public.pos_orden_lineas l
+  join public.resumen_producto_dia r on r.codigo_odoo = l.codigo_odoo and r.fecha = '2026-10-09'
+  where l.codigo_odoo = 'cod-crudo';
+  if neta is not null or margen is distinct from 118 then
+    raise exception 'tax_ids no se lee como tasa, tasa % neta %', neta, margen;
+  end if;
+
+  select venta_neta into neta from public.resumen_producto_dia where fecha = '2026-10-11' and codigo_odoo = 'cod-16';
+  if neta is distinct from 100 then
+    raise exception 'antes del cambio de tasa la neta 16 debio seguir en 100, fue %', neta;
+  end if;
+  update public.products set tasa_itbis = 0 where codigo_odoo = 'cod-16';
+  select venta_neta into neta from public.resumen_producto_dia where fecha = '2026-10-11' and codigo_odoo = 'cod-16';
+  if neta is distinct from 100 then
+    raise exception 'cambiar la tasa no debe recalcular en el mismo update, neta %', neta;
+  end if;
+  if not exists (select 1 from public.pos_rematch_cola where codigo_odoo = 'cod-16' and despues_de = 0) then
+    raise exception 'cambiar tasa_itbis no encolo el producto';
+  end if;
+  proc := public.procesar_pos_rematch(500);
+  select venta_neta into neta from public.resumen_producto_dia where fecha = '2026-10-11' and codigo_odoo = 'cod-16';
+  if neta is distinct from 116 then
+    raise exception 'el rematch debio recalcular la neta a 116, fue %', neta;
+  end if;
+  select venta_neta into neta from public.resumen_producto_dia where fecha = '2026-10-11' and codigo_odoo = 'cod-linea';
+  if neta is distinct from 100 then
+    raise exception 'la tasa guardada en la linea no debio cambiar, neta %', neta;
+  end if;
+
+  perform public.ingestar_pos_sesion($json$
+{
+    "tienda":"quick","modo":"completo",
+    "sesion":{"odooId":820,"nombre":"POS/00820","estado":"closed","startAt":"2026-10-08T14:00:00Z","totalPagos":118},
+    "ordenes":[{"odooId":820001,"fecha":"2026-10-08T15:00:00Z","total":118,"estado":"done","lineas":[
+      {"odooId":200,"odooProductId":9,"codigoOdoo":"cod-fechas","nombreOdoo":"Fechas","cantidad":1,"subtotalConItbis":118}
+    ],"pagos":[]}]
+  }$json$::jsonb);
+  perform public.ingestar_pos_sesion($json$
+{
+    "tienda":"quick","modo":"completo",
+    "sesion":{"odooId":821,"nombre":"POS/00821","estado":"closed","startAt":"2026-10-07T14:00:00Z","totalPagos":118},
+    "ordenes":[{"odooId":821001,"fecha":"2026-10-07T15:00:00Z","total":118,"estado":"done","lineas":[
+      {"odooId":201,"odooProductId":9,"codigoOdoo":"cod-fechas","nombreOdoo":"Fechas","cantidad":1,"subtotalConItbis":118}
+    ],"pagos":[]}]
+  }$json$::jsonb);
+  update public.products set tasa_itbis = 0 where codigo_odoo = 'cod-fechas';
+  proc := public.procesar_pos_rematch(500, 1);
+  if (proc->>'fechas')::int is distinct from 1 or (proc->>'pendientes')::int <= 0 then
+    raise exception 'el tope de fechas no dejo pendiente: %', proc;
+  end if;
+  select count(*) into n from public.resumen_producto_dia where codigo_odoo = 'cod-fechas' and venta_neta = 118;
+  if n is distinct from 1 then
+    raise exception 'debio recalcular una sola fecha, hay % en 118', n;
+  end if;
+  select count(*) into n from public.resumen_producto_dia where codigo_odoo = 'cod-fechas' and venta_neta = 100;
+  if n is distinct from 1 then
+    raise exception 'la otra fecha debio quedar en 100, hay %', n;
+  end if;
+  proc := public.procesar_pos_rematch(500);
+  if (proc->>'pendientes')::int is distinct from 0 then
+    raise exception 'la segunda pasada no termino: %', proc;
+  end if;
+  select count(*) into n from public.resumen_producto_dia where codigo_odoo = 'cod-fechas' and venta_neta = 118;
+  if n is distinct from 2 then
+    raise exception 'las dos fechas debian quedar en 118, hay %', n;
+  end if;
 end
 $test$;
 `,

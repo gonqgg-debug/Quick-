@@ -80,3 +80,27 @@ export async function listarSesionesCargadas(input: { desde: string | null; curs
     nextCursor: rows.length > limite && last ? String(last.odoo_id) : null,
   };
 }
+
+export async function listarPartesAbiertas() {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("pos_sesiones")
+    .select("odoo_id, nombre, fecha_operativa, lote_abierto, ingested_at")
+    .eq("tienda", TIENDA_DEFAULT)
+    .eq("ingesta", "parcial")
+    .order("fecha_operativa", { ascending: true })
+    .limit(100);
+  if (error) {
+    throw error;
+  }
+  return {
+    tienda: TIENDA_DEFAULT,
+    partes: (data ?? []).map((row) => ({
+      odooId: Number(row.odoo_id),
+      nombre: String(row.nombre ?? ""),
+      fechaOperativa: String(row.fecha_operativa),
+      loteId: row.lote_abierto ? String(row.lote_abierto) : null,
+      ingestedAt: row.ingested_at ? String(row.ingested_at) : null,
+    })),
+  };
+}

@@ -2,6 +2,8 @@ import { addDaysToDayKey, diffDayKeys, isDayKey, isoWeekdayMonday1, localDayKey,
 
 export const POS_MAX_LINEAS = 1500;
 export const POS_MAX_SESIONES = 1;
+export const POS_REMATCH_MAX_LINEAS = 500;
+export const POS_REMATCH_MAX_FECHAS = 31;
 export const CONSUMO_PAGE_DEFAULT = 50;
 export const CONSUMO_PAGE_MAX = 500;
 export const PERIODO_MAX_DIAS = 366;
@@ -15,13 +17,18 @@ export const POS_AGENT_ENDPOINTS = [
     method: "POST",
     path: "/api/agent/pos/sesiones",
     describe:
-      "Rodrigo empuja una sesión cerrada. Acepta un objeto sesion o sesiones con una sola. modo completo reemplaza lo que no venga; parcial agrega sin borrar ni recalcular; final cierra el lote y recalcula. Máximo 1.500 líneas por request, sin tope por sesión. La línea puede traer tasaItbis o tax_ids. Solo paid, done e invoiced cuentan. No manda categoría ni costo de Odoo.",
+      "Rodrigo empuja una sesión cerrada. Acepta un objeto sesion o sesiones con una sola. modo completo reemplaza lo que no venga; parcial agrega sin borrar ni recalcular; final cierra el lote y recalcula. Máximo 1.500 líneas por request, sin tope por sesión. La tasa es tasaItbis (0, 16 o 18). tax_ids son ids de account.tax, no el porcentaje: se resuelven con impuestos [{id, tasa}]. Solo paid, done e invoiced cuentan. No manda categoría ni costo de Odoo.",
   },
   {
     method: "POST",
     path: "/api/agent/pos/rematch",
     describe:
-      "Procesa la cola de re-cruce de codigo_odoo en lotes de hasta 500 líneas. Responde procesadas y pendientes. La importación del catálogo solo encola; no recalcula en el mismo request.",
+      "Procesa la cola de re-cruce. Cada llamada toca como máximo 500 líneas y 31 fechas. Lo que no entra sigue pendiente y el cursor no se salta esas líneas. Responde procesadas, pendientes y fechas. Cambiar codigo_odoo o tasa_itbis solo encola; no recalcula en el mismo request.",
+  },
+  {
+    method: "GET",
+    path: "/api/agent/pos/partes",
+    describe: "Sesiones que llegaron en modo parcial y todavía no tienen el envío final. Cada una trae odooId, fechaOperativa y loteId.",
   },
   {
     method: "GET",
@@ -105,6 +112,12 @@ export type PosLinea = {
   subtotalConItbis: number | null;
   odooRefundedLineId: number | null;
   tasaItbis: number | null;
+  impuestoOdooIds: number[];
+};
+
+export type PosImpuesto = {
+  id: number;
+  tasa: number;
 };
 
 export type PosPago = {
@@ -151,6 +164,7 @@ export type PosNormalizado = {
   tienda: string;
   modo: ModoIngest;
   loteId: string | null;
+  impuestos: PosImpuesto[];
   sesion: PosSesion;
   ordenes: PosOrden[];
 };
@@ -333,6 +347,17 @@ export function itbisIncluido(venta: number, tasa = 18): number {
   return round2(venta - venta / (1 + tasa / 100));
 }
 
+export function tasaCatalogo(value: unknown): number | null {
+  if (value == null || value === "") {
+    return null;
+  }
+  const number = typeof value === "number" ? value : Number(value);
+  if (number === 0 || number === 16 || number === 18) {
+    return number;
+  }
+  return 18;
+}
+
 export function margenConsumo(venta: number, unidades: number, costo: number | null, tasa = 18): number | null {
   if (costo == null) {
     return null;
@@ -480,29 +505,61 @@ function tasaDeLinea(raw: Record<string, unknown>, campo: string): number | null
   if (directa != null && directa !== "") {
     return normalizarTasa(directa, campo);
   }
-  const tax = raw.tax_ids ?? raw.taxIds;
-  if (tax == null) {
-    return null;
+  return null;
+}
+
+function idDeImpuesto(item: unknown): number | null {
+  if (typeof item === "number" && Number.isInteger(item) && item > 0 && item <= 2_000_000_000) {
+    return item;
   }
-  const lista = Array.isArray(tax) ? tax : [tax];
-  for (const item of lista) {
-    if (typeof item === "number" || typeof item === "string") {
-      if (String(item).trim() === "") {
-        continue;
-      }
-      return normalizarTasa(item, campo);
-    }
-    if (isRecord(item)) {
-      const amount = pick(item, ["amount", "tasa", "tasaItbis", "percent"]);
-      if (amount != null && amount !== "") {
-        return normalizarTasa(amount, campo);
-      }
+  if (typeof item === "string" && /^[0-9]+$/.test(item.trim())) {
+    const number = Number(item.trim());
+    if (number > 0 && number <= 2_000_000_000) {
+      return number;
     }
   }
-  if (lista.length > 0) {
-    throw new ParseError("tax_ids no trae la tasa. Manda tasaItbis 0, 16 o 18", campo);
+  if (Array.isArray(item)) {
+    return item.length > 0 ? idDeImpuesto(item[0]) : null;
+  }
+  if (isRecord(item)) {
+    return idDeImpuesto(pick(item, ["id", "odooId", "odoo_id"]));
   }
   return null;
+}
+
+function idsDeImpuesto(raw: Record<string, unknown>): number[] {
+  const tax = raw.tax_ids ?? raw.taxIds ?? raw.impuestoOdooIds ?? raw.impuesto_odoo_ids;
+  if (tax == null || tax === "") {
+    return [];
+  }
+  const lista = Array.isArray(tax) ? tax : [tax];
+  const ids: number[] = [];
+  for (const item of lista) {
+    const id = idDeImpuesto(item);
+    if (id != null && !ids.includes(id)) {
+      ids.push(id);
+    }
+  }
+  return ids;
+}
+
+function parseImpuestos(raw: unknown): PosImpuesto[] {
+  if (raw == null) {
+    return [];
+  }
+  if (!Array.isArray(raw)) {
+    throw new ParseError("impuestos tiene que ser una lista de {id, tasa}", "impuestos");
+  }
+  const tasas = new Map<number, number>();
+  for (const item of raw) {
+    if (!isRecord(item)) {
+      throw new ParseError("Cada impuesto necesita id y tasa", "impuestos");
+    }
+    const id = asInt(pick(item, ["id", "odooId", "odoo_id"]), "Cada impuesto necesita id", "impuestos");
+    const tasa = normalizarTasa(pick(item, ["tasa", "tasaItbis", "tasa_itbis"]), "impuestos");
+    tasas.set(id, tasa);
+  }
+  return Array.from(tasas, ([id, tasa]) => ({ id, tasa }));
 }
 
 function asText(value: unknown, max: number): string | null {
@@ -563,6 +620,7 @@ function parseLinea(raw: unknown): PosLinea {
       "lineas.odooRefundedLineId",
     ),
     tasaItbis: tasaDeLinea(raw, "lineas.tasaItbis"),
+    impuestoOdooIds: idsDeImpuesto(raw),
   };
 }
 
@@ -681,6 +739,7 @@ export function parsePosIngestBody(body: unknown): ParsePosResult {
         "sesion.odooWriteDate",
       ),
     };
+    const impuestos = parseImpuestos(body.impuestos !== undefined ? body.impuestos : item.impuestos);
     const ordenes = ordenesRaw.map(parseOrdenPos);
     const vistos = new Set<string>();
     const marcar = (tipo: string, id: number, campo: string) => {
@@ -701,7 +760,7 @@ export function parsePosIngestBody(body: unknown): ParsePosResult {
       }
     }
     const lineas = ordenes.reduce((sum, orden) => sum + orden.lineas.length, 0);
-    return { ok: true, payload: { tienda, modo, loteId, sesion, ordenes }, lineas };
+    return { ok: true, payload: { tienda, modo, loteId, impuestos, sesion, ordenes }, lineas };
   } catch (error) {
     if (error instanceof ParseError) {
       return { ok: false, status: 422, error: error.message, campo: error.campo };

@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       { method: "GET", path: "/api/agent/proveedores?q=", describe: "Proveedores con RNC y empaques (presentación y unidades por producto). q busca por nombre o RNC." },
       { method: "POST", path: "/api/agent/proveedores", describe: "Rodrigo crea un proveedor sin pasar por el panel. JSON: nombre, rnc, tieneCredito, diasCredito, formaPago (efectivo, transferencia o mixto) y notas." },
       { method: "GET", path: "/api/agent/caja?fecha=YYYY-MM-DD", describe: "Turnos y ledger del rango" },
-      { method: "GET", path: "/api/agent/catalogo?cursor=&q=", describe: "Productos de a 100. stock siempre es null" },
+      { method: "GET", path: "/api/agent/catalogo?cursor=&q=", describe: "Productos de a 100. Cada uno trae tasaItbis y tasa_itbis (0, 16 o 18; el precio ya incluye ese ITBIS). stock siempre es null." },
       {
         method: "POST",
         path: "/api/agent/catalogo",

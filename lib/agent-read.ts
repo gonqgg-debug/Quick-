@@ -2,6 +2,7 @@ import { parseCompraMedio } from "@/lib/admin-compras-shared";
 import { isUuid } from "@/lib/facturas-shared";
 import { isDayKey, todayDayKey, diffDayKeys } from "@/lib/local-day";
 import { toMoney } from "@/lib/money";
+import { tasaCatalogo } from "@/lib/pos-domain";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
 const MAX_RANGE_DAYS = 93;
@@ -144,42 +145,85 @@ export async function listAgentCaja(range: AgentRange) {
   };
 }
 
+function faltaColumnaTasa(error: { message?: string; details?: string } | null): boolean {
+  const text = `${error?.message ?? ""} ${error?.details ?? ""}`.toLowerCase();
+  return text.includes("tasa_itbis");
+}
+
+type FilaCatalogo = {
+  id: string;
+  nombre: string;
+  marca: string | null;
+  categoria: string | null;
+  precio: number | string | null;
+  tasa_itbis?: number | string | null;
+  codigo_odoo: string | null;
+  codigo_barras: string | null;
+  activo: boolean | null;
+};
+
 export async function listAgentCatalogo(search: URLSearchParams) {
   const q = (search.get("q") ?? "").trim().replace(/[%_,()]/g, " ").replace(/\s+/g, " ").slice(0, 80);
   const cursor = (search.get("cursor") ?? "").trim();
   const supabase = getSupabaseAdminClient();
-  let query = supabase
-    .from("products")
-    .select("id, nombre, marca, categoria, precio, tasa_itbis, codigo_odoo, codigo_barras, activo")
-    .order("id", { ascending: true })
-    .limit(PAGE_SIZE + 1);
-  if (cursor) {
-    query = query.gt("id", cursor);
+  const filtrar = <T extends { gt: (col: string, value: string) => T; or: (filters: string) => T }>(query: T) => {
+    let next = query;
+    if (cursor) {
+      next = next.gt("id", cursor);
+    }
+    if (q) {
+      next = next.or(`nombre.ilike.%${q}%,codigo_odoo.ilike.%${q}%,codigo_barras.ilike.%${q}%`);
+    }
+    return next;
+  };
+  const leer = (conTasa: boolean) => {
+    if (conTasa) {
+      return filtrar(
+        supabase
+          .from("products")
+          .select("id, nombre, marca, categoria, precio, tasa_itbis, codigo_odoo, codigo_barras, activo")
+          .order("id", { ascending: true })
+          .limit(PAGE_SIZE + 1),
+      );
+    }
+    return filtrar(
+      supabase
+        .from("products")
+        .select("id, nombre, marca, categoria, precio, codigo_odoo, codigo_barras, activo")
+        .order("id", { ascending: true })
+        .limit(PAGE_SIZE + 1),
+    );
+  };
+  let conTasa = true;
+  let { data, error } = await leer(true);
+  if (error && faltaColumnaTasa(error)) {
+    conTasa = false;
+    ({ data, error } = await leer(false));
   }
-  if (q) {
-    query = query.or(`nombre.ilike.%${q}%,codigo_odoo.ilike.%${q}%,codigo_barras.ilike.%${q}%`);
-  }
-  const { data, error } = await query;
   if (error) {
     throw error;
   }
-  const rows = data ?? [];
+  const rows = (data ?? []) as FilaCatalogo[];
   const page = rows.slice(0, PAGE_SIZE);
   const next = rows.length > PAGE_SIZE ? String(page[page.length - 1]?.id ?? "") : null;
   return {
-    nota: "El catálogo no guarda existencias. activo indica si el producto se ofrece. precio es el de venta e incluye ITBIS. tasaItbis es 0, 16 o 18. El costo no viaja aquí.",
-    productos: page.map((row) => ({
-      id: String(row.id),
-      nombre: String(row.nombre),
-      marca: row.marca ? String(row.marca) : null,
-      categoria: String(row.categoria ?? ""),
-      precio: toMoney(row.precio),
-      tasaItbis: Number(row.tasa_itbis) === 0 || Number(row.tasa_itbis) === 16 || Number(row.tasa_itbis) === 18 ? Number(row.tasa_itbis) : 18,
-      codigoOdoo: row.codigo_odoo ? String(row.codigo_odoo) : null,
-      codigoBarras: row.codigo_barras ? String(row.codigo_barras) : null,
-      activo: Boolean(row.activo),
-      stock: null,
-    })),
+    nota: "El catálogo no guarda existencias. activo indica si el producto se ofrece. precio es el de venta e incluye ITBIS. tasaItbis y tasa_itbis son la misma tasa: 0, 16 o 18. Si la columna todavía no está en la base, vienen en null. El costo no viaja aquí.",
+    productos: page.map((row) => {
+      const tasa = conTasa ? tasaCatalogo(row.tasa_itbis) : null;
+      return {
+        id: String(row.id),
+        nombre: String(row.nombre),
+        marca: row.marca ? String(row.marca) : null,
+        categoria: String(row.categoria ?? ""),
+        precio: toMoney(row.precio),
+        tasaItbis: tasa,
+        tasa_itbis: tasa,
+        codigoOdoo: row.codigo_odoo ? String(row.codigo_odoo) : null,
+        codigoBarras: row.codigo_barras ? String(row.codigo_barras) : null,
+        activo: Boolean(row.activo),
+        stock: null,
+      };
+    }),
     nextCursor: next || null,
   };
 }

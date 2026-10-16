@@ -1,0 +1,41 @@
+name: POS consumo
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  pos-consumo:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Cliente de Postgres
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: npm ci
+      - name: Pruebas en memoria
+        run: npx tsx scripts/check-pos-consumo.ts
+      - name: Pruebas contra Postgres
+        run: npx tsx scripts/check-pos-consumo-db.ts
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGUSER: postgres
+          PGPASSWORD: postgres

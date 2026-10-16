@@ -71,6 +71,17 @@ export function ConsumoEncabezado({ frescura }: { frescura: FrescuraConsumo | nu
         ) : null}
       </div>
 
+      {frescura && frescura.partesAbiertas > 0 ? (
+        <p
+          className="mt-3 rounded-md px-3 py-2 text-sm font-medium"
+          style={{ backgroundColor: "#FEF3C7", color: "#92400E" }}
+        >
+          {frescura.partesAbiertas === 1
+            ? "Hay 1 sesión en partes sin envío final."
+            : `Hay ${frescura.partesAbiertas} sesiones en partes sin envío final.`}
+        </p>
+      ) : null}
+
       <nav className="mt-5 flex flex-wrap gap-1.5" aria-label="Consumo">
         {TABS.map((tab) => {
           const on = activo(pathname, tab.href);

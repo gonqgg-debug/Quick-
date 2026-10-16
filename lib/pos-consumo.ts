@@ -47,6 +47,7 @@ export type FrescuraConsumo = {
   ultimaFecha: string | null;
   faltaAyer: boolean;
   pendientes: number;
+  partesAbiertas: number;
 };
 
 export type DiaConsumo = {
@@ -223,10 +224,11 @@ export async function cargarFrescura(now = Date.now()): Promise<FrescuraConsumo>
   const tienda = TIENDA_DEFAULT;
   const ayer = yesterdayDayKey(now);
   const desde = addDaysToDayKey(ayer, -29);
-  const [ultima, ayerRow, calidad] = await Promise.all([
+  const [ultima, ayerRow, calidad, partes] = await Promise.all([
     supabase.from("pos_sesiones").select("fecha_operativa").eq("tienda", tienda).order("fecha_operativa", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("pos_sesiones").select("id").eq("tienda", tienda).eq("fecha_operativa", ayer).limit(1),
     supabase.rpc("consumo_calidad_conteos", { p_tienda: tienda, p_desde: desde, p_hasta: ayer }),
+    supabase.from("pos_sesiones").select("id", { count: "exact", head: true }).eq("tienda", tienda).eq("ingesta", "parcial"),
   ]);
   if (ultima.error) {
     fallar(ultima.error);
@@ -237,6 +239,9 @@ export async function cargarFrescura(now = Date.now()): Promise<FrescuraConsumo>
   if (calidad.error) {
     fallar(calidad.error);
   }
+  if (partes.error) {
+    fallar(partes.error);
+  }
   const calidadRow = Array.isArray(calidad.data) ? calidad.data[0] : null;
   const ultimaFecha = ultima.data?.fecha_operativa ? dia(ultima.data.fecha_operativa) : null;
   const pendientes = num(calidadRow?.sin_match_productos) + num(calidadRow?.sin_costo_productos);
@@ -244,6 +249,7 @@ export async function cargarFrescura(now = Date.now()): Promise<FrescuraConsumo>
     ultimaFecha,
     faltaAyer: Boolean(ultimaFecha) && (ayerRow.data?.length ?? 0) === 0,
     pendientes,
+    partesAbiertas: partes.count ?? 0,
   };
 }
 

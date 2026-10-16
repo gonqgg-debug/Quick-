@@ -91,7 +91,9 @@ El mismo cuerpo se acepta con un objeto `sesion` y `ordenes` al nivel de arriba,
 
 El precio de la caja ya incluye ITBIS. `precioUnit`, `total` y `subtotalConItbis` son lo que pagó el cliente. No los multipliques por 1.18. `subtotal` es la base sin el impuesto; en el ejemplo, 50 cobrados son 42.37 de base y 7.63 de ITBIS. La venta del día se guarda con el impuesto incluido.
 
-La tasa no es fija. Cada línea puede traer `tasaItbis` (0, 16 o 18) o `tax_ids` con `amount` (también `0.16` se lee como 16). Si la línea no trae tasa, se usa `products.tasa_itbis`. El default del producto es 18. El margen es `venta_con_itbis / (1 + tasa/100) − unidades × costo_sin_itbis`. `products.costo_manual` y `factura_lineas.costo_unitario` se guardan **sin ITBIS**.
+La tasa no es fija. Cada línea puede traer `tasaItbis` (0, 16 o 18; `0.16` se lee como 16). `tax_ids` son ids de `account.tax`, no el porcentaje: un `18` ahí es el id del registro, no 18%. Esos ids se resuelven con `impuestos` en el mismo request, una lista `{ "id": 5, "tasa": 16 }`. Si la línea no trae `tasaItbis` y algún id está en ese mapa, se usa esa tasa. Si no, se usa `products.tasa_itbis`. El default del producto es 18. Un id sin mapa no rechaza la sesión. `tasaItbis` explícito, incluido el 0, gana sobre el mapa. El margen es `venta_con_itbis / (1 + tasa/100) − unidades × costo_sin_itbis`. `products.costo_manual` y `factura_lineas.costo_unitario` se guardan **sin ITBIS**.
+
+`GET /api/agent/catalogo` devuelve esa tasa en `tasaItbis` y en `tasa_itbis`. El precio del catálogo ya la incluye.
 
 Solo entran en la venta y en los resúmenes las órdenes `paid`, `done` e `invoiced`. `draft` y `cancel` se guardan y se excluyen. Un total negativo (devolución) resta.
 
@@ -151,11 +153,15 @@ Todos aceptan `limit` (default 50, máximo 500) y `cursor`. La respuesta trae `r
 - `GET /api/agent/consumo/ticket?desde=&hasta=`
 - `GET /api/agent/consumo/tendencias?hasta=`
 
-Cuando se corrige `products.codigo_odoo`, el trigger solo encola el código en `pos_rematch_cola`. La importación del catálogo no recalcula en ese momento.
+Cuando se corrige `products.codigo_odoo` o `products.tasa_itbis`, el trigger solo encola el código en `pos_rematch_cola`. La importación del catálogo no recalcula en ese momento. El cambio de tasa recalcula `venta_neta` y el margen de las líneas que no trajeron tasa propia. La tasa guardada en la línea sigue ganando.
 
 ## POST `/api/agent/pos/rematch`
 
-Auth de Rodrigo. Cuerpo opcional `{ "limite": 500 }` (máximo 500). Procesa hasta ese número de líneas de la cola y las fechas que toquen. Responde `{ "procesadas": 120, "pendientes": 40 }`. Hay que llamarlo hasta que `pendientes` sea 0.
+Auth de Rodrigo. Cuerpo opcional `{ "limite": 500 }` (máximo 500). Cada llamada recalcula como máximo 31 fechas. Las líneas de una fecha que no entró siguen pendientes y el cursor no las salta. Responde `{ "procesadas": 120, "pendientes": 40, "fechas": 31 }`. Hay que llamarlo hasta que `pendientes` sea 0.
+
+## GET `/api/agent/pos/partes`
+
+Sesiones que llegaron con `modo: parcial` y todavía no tienen el `final`. La respuesta trae `partes`: `odooId`, `nombre`, `fechaOperativa`, `loteId` e `ingestedAt`. El tablero de consumo muestra el mismo aviso.
 
 ## Pruebas
 
@@ -164,4 +170,4 @@ npx tsx scripts/check-pos-consumo.ts
 npx tsx scripts/check-pos-consumo-db.ts
 ```
 
-La primera no toca la base: parser, margen con tasas 0, 16 y 18, estados, partes y el día de 85.075. La segunda crea la base `quick_pos_test` en el Postgres local, aplica `supabase/migrations/20261016120000_pos_ingesta.sql` y llama `ingestar_pos_sesion`.
+La primera no toca la base: parser, margen con tasas 0, 16 y 18, estados, partes y el día de 85.075. La segunda crea la base `quick_pos_test` en el Postgres local, aplica `supabase/migrations/20261016120000_pos_ingesta.sql` y llama `ingestar_pos_sesion`. Si existen `PGHOST`, `PGPORT`, `PGUSER` y `PGPASSWORD`, usa ese servidor en vez del Postgres local. La GitHub Action `POS consumo` corre las dos en cada push y en cada pull request.

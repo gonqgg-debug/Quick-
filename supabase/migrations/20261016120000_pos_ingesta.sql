@@ -2,6 +2,7 @@
 -- Categoría y costo salen del catálogo y de las facturas de compra, nunca del POS.
 -- El costo (costo_manual y factura_lineas.costo_unitario) se guarda SIN ITBIS.
 -- El precio de venta ya incluye ITBIS. La tasa es la de la línea, si vino, y si no la de products.tasa_itbis.
+-- tax_ids de Odoo son ids de account.tax. La tasa sale de tasaItbis o de pos_impuesto_tasa, nunca del id.
 
 create table if not exists public.pos_sesiones (
   id bigserial primary key,
@@ -22,9 +23,12 @@ create table if not exists public.pos_sesiones (
   descuadrada boolean not null default false,
   odoo_write_date timestamptz,
   ingested_at timestamptz not null default now(),
+  ingesta text not null default 'cerrada',
+  lote_abierto text,
   unique (tienda, odoo_id),
   constraint pos_sesiones_estado_check check (estado = 'closed'),
-  constraint pos_sesiones_turno_check check (turno in ('am', 'pm'))
+  constraint pos_sesiones_turno_check check (turno in ('am', 'pm')),
+  constraint pos_sesiones_ingesta_check check (ingesta in ('parcial', 'cerrada'))
 );
 
 create table if not exists public.pos_ordenes (
@@ -202,6 +206,9 @@ create index if not exists idx_pos_sesiones_fecha_turno on public.pos_sesiones (
 create index if not exists idx_pos_sesiones_descuadrada
   on public.pos_sesiones (tienda, fecha_operativa)
   where descuadrada;
+create index if not exists idx_pos_sesiones_partes
+  on public.pos_sesiones (tienda, odoo_id)
+  where ingesta = 'parcial';
 create index if not exists idx_resumen_producto_dia_producto on public.resumen_producto_dia (product_id, fecha);
 create index if not exists idx_resumen_canasta_lift on public.resumen_canasta_semana (tienda, semana, lift desc);
 
@@ -251,6 +258,15 @@ create table if not exists public.pos_rematch_cola (
   despues_de bigint not null default 0,
   encolado_en timestamptz not null default now()
 );
+
+create table if not exists public.pos_impuesto_tasa (
+  odoo_id int primary key,
+  tasa numeric(4, 2) not null,
+  constraint pos_impuesto_tasa_check check (tasa in (0, 16, 18))
+);
+
+comment on table public.pos_impuesto_tasa is
+  'Id de account.tax en Odoo y su porcentaje. El id no es la tasa. Se usa si la línea no trae tasaItbis.';
 
 create or replace function public.pos_orden_cuenta(p_estado text)
 returns boolean
@@ -658,6 +674,12 @@ begin
     on conflict (codigo_odoo) do update
     set despues_de = 0, encolado_en = now();
   end if;
+  if tg_op = 'UPDATE' and old.tasa_itbis is distinct from new.tasa_itbis and new.codigo_odoo is not null then
+    insert into public.pos_rematch_cola (codigo_odoo)
+    values (new.codigo_odoo)
+    on conflict (codigo_odoo) do update
+    set despues_de = 0, encolado_en = now();
+  end if;
   if new.codigo_odoo is not null and (tg_op = 'INSERT' or old.codigo_odoo is distinct from new.codigo_odoo) then
     insert into public.pos_rematch_cola (codigo_odoo)
     values (new.codigo_odoo)
@@ -668,17 +690,20 @@ begin
 end;
 $$;
 
-create or replace function public.procesar_pos_rematch(p_limite integer)
+create or replace function public.procesar_pos_rematch(p_limite integer, p_max_fechas integer default 31)
 returns jsonb
 language plpgsql
 set search_path = public
 as $$
 declare
   v_limite integer := least(500, greatest(coalesce(p_limite, 500), 1));
+  v_max_fechas integer := least(31, greatest(coalesce(p_max_fechas, 31), 1));
   v_n integer := 0;
   v_queda integer := 0;
   v_tienda text;
-  v_fechas date[];
+  v_fechas date[] := '{}';
+  v_n_fechas integer := 0;
+  v_rec record;
 begin
   drop table if exists tmp_pos_rematch;
   create temp table tmp_pos_rematch (
@@ -687,15 +712,27 @@ begin
     orden_id bigint not null
   ) on commit drop;
 
-  insert into tmp_pos_rematch (id, codigo, orden_id)
-  select l.id, l.codigo_odoo, l.orden_id
-  from public.pos_orden_lineas l
-  join public.pos_rematch_cola c on c.codigo_odoo = l.codigo_odoo
-  where l.id > c.despues_de
-  order by l.id
-  limit v_limite;
+  for v_rec in
+    select l.id, l.codigo_odoo, l.orden_id, o.fecha_operativa
+    from public.pos_orden_lineas l
+    join public.pos_rematch_cola c on c.codigo_odoo = l.codigo_odoo
+    join public.pos_ordenes o on o.id = l.orden_id
+    where l.id > c.despues_de
+    order by l.id
+    limit v_limite
+  loop
+    if v_rec.fecha_operativa <> all (v_fechas) then
+      if cardinality(v_fechas) >= v_max_fechas then
+        exit;
+      end if;
+      v_fechas := v_fechas || v_rec.fecha_operativa;
+    end if;
+    insert into tmp_pos_rematch (id, codigo, orden_id)
+    values (v_rec.id, v_rec.codigo_odoo, v_rec.orden_id);
+  end loop;
 
   select count(*)::int into v_n from tmp_pos_rematch;
+  v_n_fechas := cardinality(v_fechas);
 
   update public.pos_orden_lineas l
   set
@@ -744,13 +781,13 @@ begin
   join public.pos_rematch_cola c on c.codigo_odoo = l.codigo_odoo
   where l.id > c.despues_de;
 
-  return jsonb_build_object('procesadas', v_n, 'pendientes', v_queda);
+  return jsonb_build_object('procesadas', v_n, 'pendientes', v_queda, 'fechas', v_n_fechas);
 end;
 $$;
 
 drop trigger if exists products_rematch_codigo on public.products;
 create trigger products_rematch_codigo
-after insert or update of codigo_odoo or delete on public.products
+after insert or update of codigo_odoo, tasa_itbis or delete on public.products
 for each row
 execute function public.trg_products_rematch_codigo();
 
@@ -801,6 +838,23 @@ begin
     raise exception using errcode = '22023', message = 'La sesión necesita odooId y startAt', hint = 'sesion';
   end if;
 
+  insert into public.pos_impuesto_tasa (odoo_id, tasa)
+  select distinct on (impuesto_id)
+    impuesto_id,
+    tasa
+  from (
+    select
+      (i->>'id')::int as impuesto_id,
+      (i->>'tasa')::numeric as tasa,
+      ord
+    from jsonb_array_elements(coalesce(p_payload->'impuestos', '[]'::jsonb)) with ordinality as entrada(i, ord)
+    where (i->>'id') ~ '^[0-9]+$'
+      and (i->>'tasa') ~ '^(0|16|18)(\.0+)?$'
+  ) impuestos
+  order by impuesto_id, ord desc
+  on conflict (odoo_id) do update
+  set tasa = excluded.tasa;
+
   if v_estado is distinct from 'closed' then
     return jsonb_build_object(
       'tienda', v_tienda,
@@ -829,7 +883,7 @@ begin
 
   insert into public.pos_sesiones (
     tienda, odoo_id, nombre, odoo_config_id, estado, start_at, stop_at, fecha_operativa, turno,
-    total_pagos, efectivo_inicial, efectivo_final, odoo_write_date, ingested_at
+    total_pagos, efectivo_inicial, efectivo_final, odoo_write_date, ingested_at, ingesta, lote_abierto
   )
   values (
     v_tienda,
@@ -845,7 +899,9 @@ begin
     round(nullif(p_payload#>>'{sesion,efectivoInicial}', '')::numeric, 2),
     round(nullif(p_payload#>>'{sesion,efectivoFinal}', '')::numeric, 2),
     nullif(p_payload#>>'{sesion,odooWriteDate}', '')::timestamptz,
-    now()
+    now(),
+    case when v_modo = 'parcial' then 'parcial' else 'cerrada' end,
+    case when v_modo = 'parcial' then v_lote else null end
   )
   on conflict (tienda, odoo_id) do update set
     nombre = excluded.nombre,
@@ -859,7 +915,9 @@ begin
     efectivo_inicial = excluded.efectivo_inicial,
     efectivo_final = excluded.efectivo_final,
     odoo_write_date = excluded.odoo_write_date,
-    ingested_at = now()
+    ingested_at = now(),
+    ingesta = excluded.ingesta,
+    lote_abierto = excluded.lote_abierto
   returning id into v_sesion_id;
 
   drop table if exists tmp_pos_ordenes;
@@ -1008,7 +1066,23 @@ begin
     round(nullif(l->>'subtotal', '')::numeric, 2),
     round(nullif(l->>'subtotalConItbis', '')::numeric, 2),
     nullif(l->>'odooRefundedLineId', '')::int,
-    nullif(l->>'tasaItbis', '')::numeric
+    coalesce(
+      nullif(l->>'tasaItbis', '')::numeric,
+      (
+        select imp.tasa
+        from jsonb_array_elements_text(
+          case
+            when jsonb_typeof(l->'impuestoOdooIds') = 'array' then l->'impuestoOdooIds'
+            else '[]'::jsonb
+          end
+        ) x(id)
+        join public.pos_impuesto_tasa imp
+          on x.id ~ '^[0-9]+$'
+         and imp.odoo_id = x.id::int
+        order by imp.odoo_id
+        limit 1
+      )
+    )
   from tmp_pos_ordenes t
   cross join lateral jsonb_array_elements(t.lineas) l;
 
@@ -1799,7 +1873,8 @@ begin
     'resumen_dia',
     'resumen_turno_dia',
     'resumen_canasta_semana',
-    'pos_rematch_cola'
+    'pos_rematch_cola',
+    'pos_impuesto_tasa'
   ]
   loop
     execute format('revoke all on table public.%I from anon, authenticated, public', tabla);
@@ -1847,7 +1922,7 @@ begin
     'public.consumo_categorias(text, date, date)',
     'public.consumo_canasta(text, date, integer, numeric, text, text)',
     'public.consumo_calidad_conteos(text, date, date)',
-    'public.procesar_pos_rematch(integer)'
+    'public.procesar_pos_rematch(integer, integer)'
   ]
   loop
     execute format('revoke all on function %s from public, anon, authenticated', firma);

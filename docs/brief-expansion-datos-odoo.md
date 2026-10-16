@@ -24,10 +24,10 @@ Traer a la plataforma el detalle de ventas del POS de Odoo (sesiones, órdenes, 
 - `tienda text not null default 'quick'` en las tablas nuevas.
 - RLS + `service_role` only, como el resto de migraciones.
 - La ingesta la empuja un agente externo. La plataforma no llama a Odoo y no guarda credenciales de Odoo.
-- Costo y margen salen de `products.costo_manual` o de la última factura de compra en unidades. Los dos costos se guardan **sin ITBIS**. Sin costo, el margen es null, nunca 0. El precio de venta ya incluye ITBIS. La tasa es la de la línea (`tasaItbis` o `tax_ids`) y, si no vino, `products.tasa_itbis` (0, 16 o 18, default 18). La venta del día se muestra con el impuesto incluido. El margen es venta / (1 + tasa/100) − unidades × costo.
+- Costo y margen salen de `products.costo_manual` o de la última factura de compra en unidades. Los dos costos se guardan **sin ITBIS**. Sin costo, el margen es null, nunca 0. El precio de venta ya incluye ITBIS. La tasa es `tasaItbis` de la línea o, si no vino, el mapa `impuestos` de los ids de `account.tax` (`tax_ids` no es el porcentaje). Si tampoco hay mapa, se usa `products.tasa_itbis` (0, 16 o 18, default 18). La venta del día se muestra con el impuesto incluido. El margen es venta / (1 + tasa/100) − unidades × costo.
 - Solo cuentan las órdenes `paid`, `done` e `invoiced`. `draft` y `cancel` se guardan y no entran en los resúmenes. Una devolución (monto negativo) resta.
 - Una sesión grande puede llegar en partes con el mismo `loteId`: `parcial` agrega sin borrar ni recalcular; `final` borra lo que no vino en ninguna parte y recalcula. El tope de 1.500 líneas es por request.
-- Cambiar `products.codigo_odoo` solo encola el re-cruce. `POST /api/agent/pos/rematch` lo procesa por lotes.
+- Cambiar `products.codigo_odoo` o `products.tasa_itbis` solo encola el re-cruce. `POST /api/agent/pos/rematch` lo procesa por lotes, con tope de fechas por llamada.
 - Las filas de `ventas_diarias` que ya existían quedan con `override_manual`. El POS no las pisa. Si difieren en más de RD$500, queda `alerta_pos`.
 - `ventas_diarias` se deriva de las sesiones. Un guardado manual queda como override.
 

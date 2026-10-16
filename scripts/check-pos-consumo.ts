@@ -12,6 +12,7 @@ import {
   parsePosIngestBody,
   relojLocal,
   resolverPeriodo,
+  tasaCatalogo,
   ventaDelDia,
   ventaDifiere,
   ventaSinItbis,
@@ -29,6 +30,7 @@ function sesion(odooId: number, nombre: string, total: number, startAt: string, 
     tienda: "quick",
     modo: "completo",
     loteId: null,
+    impuestos: [],
     sesion: {
       odooId,
       nombre,
@@ -117,6 +119,7 @@ const conLinea = sesion(841, "POS/00841", 100, "2026-10-15T14:00:00.000Z", 84100
     subtotalConItbis: 50,
     odooRefundedLineId: null,
     tasaItbis: null,
+    impuestoOdooIds: [],
   },
 ]);
 const cruce = aplicarSesion(estadoPosVacio(), conLinea, catalogo);
@@ -165,7 +168,7 @@ const sinLote = parsePosIngestBody({
 });
 assert(!sinLote.ok && sinLote.status === 422 && sinLote.campo === "loteId", "parcial sin loteId es 422");
 
-const conTax = parsePosIngestBody({
+const idComoTasa = parsePosIngestBody({
   sesiones: [{
     sesion: { odooId: 1, startAt: "2026-10-15T14:00:00Z", estado: "closed" },
     ordenes: [{
@@ -173,12 +176,74 @@ const conTax = parsePosIngestBody({
       fecha: "2026-10-15T15:00:00Z",
       total: 50,
       estado: "paid",
-      lineas: [{ odooId: 1, odooProductId: 1, cantidad: 1, tax_ids: [{ amount: 16 }] }],
+      lineas: [{ odooId: 1, odooProductId: 1, cantidad: 1, tax_ids: [18] }],
       pagos: [],
     }],
   }],
 });
-assert(conTax.ok && conTax.payload.ordenes[0]?.lineas[0]?.tasaItbis === 16, "tax_ids.amount queda como tasa de la línea");
+const lineaId = idComoTasa.ok ? idComoTasa.payload.ordenes[0]?.lineas[0] : null;
+assert(idComoTasa.ok && lineaId?.tasaItbis === null && lineaId.impuestoOdooIds[0] === 18, "tax_ids numerico es un id, no la tasa");
+
+const conAmount = parsePosIngestBody({
+  sesiones: [{
+    sesion: { odooId: 1, startAt: "2026-10-15T14:00:00Z", estado: "closed" },
+    ordenes: [{
+      odooId: 11,
+      fecha: "2026-10-15T15:00:00Z",
+      total: 50,
+      estado: "paid",
+      lineas: [{ odooId: 2, odooProductId: 1, cantidad: 1, tax_ids: [{ id: 5, amount: 18 }] }],
+      pagos: [],
+    }],
+  }],
+});
+const lineaAmount = conAmount.ok ? conAmount.payload.ordenes[0]?.lineas[0] : null;
+assert(conAmount.ok && lineaAmount?.tasaItbis === null && lineaAmount.impuestoOdooIds[0] === 5, "tax_ids.amount no es la tasa");
+
+const parOdoo = parsePosIngestBody({
+  sesion: { odooId: 1, startAt: "2026-10-15T14:00:00Z", estado: "closed" },
+  ordenes: [{
+    odooId: 12,
+    fecha: "2026-10-15T15:00:00Z",
+    total: 50,
+    estado: "paid",
+    lineas: [{ odooId: 3, odooProductId: 1, cantidad: 1, tax_ids: [[7, "ITBIS 16%"]] }],
+    pagos: [],
+  }],
+});
+const lineaPar = parOdoo.ok ? parOdoo.payload.ordenes[0]?.lineas[0] : null;
+assert(parOdoo.ok && lineaPar?.tasaItbis === null && lineaPar.impuestoOdooIds[0] === 7, "el par [id, nombre] guarda el id");
+
+const explicita = parsePosIngestBody({
+  impuestos: [{ id: 5, tasa: 16 }, { id: 5, tasa: 0 }],
+  sesion: { odooId: 1, startAt: "2026-10-15T14:00:00Z", estado: "closed" },
+  ordenes: [{
+    odooId: 13,
+    fecha: "2026-10-15T15:00:00Z",
+    total: 50,
+    estado: "paid",
+    lineas: [{ odooId: 4, odooProductId: 1, cantidad: 1, tasaItbis: 0, tax_ids: [5] }],
+    pagos: [],
+  }],
+});
+const lineaExplicita = explicita.ok ? explicita.payload.ordenes[0]?.lineas[0] : null;
+assert(
+  explicita.ok && lineaExplicita?.tasaItbis === 0 && lineaExplicita.impuestoOdooIds[0] === 5 && explicita.payload.impuestos[0]?.tasa === 0,
+  "tasaItbis explicito gana y el mapa id a tasa queda en el payload",
+);
+
+const tasaMala = parsePosIngestBody({
+  sesion: { odooId: 1, startAt: "2026-10-15T14:00:00Z", estado: "closed" },
+  ordenes: [{
+    odooId: 14,
+    fecha: "2026-10-15T15:00:00Z",
+    total: 50,
+    lineas: [{ odooId: 5, odooProductId: 1, cantidad: 1, tasaItbis: 5 }],
+    pagos: [],
+  }],
+});
+assert(!tasaMala.ok && tasaMala.status === 422 && tasaMala.campo === "lineas.tasaItbis", "una tasa que no es 0, 16 o 18 es 422");
+assert(tasaCatalogo(16) === 16 && tasaCatalogo(null) === null && tasaCatalogo(7) === 18, "la tasa del catalogo solo acepta 0, 16 y 18");
 
 const dos = parsePosIngestBody({
   sesiones: [
