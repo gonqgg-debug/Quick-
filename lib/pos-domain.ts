@@ -7,6 +7,8 @@ export const CONSUMO_PAGE_MAX = 500;
 export const PERIODO_MAX_DIAS = 366;
 export const CANASTA_MIN_ORDENES = 5;
 export const TIENDA_DEFAULT = "quick";
+/** El precio cobrado en caja ya incluye este ITBIS. No se suma encima. */
+export const ITBIS_TASA = 0.18;
 
 export const POS_AGENT_ENDPOINTS = [
   {
@@ -302,11 +304,19 @@ export function metodoCanon(valor: string | null): MetodoPago {
   return "otro";
 }
 
+export function ventaSinItbis(venta: number): number {
+  return round2(venta / (1 + ITBIS_TASA));
+}
+
+export function itbisIncluido(venta: number): number {
+  return round2(venta - venta / (1 + ITBIS_TASA));
+}
+
 export function margenConsumo(venta: number, unidades: number, costo: number | null): number | null {
   if (costo == null) {
     return null;
   }
-  return round2(venta - unidades * costo);
+  return round2(venta / (1 + ITBIS_TASA) - unidades * costo);
 }
 
 export function costoVigenteConsumo(
@@ -936,10 +946,10 @@ export function formatPct(value: number | null | undefined): string {
 }
 
 export const DEFINICIONES = {
-  venta: "Suma de los totales de las órdenes, con las devoluciones ya restadas.",
-  ticket: "Venta dividida entre el número de órdenes del periodo.",
+  venta: "Lo que pagó el cliente, con las devoluciones ya restadas. El ITBIS de 18% ya va incluido: no se suma encima.",
+  ticket: "Venta dividida entre el número de órdenes del periodo. El ITBIS ya va incluido.",
   unidadesTicket: "Unidades vendidas divididas entre el número de órdenes.",
-  margen: "Venta menos unidades por el costo vigente. Si no hay costo, no se calcula: no es cero.",
+  margen: "Venta sin el ITBIS incluido, menos unidades por el costo vigente. El impuesto no cuenta como ganancia. Si no hay costo, no se calcula: no es cero.",
   cobertura: "Parte de la venta que tiene costo, manual o de la última factura.",
   lift: "Cuántas veces más se llevan juntos de lo que se esperaría por separado.",
   hora: "Una venta después de medianoche sigue en el día en que se abrió la caja.",

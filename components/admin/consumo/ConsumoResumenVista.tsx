@@ -17,6 +17,7 @@ export function ConsumoResumenVista({ data }: { data: ResumenConsumo }) {
           etiqueta="Venta"
           valor={formatRd(data.kpis.venta)}
           definicion={DEFINICIONES.venta}
+          detalle="Incluye ITBIS"
           delta={<Delta actual={data.kpis.venta} anterior={data.anterior?.venta ?? null} />}
         />
         <Metrica
@@ -39,7 +40,7 @@ export function ConsumoResumenVista({ data }: { data: ResumenConsumo }) {
           detalle={
             data.kpis.cobertura == null
               ? undefined
-              : `${formatPct(data.kpis.cobertura).replace("+", "")} de la venta tiene costo${data.kpis.margenPct == null ? "" : ` · ${formatPct(data.kpis.margenPct).replace("+", "")} de margen`}`
+              : `${formatPct(data.kpis.cobertura).replace("+", "")} de la venta tiene costo${data.kpis.margenPct == null ? "" : ` · ${formatPct(data.kpis.margenPct).replace("+", "")} sobre la venta sin ITBIS`}`
           }
           delta={<Delta actual={data.kpis.margen} anterior={data.anterior?.margen ?? null} />}
         />

@@ -51,8 +51,8 @@ Una sesión por request, y como máximo 1.500 líneas. Si no, `413`.
               "cantidad": 2,
               "precioUnit": 25,
               "descuento": 0,
-              "subtotal": 50,
-              "subtotalConItbis": 59,
+              "subtotal": 42.37,
+              "subtotalConItbis": 50,
               "odooRefundedLineId": null
             }
           ],
@@ -75,6 +75,8 @@ Una sesión por request, y como máximo 1.500 líneas. Si no, `413`.
 ```
 
 También se aceptan los nombres de Odoo (`odoo_id`, `start_at`, `amount_total`, `qty`, `price_subtotal_incl`, `payment_method_id`, `is_change`, `full_product_name`).
+
+El precio de la caja ya incluye ITBIS. `precioUnit`, `total` y `subtotalConItbis` son lo que pagó el cliente. No los multipliques por 1.18. `subtotal` es la base sin el impuesto; en el ejemplo, 50 cobrados son 42.37 de base y 7.63 de ITBIS. La venta del día se guarda con el impuesto incluido. El margen resta ese 18% antes de comparar con el costo.
 
 No mandes `categ_id`, `pos.category`, `standard_price`, `total_cost`, `categoria` ni `costo`. La respuesta es `422`.
 

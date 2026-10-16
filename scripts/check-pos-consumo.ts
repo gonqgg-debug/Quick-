@@ -6,6 +6,7 @@ import {
   estadoPosVacio,
   fechaOperativaDe,
   fijarVentaManual,
+  itbisIncluido,
   margenConsumo,
   metodoCanon,
   parsePosIngestBody,
@@ -13,6 +14,7 @@ import {
   resolverPeriodo,
   ventaDelDia,
   ventaDifiere,
+  ventaSinItbis,
   type PosNormalizado,
 } from "../lib/pos-domain";
 
@@ -126,7 +128,9 @@ const manual = costoVigenteConsumo(8, 12);
 assert(manual.origen === "manual" && manual.costo === 8, "el costo manual gana");
 const factura = costoVigenteConsumo(null, 12);
 assert(factura.origen === "factura" && factura.costo === 12, "sin manual se usa la factura");
-assert(margenConsumo(100, 4, factura.costo) === 52, "el margen usa el costo unitario");
+assert(ventaSinItbis(118) === 100, "118 cobrados con ITBIS incluido tienen base 100");
+assert(itbisIncluido(118) === 18, "el ITBIS incluido en 118 es 18");
+assert(margenConsumo(100, 4, factura.costo) === 36.75, "el margen saca el ITBIS incluido antes de restar el costo de 48");
 
 const sucio = parsePosIngestBody({
   sesiones: [{ sesion: { odooId: 1, startAt: "2026-10-15T14:00:00Z", estado: "closed", standard_price: 10 }, ordenes: [] }],

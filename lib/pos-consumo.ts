@@ -5,6 +5,7 @@ import {
   decodeCursor,
   encodeCursor,
   lunesDe,
+  ITBIS_TASA,
   margenConsumo,
   parseDias,
   parseLimit,
@@ -130,7 +131,10 @@ function kpisDe(dias: DiaConsumo[], margen: { venta: number; ventaConCosto: numb
     unidadesPorTicket: ordenes > 0 ? Math.round((unidades / ordenes) * 1000) / 1000 : null,
     unidades,
     margen: margenValor,
-    margenPct: margenValor == null || ventaConCosto === 0 ? null : Math.round((margenValor / ventaConCosto) * 10000) / 10000,
+    margenPct:
+      margenValor == null || ventaConCosto === 0
+        ? null
+        : Math.round((margenValor / (ventaConCosto / (1 + ITBIS_TASA))) * 10000) / 10000,
     cobertura: (margen?.venta ?? 0) > 0 ? Math.round((ventaConCosto / (margen?.venta ?? 0)) * 10000) / 10000 : null,
     ventaConCosto,
   };

@@ -24,7 +24,7 @@ Traer a la plataforma el detalle de ventas del POS de Odoo (sesiones, órdenes, 
 - `tienda text not null default 'quick'` en las tablas nuevas.
 - RLS + `service_role` only, como el resto de migraciones.
 - La ingesta la empuja un agente externo. La plataforma no llama a Odoo y no guarda credenciales de Odoo.
-- Costo y margen salen de `products.costo_manual` o de la última factura de compra en unidades. Sin costo, el margen es null, nunca 0.
+- Costo y margen salen de `products.costo_manual` o de la última factura de compra en unidades. Sin costo, el margen es null, nunca 0. El precio de venta ya incluye ITBIS 18%: la venta del día se muestra así, y el margen usa la venta sin ese impuesto.
 - `ventas_diarias` se deriva de las sesiones. Un guardado manual queda como override.
 
 El contrato del POST está en [pos-ingesta-contrato.md](pos-ingesta-contrato.md).

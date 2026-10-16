@@ -1108,7 +1108,8 @@ as $$
   select
     round(coalesce(sum(a.venta), 0), 2),
     round(coalesce(sum(a.venta) filter (where c.costo_unit is not null), 0), 2),
-    round(sum(a.venta - a.unidades * c.costo_unit) filter (where c.costo_unit is not null), 2),
+    -- La venta ya incluye ITBIS 18%. El margen usa la base sin ese impuesto.
+    round(sum(a.venta / 1.18 - a.unidades * c.costo_unit) filter (where c.costo_unit is not null), 2),
     round(coalesce(sum(a.unidades), 0), 3)
   from agg a
   left join public.costo_producto_vigente c on c.product_id = a.product_id;
@@ -1189,10 +1190,10 @@ as $$
       c.origen as costo_origen,
       c.fecha as costo_fecha,
       c.ref as costo_ref,
-      case when c.costo_unit is null then null else round(a.venta - a.unidades * c.costo_unit, 2) end as margen,
+      case when c.costo_unit is null then null else round(a.venta / 1.18 - a.unidades * c.costo_unit, 2) end as margen,
       case
         when c.costo_unit is null or a.venta = 0 then null
-        else round((a.venta - a.unidades * c.costo_unit) / a.venta, 4)
+        else round((a.venta / 1.18 - a.unidades * c.costo_unit) / (a.venta / 1.18), 4)
       end as margen_pct,
       round(an.venta, 2) as venta_anterior,
       case

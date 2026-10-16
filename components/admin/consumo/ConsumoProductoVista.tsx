@@ -61,7 +61,7 @@ export function ConsumoProductoVista({
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Metrica etiqueta="Venta" valor={formatRd(producto.venta)} definicion={DEFINICIONES.venta} />
         <Metrica etiqueta="Unidades" valor={formatNumero(producto.unidades, 1)} definicion="Unidades netas, con las devoluciones restadas." />
-        <Metrica etiqueta="Precio realizado" valor={formatRd(producto.precioRealizado)} definicion="Venta dividida entre unidades." />
+        <Metrica etiqueta="Precio realizado" valor={formatRd(producto.precioRealizado)} definicion="Lo que pagó el cliente por unidad. El ITBIS de 18% ya va incluido." />
         <Metrica
           etiqueta="Margen"
           valor={producto.margen == null ? "Sin costo" : formatRd(producto.margen)}
