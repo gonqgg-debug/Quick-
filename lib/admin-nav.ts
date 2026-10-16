@@ -19,7 +19,8 @@ export type AdminNavIcon =
   | "invoices"
   | "decisions"
   | "exceptions"
-  | "close";
+  | "close"
+  | "consumo";
 
 export type AdminNavChild = {
   href: string;
@@ -45,6 +46,7 @@ export type AdminNavSectionId =
   | "clientes"
   | "expansion"
   | "catalogo"
+  | "consumo"
   | "finanzas"
   | "contabilidad";
 
@@ -110,6 +112,14 @@ export const ADMIN_CATALOGO_NAV: AdminNavItem[] = [
   { href: "/admin/catalogo/solicitudes", label: "Solicitudes", icon: "requests", status: "live" },
 ];
 
+export const ADMIN_CONSUMO_NAV: AdminNavItem[] = [
+  { href: "/admin/consumo", label: "Resumen", icon: "consumo", status: "live" },
+  { href: "/admin/consumo/productos", label: "Productos", icon: "products", status: "live" },
+  { href: "/admin/consumo/horarios", label: "Horarios", icon: "history", status: "live" },
+  { href: "/admin/consumo/canasta", label: "Canasta", icon: "catalog", status: "live" },
+  { href: "/admin/consumo/calidad", label: "Calidad", icon: "exceptions", status: "live" },
+];
+
 export const ADMIN_REPORTE: AdminNavItem = {
   href: "/admin/reporte",
   label: "Reporte",
@@ -167,6 +177,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   ...ADMIN_CLIENTES_NAV,
   ...ADMIN_EXPANSION_NAV,
   ...ADMIN_CATALOGO_NAV,
+  ...ADMIN_CONSUMO_NAV,
   ...ADMIN_FINANZAS_NAV,
   ...ADMIN_CONTABILIDAD_NAV,
 ];
@@ -176,6 +187,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   { id: "clientes", label: "Clientes", items: ADMIN_CLIENTES_NAV },
   { id: "expansion", label: "Expansión", items: ADMIN_EXPANSION_NAV },
   { id: "catalogo", label: "Catálogo", items: ADMIN_CATALOGO_NAV },
+  { id: "consumo", label: "Consumo", items: ADMIN_CONSUMO_NAV },
   { id: "finanzas", label: "Finanzas", items: ADMIN_FINANZAS_NAV },
   { id: "contabilidad", label: "Contabilidad", items: ADMIN_CONTABILIDAD_NAV },
 ];

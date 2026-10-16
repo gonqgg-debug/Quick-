@@ -8,6 +8,7 @@ import {
   type VentaDiaria,
 } from "@/lib/admin-ventas-shared";
 import { formatDayKey, todayDayKey, yesterdayDayKey } from "@/lib/local-day";
+import { formatPrice } from "@/lib/money";
 import { brand } from "@/lib/theme";
 import { AdminInput, adminLabelClass } from "@/components/admin/AdminField";
 import {
@@ -151,9 +152,25 @@ export function AdminVentas() {
         <h2 className="font-display text-lg font-bold">Registrar venta del día</h2>
         <p className="mt-1 text-sm text-brand-muted">
           {captured
-            ? "Este día ya está capturado. Guardar actualiza el monto."
-            : "Si la fecha ya existe, se actualiza el monto en vez de crear un duplicado."}
+            ? "Guardar fija este monto a mano. La caja sigue guardando el suyo al lado."
+            : "Si no lo fijas, la caja escribe el total del día al cerrar las sesiones."}
         </p>
+        {captured?.ventaPos != null ? (
+          <p className="mt-3 text-sm text-brand-muted">
+            Caja: <span className="font-semibold tabular-nums text-brand-ink">{formatPrice(captured.ventaPos)}</span>
+            <span
+              className="ml-2 rounded-full px-2 py-0.5 text-xs font-bold"
+              style={{ backgroundColor: captured.overrideManual ? "#FEF3C7" : "#ECFDF3", color: captured.overrideManual ? "#92400E" : "#166534" }}
+            >
+              {captured.overrideManual ? "Fijado a mano" : "Desde la caja"}
+            </span>
+          </p>
+        ) : null}
+        {captured?.difiere ? (
+          <p className="mt-3 rounded-2xl px-3 py-2 text-sm" style={{ backgroundColor: "#FEF3C7", color: "#92400E" }}>
+            El monto fijado ({formatPrice(captured.monto)}) no coincide con la caja ({formatPrice(captured.ventaPos)}). Metas usa el monto fijado.
+          </p>
+        ) : null}
         <form
           className="mt-4 grid gap-3 sm:grid-cols-[180px_1fr_auto] sm:items-end"
           onSubmit={(event) => {
@@ -233,6 +250,7 @@ export function AdminVentas() {
               <DataTableTh>Fecha</DataTableTh>
               <DataTableTh>Día</DataTableTh>
               <DataTableTh numeric>Monto</DataTableTh>
+              <DataTableTh numeric>Caja</DataTableTh>
               <DataTableTh className="w-24">
                 <span className="sr-only">Editar</span>
               </DataTableTh>
@@ -255,6 +273,16 @@ export function AdminVentas() {
                       ariaLabel={`Monto del ${venta.fecha}`}
                       onSave={(nextMonto) => saveInline(venta.fecha, nextMonto)}
                     />
+                    {venta.overrideManual ? (
+                      <span className="mt-1 block text-xs font-semibold text-brand-muted">Fijado a mano</span>
+                    ) : venta.origen === "pos" ? (
+                      <span className="mt-1 block text-xs font-semibold" style={{ color: brand.green }}>
+                        Desde la caja
+                      </span>
+                    ) : null}
+                  </DataTableCell>
+                  <DataTableCell numeric className={venta.difiere ? "font-semibold" : "text-brand-muted"}>
+                    {venta.ventaPos == null ? "—" : formatPrice(venta.ventaPos)}
                   </DataTableCell>
                   <DataTableCell>
                     <button

@@ -27,7 +27,7 @@ type OpenState = Record<AdminNavSectionId | AdminNavGroup, boolean>;
 const NAV_STORAGE_KEY = "quick-admin-nav-open-v2";
 
 function isActivePath(pathname: string, href: string): boolean {
-  if (href === "/admin" || href === "/admin/ventas" || href === "/admin/reporte") {
+  if (href === "/admin" || href === "/admin/ventas" || href === "/admin/reporte" || href === "/admin/consumo") {
     return pathname === href;
   }
   if (href === "/admin/clientes") {
@@ -70,6 +70,9 @@ function sectionForPath(pathname: string): AdminNavSectionId | null {
   if (pathname.startsWith("/admin/catalogo")) {
     return "catalogo";
   }
+  if (pathname.startsWith("/admin/consumo")) {
+    return "consumo";
+  }
   if (
     pathname.startsWith("/admin/ventas") ||
     pathname.startsWith("/admin/compras") ||
@@ -107,6 +110,7 @@ function defaultOpen(): OpenState {
     clientes: false,
     expansion: false,
     catalogo: false,
+    consumo: false,
     finanzas: false,
     contabilidad: false,
     caja: false,
@@ -831,6 +835,14 @@ function NavGlyph({
           <path d="M16 3.5v3" />
           <path d="M4 9h16" />
           <path d="M8.5 14.2 11 16.5 15.5 12" />
+        </svg>
+      );
+    case "consumo":
+      return (
+        <svg {...common}>
+          <path d="M4 19V5" />
+          <path d="M4 19h16" />
+          <path d="M7 15.5c1.6-3 3-4.5 5-4.5s2.6 2.4 4 2.4 2.2-1.6 4-4.4" />
         </svg>
       );
     case "sales":

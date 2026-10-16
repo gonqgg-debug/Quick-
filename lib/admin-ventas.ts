@@ -2,6 +2,7 @@ import { publishAgentEvent } from "@/lib/agent-events";
 import { parsePrice } from "@/lib/catalog-import";
 import { calendarDayKey, isDayKey, yesterdayDayKey } from "@/lib/local-day";
 import { toMoney } from "@/lib/money";
+import { ventaDifiere } from "@/lib/pos-domain";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import {
   VENTAS_DEFAULT_LIMIT,
@@ -13,14 +14,24 @@ import {
 export type { VentaDiaria } from "@/lib/admin-ventas-shared";
 export { VENTAS_DEFAULT_LIMIT, parseVentasLimit } from "@/lib/admin-ventas-shared";
 
-const VENTA_SELECT = "id, fecha, dia_semana, venta_real";
+const VENTA_SELECT = "id, fecha, dia_semana, venta_real, origen, override_manual, venta_pos";
+const VENTA_SELECT_BASE = "id, fecha, dia_semana, venta_real";
 
 type VentaRow = {
   id?: unknown;
   fecha?: unknown;
   dia_semana?: unknown;
   venta_real?: unknown;
+  origen?: unknown;
+  override_manual?: unknown;
+  venta_pos?: unknown;
 };
+
+function missingColumn(error: unknown): boolean {
+  const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+  const message = error && typeof error === "object" && "message" in error ? String(error.message) : "";
+  return code === "42703" || /column .* does not exist/i.test(message);
+}
 
 function isMissingConflictTarget(error: unknown): boolean {
   const message = error && typeof error === "object" && "message" in error ? String(error.message) : "";
@@ -58,11 +69,18 @@ function mapVenta(row: VentaRow | null): VentaDiaria | null {
   if (!fecha) {
     return null;
   }
+  const origen = row.origen === "manual" || row.origen === "pos" ? row.origen : null;
+  const ventaPos = row.venta_pos == null || row.venta_pos === "" ? null : toMoney(row.venta_pos);
+  const monto = toMoney(row.venta_real);
   return {
     id: String(row.id ?? fecha),
     fecha,
     diaSemana: diaSemanaFromFecha(fecha),
-    monto: toMoney(row.venta_real),
+    monto,
+    ventaPos,
+    origen,
+    overrideManual: row.override_manual === true,
+    difiere: ventaDifiere({ ventaReal: monto, ventaPos }),
   };
 }
 
@@ -83,6 +101,17 @@ export async function listVentasDiarias(limit = VENTAS_DEFAULT_LIMIT): Promise<V
     .select(VENTA_SELECT)
     .order("fecha", { ascending: false })
     .limit(take);
+  if (error && missingColumn(error)) {
+    const legacy = await supabase
+      .from("ventas_diarias")
+      .select(VENTA_SELECT_BASE)
+      .order("fecha", { ascending: false })
+      .limit(take);
+    if (legacy.error) {
+      throw legacy.error;
+    }
+    return (legacy.data ?? []).map((row) => mapVenta(row)).filter((row): row is VentaDiaria => Boolean(row));
+  }
   if (error) {
     throw error;
   }
@@ -96,13 +125,27 @@ export async function upsertVentaDiaria(fecha: string, monto: number): Promise<V
   }
 
   const supabase = getSupabaseAdminClient();
-  const payload = { fecha, dia_semana: diaSemana, venta_real: monto };
+  const payload = { fecha, dia_semana: diaSemana, venta_real: monto, origen: "manual" as const, override_manual: true };
 
   const { data: upserted, error: upsertError } = await supabase
     .from("ventas_diarias")
     .upsert(payload, { onConflict: "fecha" })
     .select(VENTA_SELECT)
     .maybeSingle();
+  if (upsertError && missingColumn(upsertError)) {
+    const legacy = await supabase
+      .from("ventas_diarias")
+      .upsert({ fecha, dia_semana: diaSemana, venta_real: monto }, { onConflict: "fecha" })
+      .select(VENTA_SELECT_BASE)
+      .maybeSingle();
+    if (!legacy.error) {
+      const mapped = mapVenta(legacy.data);
+      if (mapped) {
+        await publishAgentEvent("venta.guardada", { ...mapped });
+        return mapped;
+      }
+    }
+  }
   if (!upsertError) {
     const mapped = mapVenta(upserted);
     if (mapped) {
@@ -115,7 +158,7 @@ export async function upsertVentaDiaria(fecha: string, monto: number): Promise<V
 
   const { data: updated, error: updateError } = await supabase
     .from("ventas_diarias")
-    .update({ dia_semana: diaSemana, venta_real: monto })
+    .update({ dia_semana: diaSemana, venta_real: monto, origen: "manual", override_manual: true })
     .eq("fecha", fecha)
     .select(VENTA_SELECT)
     .maybeSingle();
@@ -189,7 +232,7 @@ export async function updateVentaDiaria(id: string, patch: VentaPatch): Promise<
 
   const { data, error } = await supabase
     .from("ventas_diarias")
-    .update({ fecha: nextFecha, dia_semana: diaSemana, venta_real: nextMonto })
+    .update({ fecha: nextFecha, dia_semana: diaSemana, venta_real: nextMonto, origen: "manual", override_manual: true })
     .eq("id", ventaId)
     .select(VENTA_SELECT)
     .maybeSingle();

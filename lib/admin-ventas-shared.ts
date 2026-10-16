@@ -5,6 +5,10 @@ export type VentaDiaria = {
   fecha: string;
   diaSemana: string;
   monto: number;
+  ventaPos: number | null;
+  origen: "manual" | "pos" | null;
+  overrideManual: boolean;
+  difiere: boolean;
 };
 
 export const VENTAS_DEFAULT_LIMIT = 14;
