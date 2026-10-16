@@ -197,6 +197,6 @@ Las solicitudes de propuestas y de ampliación salen en `GET /api/agent/miles/in
 
 ## Migración
 
-`supabase/migrations/20261016200000_miles_consumo.sql` crea las tablas de Miles. `20261016220000_miles_visual.sql` agrega `visual`, `resolucion` y `recomendacion_estado`. `20261016230000_miles_promos.sql` crea propuestas, productos, hallazgos vinculados y variantes, y agrega `propuesta_id`, `variante_id` y `snapshot` a las pruebas. Hay que aplicarla en cada entorno antes de publicar propuestas. Este cambio no la aplica en producción y no enciende promociones.
+`supabase/migrations/20261016200000_miles_consumo.sql` crea las tablas de Miles. `20261016220000_miles_visual.sql` agrega `visual`, `resolucion` y `recomendacion_estado`. `20261016230000_miles_promos.sql` crea propuestas, productos, hallazgos vinculados y variantes, y agrega `propuesta_id`, `variante_id` y `snapshot` a las pruebas. En producción quedó registrada como `20261016230000`. No enciende promociones.
 
 Una propuesta guardada sigue siendo válida si no trae probabilidad ni visual. El estado de la propuesta no es el estado de la prueba. El snapshot de una prueba no se recalcula cuando cambian el catálogo o el simulador.
