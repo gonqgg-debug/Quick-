@@ -41,6 +41,7 @@ export function ConsumoEncabezado({ frescura }: { frescura: FrescuraConsumo | nu
   const pathname = usePathname();
   const params = useSearchParams();
   const router = useRouter();
+  const esListaProductos = pathname === "/admin/consumo/productos";
   const muestraPeriodo = pathname === "/admin/consumo" || pathname.startsWith("/admin/consumo/productos") || pathname.startsWith("/admin/consumo/horarios");
   const preset = params.get("preset") ?? (params.get("desde") || params.get("hasta") ? "custom" : "7d");
   const comparacion = params.get("comparar") === "0" ? "off" : (params.get("comparacion") ?? "anterior");
@@ -56,11 +57,24 @@ export function ConsumoEncabezado({ frescura }: { frescura: FrescuraConsumo | nu
     router.push(conQuery(pathname, params, patch));
   }
 
+  if (esListaProductos) {
+    if (!frescura || frescura.partesAbiertas === 0) {
+      return null;
+    }
+    return (
+      <p className="rounded-md px-3 py-2 text-sm font-medium" style={{ backgroundColor: "#FEF3C7", color: "#92400E" }}>
+        {frescura.partesAbiertas === 1
+          ? "Hay 1 sesión en partes sin envío final."
+          : `Hay ${frescura.partesAbiertas} sesiones en partes sin envío final.`}
+      </p>
+    );
+  }
+
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Consumo</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Analítica</p>
           <h1 className="font-display mt-1 text-2xl font-bold">Qué se vende en la caja</h1>
         </div>
         {frescura ? (

@@ -188,7 +188,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   { id: "clientes", label: "Clientes", items: ADMIN_CLIENTES_NAV },
   { id: "expansion", label: "Expansión", items: ADMIN_EXPANSION_NAV },
   { id: "catalogo", label: "Catálogo", items: ADMIN_CATALOGO_NAV },
-  { id: "consumo", label: "Consumo", items: ADMIN_CONSUMO_NAV },
+  { id: "consumo", label: "Analítica", items: ADMIN_CONSUMO_NAV },
   { id: "finanzas", label: "Finanzas", items: ADMIN_FINANZAS_NAV },
   { id: "contabilidad", label: "Contabilidad", items: ADMIN_CONTABILIDAD_NAV },
 ];

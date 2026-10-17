@@ -9,6 +9,7 @@ const migrationMiles = join(root, "supabase/migrations/20261016200000_miles_cons
 const migrationVuelto = join(root, "supabase/migrations/20261016210000_pagos_con_vuelto.sql");
 const migrationVisual = join(root, "supabase/migrations/20261016220000_miles_visual.sql");
 const migrationPromos = join(root, "supabase/migrations/20261016230000_miles_promos.sql");
+const migrationProductos = join(root, "supabase/migrations/20261017000000_productos_analitica.sql");
 const DB = "quick_pos_test";
 
 function quote(value: string): string {
@@ -122,6 +123,7 @@ sqlFile(DB, migrationMiles);
 sqlFile(DB, migrationVuelto);
 sqlFile(DB, migrationVisual);
 sqlFile(DB, migrationPromos);
+sqlFile(DB, migrationProductos);
 
 sql(
   DB,
@@ -640,6 +642,49 @@ begin
   if (select efectivo + banco + tarjeta + credito + otro from public.resumen_dia where fecha = '2026-09-01')
      is distinct from (select venta from public.resumen_dia where fecha = '2026-09-01') then
     raise exception 'el mix del dia no suma la venta';
+  end if;
+
+  insert into public.products (nombre, categoria, precio, codigo_odoo, codigo_barras, costo_manual, costo_manual_fuente, costo_manual_en, tasa_itbis)
+  values
+    ('Huevo suelto', 'Otros', 10, 'cod-sincosto', '750999', null, null, null, 0),
+    ('Sal', 'Otros', 5, 'cod-cero', null, 0, 'admin', now(), 0);
+  insert into public.resumen_producto_dia (tienda, fecha, codigo_odoo, product_id, nombre, unidades, venta, venta_neta, unidades_sin_itbis, n_ordenes)
+  select 'quick', '2026-10-20', p.codigo_odoo, p.id, p.nombre,
+    case when p.codigo_odoo = 'cod-sincosto' then 2 else 1 end,
+    case when p.codigo_odoo = 'cod-sincosto' then 20 else 10 end,
+    case when p.codigo_odoo = 'cod-sincosto' then 20 else 10 end,
+    case when p.codigo_odoo = 'cod-sincosto' then 2 else 1 end,
+    1
+  from public.products p
+  where p.codigo_odoo in ('cod-sincosto', 'cod-cero');
+
+  select t.margen, t.costo_ventas, t.codigo_barras into margen, neta, match
+  from public.consumo_top_productos('quick', '2026-10-20', '2026-10-20', null, null, 'venta', null, null, 10, null, null, null) t
+  where t.codigo_odoo = 'cod-sincosto';
+  if margen is not null or neta is not null or match is distinct from '750999' then
+    raise exception 'sin costo no es cero: margen % costo % barras %', margen, neta, match;
+  end if;
+  select t.margen, t.costo_ventas into margen, neta
+  from public.consumo_top_productos('quick', '2026-10-20', '2026-10-20', null, null, 'venta', null, null, 10, null, null, null) t
+  where t.codigo_odoo = 'cod-cero';
+  if margen is distinct from 10 or neta is distinct from 0 then
+    raise exception 'costo cero valido debio dejar margen 10 y costo 0, fue % %', margen, neta;
+  end if;
+  select tt.productos, tt.sin_costo_productos, tt.margen, tt.venta, tt.venta_neta_con_costo
+    into n, hora, margen, venta, neta
+  from public.consumo_productos_totales('quick', '2026-10-20', '2026-10-20', null, null, false) tt;
+  if n is distinct from 2 or hora is distinct from 1 or margen is distinct from 10 or venta is distinct from 30 or neta is distinct from 10 then
+    raise exception 'totales filtrados % sin costo % margen % venta % neta con costo %', n, hora, margen, venta, neta;
+  end if;
+  select tt.productos into n
+  from public.consumo_productos_totales('quick', '2026-10-20', '2026-10-20', null, '750999', false) tt;
+  if n is distinct from 1 then
+    raise exception 'la busqueda por barras no encontro el producto, fue %', n;
+  end if;
+  select t.codigo_odoo into match
+  from public.consumo_top_productos('quick', '2026-10-20', '2026-10-20', null, null, 'venta_asc', null, null, 1, null, null, null, false, 0) t;
+  if match is distinct from 'cod-cero' then
+    raise exception 'el orden ascendente no puso primero la venta menor, fue %', match;
   end if;
 end
 $test$;

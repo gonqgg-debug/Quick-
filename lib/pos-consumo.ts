@@ -100,6 +100,21 @@ export type ProductoConsumo = {
   ventaAnterior: number | null;
   variacion: number | null;
   matchEstado: "match" | "sin_match";
+  ventaNeta: number;
+  costoVentas: number | null;
+  codigoBarras: string | null;
+};
+
+export type TotalesProductos = {
+  venta: number;
+  unidades: number;
+  productos: number;
+  ventaConCosto: number;
+  ventaNeta: number;
+  ventaNetaConCosto: number;
+  costoVentas: number | null;
+  margen: number | null;
+  sinCostoProductos: number;
 };
 
 export type ResumenConsumo = {
@@ -223,7 +238,73 @@ function mapProducto(row: Record<string, unknown>): ProductoConsumo {
     ventaAnterior: numOrNull(row.venta_anterior),
     variacion: numOrNull(row.variacion),
     matchEstado: row.match_estado === "sin_match" || row.product_id == null ? "sin_match" : "match",
+    ventaNeta: num(row.venta_neta),
+    costoVentas: numOrNull(row.costo_ventas),
+    codigoBarras: row.codigo_barras ? String(row.codigo_barras) : null,
   };
+}
+
+function mapTotales(row: Record<string, unknown> | null): TotalesProductos {
+  if (!row) {
+    return {
+      venta: 0,
+      unidades: 0,
+      productos: 0,
+      ventaConCosto: 0,
+      ventaNeta: 0,
+      ventaNetaConCosto: 0,
+      costoVentas: null,
+      margen: null,
+      sinCostoProductos: 0,
+    };
+  }
+  return {
+    venta: num(row.venta),
+    unidades: num(row.unidades),
+    productos: num(row.productos),
+    ventaConCosto: num(row.venta_con_costo),
+    ventaNeta: num(row.venta_neta),
+    ventaNetaConCosto: num(row.venta_neta_con_costo),
+    costoVentas: numOrNull(row.costo_ventas),
+    margen: numOrNull(row.margen),
+    sinCostoProductos: num(row.sin_costo_productos),
+  };
+}
+
+async function totalesProductos(input: {
+  desde: string;
+  hasta: string;
+  categoria: string;
+  q: string;
+  sinCosto: boolean;
+}): Promise<TotalesProductos> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.rpc("consumo_productos_totales", {
+    p_tienda: TIENDA_DEFAULT,
+    p_desde: input.desde,
+    p_hasta: input.hasta,
+    p_categoria: input.categoria || null,
+    p_q: input.q || null,
+    p_sin_costo: input.sinCosto,
+  });
+  if (error) {
+    fallar(error);
+  }
+  const row = Array.isArray(data) ? (data[0] as Record<string, unknown> | undefined) : null;
+  return mapTotales(row ?? null);
+}
+
+function valorOrden(orden: OrdenConsumo, row: ProductoConsumo): number | null {
+  if (orden === "unidades" || orden === "unidades_asc") {
+    return row.unidades;
+  }
+  if (orden === "margen" || orden === "margen_asc") {
+    return row.margen;
+  }
+  if (orden === "variacion" || orden === "variacion_asc") {
+    return row.variacion;
+  }
+  return row.venta;
 }
 
 export async function cargarFrescura(now = Date.now()): Promise<FrescuraConsumo> {
@@ -431,11 +512,23 @@ export async function cargarProductos(input: {
   q: string;
   cursor: string | null;
   limit?: number;
+  offset?: number;
+  sinCosto?: boolean;
+  conTotales?: boolean;
 }) {
   const supabase = getSupabaseAdminClient();
   const limite = parseLimit(input.limit == null ? null : String(input.limit), CONSUMO_PAGE_DEFAULT);
-  const cursor = decodeCursor(input.cursor, input.orden);
-  const { data, error } = await supabase.rpc("consumo_top_productos", {
+  const offset = Math.max(0, Math.floor(input.offset ?? 0));
+  const sinCosto = input.sinCosto === true;
+  const cursor = offset > 0 ? null : decodeCursor(input.cursor, input.orden);
+  const filtro = {
+    desde: input.periodo.desde,
+    hasta: input.periodo.hasta,
+    categoria: input.categoria,
+    q: input.q,
+    sinCosto,
+  };
+  const lista = supabase.rpc("consumo_top_productos", {
     p_tienda: TIENDA_DEFAULT,
     p_desde: input.periodo.desde,
     p_hasta: input.periodo.hasta,
@@ -448,47 +541,55 @@ export async function cargarProductos(input: {
     p_cursor_null: cursor ? cursor.n : null,
     p_cursor_valor: cursor ? cursor.v : null,
     p_cursor_codigo: cursor ? cursor.id : null,
+    p_sin_costo: sinCosto,
+    p_offset: offset,
   });
-  if (error) {
-    fallar(error);
-  }
-  const alcance = await supabase.rpc("consumo_venta_alcance", {
-    p_tienda: TIENDA_DEFAULT,
-    p_desde: input.periodo.desde,
-    p_hasta: input.periodo.hasta,
-    p_categoria: input.categoria || null,
-    p_q: input.q || null,
-  });
-  if (alcance.error) {
-    fallar(alcance.error);
-  }
-  const periodoTotal = await supabase.rpc("consumo_venta_alcance", {
+  const periodoTotal = supabase.rpc("consumo_venta_alcance", {
     p_tienda: TIENDA_DEFAULT,
     p_desde: input.periodo.desde,
     p_hasta: input.periodo.hasta,
     p_categoria: null,
     p_q: null,
   });
-  if (periodoTotal.error) {
-    fallar(periodoTotal.error);
+  const quiereTotales = input.conTotales !== false;
+  const [data, totales, totalesTramo, totalesAnterior, alcancePeriodo] = await Promise.all([
+    lista,
+    quiereTotales ? totalesProductos(filtro) : Promise.resolve(null),
+    quiereTotales && input.periodo.comparar && input.periodo.tramo && (input.periodo.tramo.desde !== input.periodo.desde || input.periodo.tramo.hasta !== input.periodo.hasta)
+      ? totalesProductos({ ...filtro, desde: input.periodo.tramo.desde, hasta: input.periodo.tramo.hasta })
+      : Promise.resolve(null),
+    quiereTotales && input.periodo.comparar
+      ? totalesProductos({ ...filtro, desde: input.periodo.anterior.desde, hasta: input.periodo.anterior.hasta })
+      : Promise.resolve(null),
+    periodoTotal,
+  ]);
+  if (data.error) {
+    fallar(data.error);
   }
-  const rows = ((data ?? []) as Record<string, unknown>[]).map(mapProducto);
+  if (alcancePeriodo.error) {
+    fallar(alcancePeriodo.error);
+  }
+  const rows = ((data.data ?? []) as Record<string, unknown>[]).map(mapProducto);
   const page = rows.slice(0, limite);
   const last = page[page.length - 1];
-  const sortValor =
-    input.orden === "unidades"
-      ? last?.unidades
-      : input.orden === "margen"
-        ? last?.margen
-        : input.orden === "variacion" || input.orden === "variacion_asc"
-          ? last?.variacion
-          : last?.venta;
+  const sortValor = last ? valorOrden(input.orden, last) : null;
+  const vacio: TotalesProductos = {
+    venta: 0,
+    unidades: 0,
+    productos: 0,
+    ventaConCosto: 0,
+    ventaNeta: 0,
+    ventaNetaConCosto: 0,
+    costoVentas: null,
+    margen: null,
+    sinCostoProductos: 0,
+  };
   return {
     rows: page,
-    ventaPeriodo: num(periodoTotal.data),
-    ventaAlcance: num(alcance.data),
+    ventaPeriodo: num(alcancePeriodo.data),
+    ventaAlcance: totales?.venta ?? 0,
     nextCursor:
-      rows.length > limite && last
+      offset === 0 && rows.length > limite && last
         ? encodeCursor({
             n: sortValor == null ? 1 : 0,
             v: sortValor ?? null,
@@ -496,6 +597,9 @@ export async function cargarProductos(input: {
             orden: input.orden,
           })
         : null,
+    totales: totales ?? vacio,
+    totalesTramo,
+    totalesAnterior,
   };
 }
 
@@ -520,7 +624,7 @@ export async function cargarProducto(codigo: string, periodo: ConsumoPeriodo) {
       p_desde: periodo.desde,
       p_hasta: periodo.hasta,
     }),
-    supabase.from("products").select("id, nombre, marca, categoria, codigo_odoo").eq("codigo_odoo", codigo).limit(1).maybeSingle(),
+    supabase.from("products").select("id, nombre, marca, categoria, codigo_odoo, codigo_barras").eq("codigo_odoo", codigo).limit(1).maybeSingle(),
   ]);
   if (horas.error) fallar(horas.error);
   if (producto.error) fallar(producto.error);
@@ -560,6 +664,10 @@ export async function cargarProducto(codigo: string, periodo: ConsumoPeriodo) {
     costoFecha: costo.data?.fecha ? dia(costo.data.fecha) : null,
     costoRef: costo.data?.ref ? String(costo.data.ref) : null,
     margen: costoUnit == null ? null : Math.round((ventaNeta - costoUnit * unidadesSinItbis) * 100) / 100,
+    margenPct: costoUnit == null || ventaNeta === 0 ? null : Math.round(((ventaNeta - costoUnit * unidadesSinItbis) / ventaNeta) * 10000) / 10000,
+    ventaNeta: Math.round(ventaNeta * 100) / 100,
+    costoVentas: costoUnit == null ? null : Math.round(costoUnit * unidadesSinItbis * 100) / 100,
+    codigoBarras: producto.data?.codigo_barras ? String(producto.data.codigo_barras) : null,
     serie,
     horas: ((horas.data ?? []) as Record<string, unknown>[]).map((row) => ({
       hora: num(row.hora),
@@ -922,9 +1030,31 @@ export function periodoDesdeParams(params: { get(name: string): string | null },
       hasta: params.get("hasta"),
       preset: params.get("preset"),
       comparar: params.get("comparar"),
+      comparacion: params.get("comparacion"),
     },
     now,
   );
+}
+
+export async function cargarPanelProducto(codigo: string, periodo: ConsumoPeriodo) {
+  const actual = await cargarProducto(codigo, periodo);
+  const anterior = periodo.comparar
+    ? await cargarProducto(codigo, {
+        ...periodo,
+        desde: periodo.anterior.desde,
+        hasta: periodo.anterior.hasta,
+        comparar: false,
+      })
+    : null;
+  const ventaAnterior = anterior && anterior.serie.length > 0 ? anterior.venta : null;
+  const bruto = ventaAnterior == null || ventaAnterior === 0 ? null : (actual.venta - ventaAnterior) / Math.abs(ventaAnterior);
+  return {
+    ...actual,
+    ventaAnterior: periodo.comparar ? ventaAnterior : null,
+    variacion: periodo.comparar && bruto != null && Number.isFinite(bruto) ? bruto : null,
+    serieGrafica: actual.serie,
+    serieAnterior: periodo.comparar && anterior && anterior.serie.length > 0 ? anterior.serie : null,
+  };
 }
 
 export { parseDias, parseLimit, parseMetrica, parseOrden };

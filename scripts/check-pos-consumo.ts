@@ -12,6 +12,7 @@ import {
   metodoCanon,
   parsePosIngestBody,
   relojLocal,
+  parseOrden,
   resolverPeriodo,
   tasaCatalogo,
   ventaDelDia,
@@ -20,6 +21,7 @@ import {
   type PosNormalizado,
 } from "../lib/pos-domain";
 import { anioAnterior, asociacionCanasta, coberturaDeFechas, desgloseVenta, estadoComparacion, estadoHora, participacion, promedioOcurrencia, resolverComparacion, variacionPct } from "../lib/consumo-metricas";
+import { celdaCsv, csvProductos, etiquetaVariacion, etiquetaVariacionTotal, margenAgregado } from "../lib/productos-analitica";
 import { MilesError, hashPayload, parseHallazgo } from "../lib/miles-domain";
 import { calcularPromo, revisarAritmetica, supuestosVacios } from "../lib/promo-calculo";
 import { parseCorreccionPropuesta, parsePropuesta } from "../lib/promo-domain";
@@ -301,6 +303,17 @@ assert(metodoCanon("Cuenta de cliente") === "credito", "cuenta de cliente es cr�
 const periodo = resolverPeriodo({ preset: "7d", comparar: "1" }, Date.parse("2026-10-16T12:00:00Z"));
 assert(periodo.hasta === "2026-10-16", "el periodo cierra hoy en Santo Domingo");
 assert(periodo.desde === "2026-10-10", "7 días incluyen hoy");
+const mesAnterior = resolverPeriodo({ preset: "mes_anterior" }, Date.parse("2026-10-16T16:00:00Z"));
+assert(mesAnterior.desde === "2026-09-01" && mesAnterior.hasta === "2026-09-30" && mesAnterior.preset === "mes_anterior", "mes anterior es el mes calendario cerrado");
+const enero = resolverPeriodo({ preset: "mes_anterior" }, Date.parse("2026-01-15T16:00:00Z"));
+assert(enero.desde === "2025-12-01" && enero.hasta === "2025-12-31", "mes anterior en enero cruza de año");
+assert(parseOrden("venta_asc") === "venta_asc" && parseOrden("margen_asc") === "margen_asc" && parseOrden("no") === "venta", "el orden acepta ascendente y rechaza basura");
+assert(etiquetaVariacion(null, null).tipo === "sin_base", "sin fila anterior no es una venta nueva");
+assert(etiquetaVariacion(0, null).tipo === "nuevo", "venta anterior en cero es nuevo");
+assert(etiquetaVariacion(10, 0.25).tipo === "pct" && etiquetaVariacion(10, Number.POSITIVE_INFINITY).tipo === "sin_base", "una variación no finita no se muestra");
+assert(etiquetaVariacionTotal(20, 0).tipo === "sin_base" && etiquetaVariacionTotal(null, 10).tipo === "sin_base", "el total no usa infinito ni llama nuevo a una base en cero");
+assert(margenAgregado(10, 0) === null && margenAgregado(null, 40) === null && margenAgregado(10, 40) === 0.25, "el margen agregado no promedia porcentajes ni usa venta sin costo");
+assert(celdaCsv("=cmd") === "'=cmd" && !csvProductos([], 0, false).includes("Infinity"), "el csv no ejecuta fórmulas ni escribe infinito");
 assert(periodo.tramo?.hasta === "2026-10-15" && periodo.anterior.desde === "2026-10-04" && periodo.anterior.hasta === "2026-10-09", "la comparación de un periodo en curso usa días completos");
 const semana = resolverComparacion("2026-10-10", "2026-10-15", "semana", Date.parse("2026-10-16T12:00:00Z"));
 assert(semana.anterior?.desde === "2026-10-03" && semana.anterior.hasta === "2026-10-08", "mismos días de la semana corren 7 días");

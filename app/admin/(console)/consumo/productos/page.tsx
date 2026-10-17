@@ -1,14 +1,15 @@
-import { ConsumoProductosVista } from "@/components/admin/consumo/ConsumoProductosVista";
+import { Suspense } from "react";
+import { ProductosAnalitica } from "@/components/admin/consumo/ProductosAnalitica";
 import { ErrorPanel } from "@/components/admin/consumo/ui";
-import { buscarSeguro, parseOrden } from "@/lib/pos-domain";
-import { cargarProductos, paramsDe, periodoDesdeParams } from "@/lib/pos-consumo";
+import { parseSinCosto, parseVista } from "@/lib/productos-analitica";
+import { TIENDA_DEFAULT, buscarSeguro, parseOrden, parsePagina, parseTamano } from "@/lib/pos-domain";
+import { cargarFrescura, cargarPanelProducto, cargarProductos, paramsDe, periodoDesdeParams } from "@/lib/pos-consumo";
 import { getSupabaseAdminClient } from "@/lib/supabase";
-import { TIENDA_DEFAULT } from "@/lib/pos-domain";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Productos | Consumo",
+  title: "Ventas por producto | Analítica",
 };
 
 export default async function ConsumoProductosPage({
@@ -18,31 +19,61 @@ export default async function ConsumoProductosPage({
 }) {
   const params = paramsDe(searchParams);
   const periodo = periodoDesdeParams(params);
+  const ordenRaw = parseOrden(params.get("orden"));
+  const orden = !periodo.comparar && (ordenRaw === "variacion" || ordenRaw === "variacion_asc") ? "venta" : ordenRaw;
+  const categoria = (params.get("categoria") ?? "").slice(0, 80);
+  const q = buscarSeguro(params.get("q"));
+  const sinCosto = parseSinCosto(params.get("sin_costo"));
+  const tamano = parseTamano(params.get("tamano"));
+  const pagina = parsePagina(params.get("pagina"));
+  const vista = parseVista(params.get("vista"));
+  const codigo = (params.get("producto") ?? "").slice(0, 120);
   try {
-    const [lista, categorias] = await Promise.all([
+    const [lista, categorias, frescura] = await Promise.all([
       cargarProductos({
         periodo,
-        orden: parseOrden(params.get("orden")),
-        categoria: (params.get("categoria") ?? "").slice(0, 80),
-        q: buscarSeguro(params.get("q")),
-        cursor: params.get("cursor"),
+        orden,
+        categoria,
+        q,
+        cursor: null,
+        limit: tamano,
+        offset: (pagina - 1) * tamano,
+        sinCosto,
       }),
       categoriasDelPeriodo(periodo.desde, periodo.hasta),
+      cargarFrescura().catch(() => null),
     ]);
+    let panel: Awaited<ReturnType<typeof cargarPanelProducto>> | null = null;
+    let panelError: string | null = null;
+    if (codigo) {
+      try {
+        panel = await cargarPanelProducto(codigo, periodo);
+      } catch (error) {
+        panelError = error instanceof Error ? error.message : "No pudimos abrir el producto";
+      }
+    }
     return (
-      <ConsumoProductosVista
+      <Suspense fallback={<div className="analitica-productos h-40 animate-pulse rounded-lg bg-[#E8EBE8]" aria-hidden="true" />}>
+      <ProductosAnalitica
         rows={lista.rows}
-        nextCursor={lista.nextCursor}
-        orden={parseOrden(params.get("orden"))}
-        categoria={params.get("categoria") ?? ""}
-        q={params.get("q") ?? ""}
-        categorias={categorias}
-        desde={periodo.desde}
-        hasta={periodo.hasta}
-        cursor={params.get("cursor")}
+        periodo={periodo}
+        totales={lista.totales}
+        totalesTramo={lista.totalesTramo}
+        totalesAnterior={lista.totalesAnterior}
         ventaPeriodo={lista.ventaPeriodo}
-        ventaAlcance={lista.ventaAlcance}
+        orden={orden}
+        categoria={categoria}
+        q={q}
+        categorias={categorias}
+        sinCosto={sinCosto}
+        vista={vista}
+        pagina={pagina}
+        tamano={tamano}
+        frescura={frescura}
+        panel={panel}
+        panelError={panelError}
       />
+      </Suspense>
     );
   } catch (error) {
     return <ErrorPanel message={error instanceof Error ? error.message : "No pudimos cargar los productos"} />;

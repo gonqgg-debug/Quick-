@@ -96,9 +96,18 @@ const FORBIDDEN_KEYS = new Set([
 ]);
 
 export type MetodoPago = "efectivo" | "banco" | "credito" | "tarjeta" | "otro";
-export type OrdenConsumo = "venta" | "unidades" | "margen" | "variacion" | "variacion_asc";
+export type OrdenConsumo =
+  | "venta"
+  | "venta_asc"
+  | "unidades"
+  | "unidades_asc"
+  | "margen"
+  | "margen_asc"
+  | "variacion"
+  | "variacion_asc";
 export type MetricaHorario = "venta" | "ordenes" | "unidades";
-export type PresetPeriodo = "7d" | "30d" | "mes" | "custom";
+export type PresetPeriodo = "7d" | "30d" | "mes" | "mes_anterior" | "custom";
+export const TAMANOS_PAGINA = [25, 50, 100] as const;
 
 export type PosLinea = {
   odooId: number;
@@ -1013,7 +1022,7 @@ export function resolverPeriodo(
   const hoy = todayDayKey(now);
   let hasta = input.hasta && isDayKey(input.hasta) ? input.hasta : hoy;
   const preset: PresetPeriodo =
-    input.preset === "30d" || input.preset === "mes" || input.preset === "custom" || input.preset === "7d"
+    input.preset === "30d" || input.preset === "mes" || input.preset === "mes_anterior" || input.preset === "custom" || input.preset === "7d"
       ? input.preset
       : input.desde || input.hasta
         ? "custom"
@@ -1022,6 +1031,10 @@ export function resolverPeriodo(
   if (preset === "30d") {
     desde = addDaysToDayKey(hasta, -29);
   } else if (preset === "mes") {
+    desde = `${hasta.slice(0, 7)}-01`;
+  } else if (preset === "mes_anterior") {
+    const primero = `${hoy.slice(0, 7)}-01`;
+    hasta = addDaysToDayKey(primero, -1);
     desde = `${hasta.slice(0, 7)}-01`;
   } else if (preset === "custom" && input.desde && isDayKey(input.desde)) {
     desde = input.desde;
@@ -1069,11 +1082,32 @@ export function parseLimit(raw: string | null, fallback = CONSUMO_PAGE_DEFAULT):
   return Math.min(CONSUMO_PAGE_MAX, parsed);
 }
 
+const ORDENES_CONSUMO: readonly OrdenConsumo[] = [
+  "venta",
+  "venta_asc",
+  "unidades",
+  "unidades_asc",
+  "margen",
+  "margen_asc",
+  "variacion",
+  "variacion_asc",
+];
+
 export function parseOrden(raw: string | null): OrdenConsumo {
-  if (raw === "unidades" || raw === "margen" || raw === "variacion" || raw === "variacion_asc" || raw === "venta") {
-    return raw;
+  return ORDENES_CONSUMO.includes(raw as OrdenConsumo) ? (raw as OrdenConsumo) : "venta";
+}
+
+export function parseTamano(raw: string | null): (typeof TAMANOS_PAGINA)[number] {
+  const parsed = Number(raw);
+  return TAMANOS_PAGINA.includes(parsed as (typeof TAMANOS_PAGINA)[number]) ? (parsed as (typeof TAMANOS_PAGINA)[number]) : 50;
+}
+
+export function parsePagina(raw: string | null): number {
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return 1;
   }
-  return "venta";
+  return Math.min(parsed, 10000);
 }
 
 export function parseMetrica(raw: string | null): MetricaHorario {
