@@ -12,7 +12,10 @@ import {
   metodoCanon,
   parsePosIngestBody,
   relojLocal,
+  parseComparacion,
+  parseOrden,
   resolverPeriodo,
+  ventanasSemana,
   tasaCatalogo,
   ventaDelDia,
   ventaDifiere,
@@ -21,7 +24,8 @@ import {
 } from "../lib/pos-domain";
 import { anioAnterior, asociacionCanasta, coberturaDeFechas, desgloseVenta, estadoComparacion, estadoHora, participacion, promedioOcurrencia, resolverComparacion, variacionPct } from "../lib/consumo-metricas";
 import { describirPeriodo, estadoCosto, margenAgregado, subtituloProducto, variacionAgregada, variacionProducto } from "../lib/consumo-productos-ui";
-import { MilesError, hashPayload, parseHallazgo } from "../lib/miles-domain";
+import { celdaCsv, csvProductos, etiquetaVariacion, etiquetaVariacionTotal } from "../lib/productos-analitica";
+import { CONSULTAS_MILES, MilesError, hashPayload, parseAvanceInvestigacion, parseCierreRun, parseEvidencia, parseHallazgo } from "../lib/miles-domain";
 import { calcularPromo, revisarAritmetica, supuestosVacios } from "../lib/promo-calculo";
 import { parseCorreccionPropuesta, parsePropuesta } from "../lib/promo-domain";
 import { indicadoresPromo, ordenAtencion, probabilidadCompleta } from "../lib/promo-presentacion";
@@ -302,6 +306,17 @@ assert(metodoCanon("Cuenta de cliente") === "credito", "cuenta de cliente es cr�
 const periodo = resolverPeriodo({ preset: "7d", comparar: "1" }, Date.parse("2026-10-16T12:00:00Z"));
 assert(periodo.hasta === "2026-10-16", "el periodo cierra hoy en Santo Domingo");
 assert(periodo.desde === "2026-10-10", "7 días incluyen hoy");
+const mesAnterior = resolverPeriodo({ preset: "mes_anterior" }, Date.parse("2026-10-16T16:00:00Z"));
+assert(mesAnterior.desde === "2026-09-01" && mesAnterior.hasta === "2026-09-30" && mesAnterior.preset === "mes_anterior", "mes anterior es el mes calendario cerrado");
+const enero = resolverPeriodo({ preset: "mes_anterior" }, Date.parse("2026-01-15T16:00:00Z"));
+assert(enero.desde === "2025-12-01" && enero.hasta === "2025-12-31", "mes anterior en enero cruza de año");
+assert(parseOrden("venta_asc") === "venta_asc" && parseOrden("margen_asc") === "margen_asc" && parseOrden("no") === "venta", "el orden acepta ascendente y rechaza basura");
+assert(etiquetaVariacion(null, null).tipo === "sin_base", "sin fila anterior no es una venta nueva");
+assert(etiquetaVariacion(0, null).tipo === "nuevo", "venta anterior en cero es nuevo");
+assert(etiquetaVariacion(10, 0.25).tipo === "pct" && etiquetaVariacion(10, Number.POSITIVE_INFINITY).tipo === "sin_base", "una variación no finita no se muestra");
+assert(etiquetaVariacionTotal(20, 0).tipo === "sin_base" && etiquetaVariacionTotal(null, 10).tipo === "sin_base", "el total no usa infinito ni llama nuevo a una base en cero");
+assert(margenAgregado(10, 0) === null && margenAgregado(null, 40) === null && margenAgregado(10, 40) === 0.25, "el margen agregado no promedia porcentajes ni usa venta sin costo");
+assert(celdaCsv("=cmd") === "'=cmd" && !csvProductos([], 0, false).includes("Infinity"), "el csv no ejecuta fórmulas ni escribe infinito");
 assert(periodo.tramo?.hasta === "2026-10-15" && periodo.anterior.desde === "2026-10-04" && periodo.anterior.hasta === "2026-10-09", "la comparación de un periodo en curso usa días completos");
 const completos = resolverPeriodo({ preset: "7c", comparacion: "semana" }, Date.parse("2026-10-16T12:00:00Z"));
 assert(completos.desde === "2026-10-09" && completos.hasta === "2026-10-15" && completos.comparacion === "semana", "7 días completos terminan ayer y leen el modo de comparación");
@@ -323,6 +338,15 @@ assert(estadoCosto(null, null) === "sin_costo" && estadoCosto("factura", 0) === 
 assert(subtituloProducto({ nombre: "Agua Brava 16oz", marca: "Brava", codigo: "A1" }) === "A1", "la marca que ya está en el nombre no se repite");
 const semana = resolverComparacion("2026-10-10", "2026-10-15", "semana", Date.parse("2026-10-16T12:00:00Z"));
 assert(semana.anterior?.desde === "2026-10-03" && semana.anterior.hasta === "2026-10-08", "mismos días de la semana corren 7 días");
+assert(parseComparacion("semana anterior") === "semana" && parseComparacion("semana_anterior") === "semana", "semana anterior no es el periodo inmediato");
+const diaSemana = resolverComparacion("2026-10-16", "2026-10-16", parseComparacion("semana anterior"), Date.parse("2026-10-17T12:00:00Z"));
+assert(diaSemana.anterior?.desde === "2026-10-09" && diaSemana.anterior.hasta === "2026-10-09", "un día con semana anterior cae en el mismo día de la semana pasada");
+assert(diaSemana.anterior?.desde !== "2026-10-15", "semana anterior no es el día previo");
+const viernes = ventanasSemana("2026-10-16");
+assert(viernes.actual.desde === "2026-10-12" && viernes.actual.hasta === "2026-10-16", "la semana del resumen llega hasta el corte");
+assert(viernes.anterior.desde === "2026-10-05" && viernes.anterior.hasta === "2026-10-09", "la semana anterior del resumen repite lunes a viernes");
+const lunes = ventanasSemana("2026-10-12");
+assert(lunes.actual.desde === "2026-10-12" && lunes.actual.hasta === "2026-10-12" && lunes.anterior.desde === "2026-10-05" && lunes.anterior.hasta === "2026-10-05", "el lunes se compara con el lunes anterior, no con el domingo");
 assert(anioAnterior("2024-02-29") === "2023-02-28", "el 29 de febrero cae en el 28");
 assert(variacionPct(10, 0) === null && estadoComparacion({ pedida: true, coberturaCompleta: true, base: 0 }) === "sin_base", "base cero no da un porcentaje infinito");
 assert(estadoComparacion({ pedida: true, coberturaCompleta: false, base: 10 }) === "no_disponible", "sin cobertura no hay comparación");
@@ -358,6 +382,50 @@ try {
   rechazo = error instanceof MilesError;
 }
 assert(rechazo, "Miles no acepta un agent_id en el cuerpo");
+assert(parseCierreRun({ version: 1, estado: "completada" }).estado === "completada", "cerrar una corrida acepta estado completada");
+assert(parseCierreRun({ version: 2, estado: "fallida", error: "se cortó" }).estado === "fallida", "cerrar una corrida acepta estado fallida");
+let cierreSinEstado = "";
+try {
+  parseCierreRun({ version: 1 });
+} catch (error) {
+  cierreSinEstado = error instanceof MilesError ? error.message : "";
+}
+assert(cierreSinEstado.includes("completada") && !cierreSinEstado.includes("no acepta"), "sin estado el cierre dice que falta, no que Miles lo rechaza");
+let hallazgoConEstado = "";
+try {
+  parseHallazgo({ ...hallazgo, estado: "vigente" });
+} catch (error) {
+  hallazgoConEstado = error instanceof MilesError ? error.message : "";
+}
+assert(hallazgoConEstado.includes("no acepta el campo estado"), "un hallazgo sigue sin poder fijar estado");
+assert(parseAvanceInvestigacion({ version: 1, estado: "en_analisis" }).estado === "en_analisis", "avanzar una investigación acepta estado");
+let tituloLargo = "";
+try {
+  parseHallazgo({ ...hallazgo, titulo: "a".repeat(170) });
+} catch (error) {
+  tituloLargo = error instanceof MilesError ? error.message : "";
+}
+assert(tituloLargo.includes("admite hasta 160") && !tituloLargo.includes("obligatorio"), "un título de 170 caracteres dice el tope");
+let tituloVacio = "";
+try {
+  parseHallazgo({ ...hallazgo, titulo: "   " });
+} catch (error) {
+  tituloVacio = error instanceof MilesError ? error.message : "";
+}
+assert(tituloVacio === "titulo es obligatorio", "un título vacío sigue siendo obligatorio");
+const evidenciaLarga = parseEvidencia({
+  consultas: ["/api/agent/analytics/summary?desde=2026-10-01&hasta=2026-10-16&categoria=tabaco", { nombre: "consumo_mapa_horas" }],
+  filtros: { categoria: "tabaco" },
+});
+assert(evidenciaLarga.consultas.join(",") === "analytics/summary,consumo_mapa_horas", "una ruta con filtros y un objeto nombre son consultas válidas");
+assert(parseEvidencia({ consultas: "consumo_margen_periodo", filtros: {} }).consultas[0] === "consumo_margen_periodo", "una consulta puede llegar como string");
+let consultaMala = "";
+try {
+  parseEvidencia({ consultas: ["select * from pos_ordenes"], filtros: {} });
+} catch (error) {
+  consultaMala = error instanceof MilesError ? error.message : "";
+}
+assert(consultaMala.includes("no reconoce") && consultaMala.includes("consumo_margen_periodo") && consultaMala.includes(CONSULTAS_MILES[0]), "una consulta desconocida devuelve los nombres válidos");
 const grafico = leerVisual({
   tipo: "comparacion",
   metrica: { nombre: "venta", valor: 100, unidad: "rd" },

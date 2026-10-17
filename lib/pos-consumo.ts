@@ -5,7 +5,7 @@ import {
   TIENDA_DEFAULT,
   decodeCursor,
   encodeCursor,
-  lunesDe,
+  ventanasSemana,
   margenConsumo,
   parseDias,
   parseLimit,
@@ -136,7 +136,14 @@ export type ResumenConsumo = {
   turnos: Array<{ turno: "am" | "pm"; venta: number; ordenes: number; ticket: number | null; unidadesPorTicket: number | null }>;
   calidad: { sinMatchProductos: number; sinMatchVenta: number; sinCostoProductos: number; sinCostoVenta: number; descuadradas: number };
   tendencias: {
-    semana: { actual: number; anterior: number; desde: string; hasta: string };
+    semana: {
+      actual: number;
+      anterior: number;
+      desde: string;
+      hasta: string;
+      anteriorDesde: string;
+      anteriorHasta: string;
+    };
     mes: { actual: number; anterior: number; desde: string; hasta: string };
   };
   categorias: Array<{ categoria: string; venta: number }>;
@@ -300,8 +307,8 @@ export async function cargarFrescura(now = Date.now(), tienda = TIENDA_DEFAULT):
 export async function cargarResumen(periodo: ConsumoPeriodo, now = Date.now()): Promise<ResumenConsumo> {
   const supabase = getSupabaseAdminClient();
   const tienda = TIENDA_DEFAULT;
-  const lunes = lunesDe(periodo.hasta);
-  const lunesPrevio = addDaysToDayKey(lunes, -7);
+  const semanaVentana = ventanasSemana(periodo.hasta);
+  const lunesPrevio = semanaVentana.anterior.desde;
   const mesDesde = `${periodo.hasta.slice(0, 7)}-01`;
   const mesPrevioHasta = addDaysToDayKey(mesDesde, -1);
   const mesPrevioDesde = `${mesPrevioHasta.slice(0, 7)}-01`;
@@ -442,10 +449,12 @@ export async function cargarResumen(periodo: ConsumoPeriodo, now = Date.now()): 
     },
     tendencias: {
       semana: {
-        actual: suma(lunes, addDaysToDayKey(lunes, 6)),
-        anterior: suma(lunesPrevio, addDaysToDayKey(lunesPrevio, 6)),
-        desde: lunes,
-        hasta: addDaysToDayKey(lunes, 6),
+        actual: suma(semanaVentana.actual.desde, semanaVentana.actual.hasta),
+        anterior: suma(semanaVentana.anterior.desde, semanaVentana.anterior.hasta),
+        desde: semanaVentana.actual.desde,
+        hasta: semanaVentana.actual.hasta,
+        anteriorDesde: semanaVentana.anterior.desde,
+        anteriorHasta: semanaVentana.anterior.hasta,
       },
       mes: {
         actual: suma(mesDesde, periodo.hasta),

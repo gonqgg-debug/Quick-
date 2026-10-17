@@ -173,7 +173,12 @@ export function ConsumoResumenVista({
       </section>
 
       <section className="grid gap-3 md:grid-cols-2">
-        <Comparacion titulo="Semana contra semana" actual={data.tendencias.semana.actual} anterior={data.tendencias.semana.anterior} nota={`Semana del ${formatDayKey(data.tendencias.semana.desde)}`} />
+        <Comparacion
+          titulo="Semana contra semana"
+          actual={data.tendencias.semana.actual}
+          anterior={data.tendencias.semana.anterior}
+          nota={`${formatDayKey(data.tendencias.semana.desde)} – ${formatDayKey(data.tendencias.semana.hasta)} contra ${formatDayKey(data.tendencias.semana.anteriorDesde)} – ${formatDayKey(data.tendencias.semana.anteriorHasta)}`}
+        />
         <Comparacion titulo="Mes contra mes" actual={data.tendencias.mes.actual} anterior={data.tendencias.mes.anterior} nota="Mes en curso contra el mes anterior" />
       </section>
     </div>

@@ -7,6 +7,7 @@ alter table public.products
   add column if not exists codigo_barras text;
 
 drop function if exists public.consumo_top_productos(text, date, date, date, date, text, text, text, integer, integer, numeric, text);
+drop function if exists public.consumo_top_productos(text, date, date, date, date, text, text, text, integer, integer, numeric, text, boolean, integer);
 
 create function public.consumo_top_productos(
   p_tienda text,
