@@ -23,7 +23,8 @@ import {
   type PosNormalizado,
 } from "../lib/pos-domain";
 import { anioAnterior, asociacionCanasta, coberturaDeFechas, desgloseVenta, estadoComparacion, estadoHora, participacion, promedioOcurrencia, resolverComparacion, variacionPct } from "../lib/consumo-metricas";
-import { celdaCsv, csvProductos, etiquetaVariacion, etiquetaVariacionTotal, margenAgregado } from "../lib/productos-analitica";
+import { describirPeriodo, estadoCosto, margenAgregado, subtituloProducto, variacionAgregada, variacionProducto } from "../lib/consumo-productos-ui";
+import { celdaCsv, csvProductos, etiquetaVariacion, etiquetaVariacionTotal } from "../lib/productos-analitica";
 import { CONSULTAS_MILES, MilesError, hashPayload, parseAvanceInvestigacion, parseCierreRun, parseEvidencia, parseHallazgo } from "../lib/miles-domain";
 import { calcularPromo, revisarAritmetica, supuestosVacios } from "../lib/promo-calculo";
 import { parseCorreccionPropuesta, parsePropuesta } from "../lib/promo-domain";
@@ -317,6 +318,24 @@ assert(etiquetaVariacionTotal(20, 0).tipo === "sin_base" && etiquetaVariacionTot
 assert(margenAgregado(10, 0) === null && margenAgregado(null, 40) === null && margenAgregado(10, 40) === 0.25, "el margen agregado no promedia porcentajes ni usa venta sin costo");
 assert(celdaCsv("=cmd") === "'=cmd" && !csvProductos([], 0, false).includes("Infinity"), "el csv no ejecuta fórmulas ni escribe infinito");
 assert(periodo.tramo?.hasta === "2026-10-15" && periodo.anterior.desde === "2026-10-04" && periodo.anterior.hasta === "2026-10-09", "la comparación de un periodo en curso usa días completos");
+const completos = resolverPeriodo({ preset: "7c", comparacion: "semana" }, Date.parse("2026-10-16T12:00:00Z"));
+assert(completos.desde === "2026-10-09" && completos.hasta === "2026-10-15" && completos.comparacion === "semana", "7 días completos terminan ayer y leen el modo de comparación");
+assert(completos.anterior.desde === "2026-10-02" && completos.anterior.hasta === "2026-10-08", "mismos días de una semana completa corren 7 días");
+const mesPrevio = resolverPeriodo({ preset: "mes_anterior" }, Date.parse("2026-10-16T12:00:00Z"));
+assert(mesPrevio.desde === "2026-09-01" && mesPrevio.hasta === "2026-09-30", "mes anterior es el mes calendario cerrado");
+const dias30 = resolverPeriodo({ preset: "30c" }, Date.parse("2026-10-16T12:00:00Z"));
+assert(dias30.hasta === "2026-10-15" && dias30.desde === "2026-09-16", "30 días completos terminan ayer");
+const aviso = describirPeriodo(periodo);
+assert(aviso.aviso != null && aviso.aviso.includes("día en curso"), "un periodo que incluye hoy explica el tramo efectivo");
+assert(variacionProducto("ok", null, null)?.texto === "Nuevo", "sin fila anterior el producto es nuevo");
+assert(variacionProducto("ok", null, 0)?.texto === "Sin base", "venta anterior cero no es un porcentaje");
+assert(variacionProducto("ok", Number.POSITIVE_INFINITY, 0)?.texto === "Sin base", "una base cero no se muestra como infinito");
+assert(variacionProducto("no_disponible", 0.2, 10)?.texto === "Comparación no disponible", "sin cobertura no hay variación");
+assert(variacionProducto("off", 0.2, 10) == null, "sin comparación no hay variación");
+assert(variacionAgregada("ok", 110, 100)?.texto.includes("ventas") && variacionAgregada("sin_base", 10, 0)?.texto === "Sin base", "el total usa texto y no promedia porcentajes");
+assert(margenAgregado(40, 200) === 0.2 && margenAgregado(null, 200) == null && margenAgregado(40, 0) == null, "el margen agregado usa la venta neta con costo");
+assert(estadoCosto(null, null) === "sin_costo" && estadoCosto("factura", 0) === "estimado" && estadoCosto("manual", 8) === "disponible", "costo cero no es costo ausente");
+assert(subtituloProducto({ nombre: "Agua Brava 16oz", marca: "Brava", codigo: "A1" }) === "A1", "la marca que ya está en el nombre no se repite");
 const semana = resolverComparacion("2026-10-10", "2026-10-15", "semana", Date.parse("2026-10-16T12:00:00Z"));
 assert(semana.anterior?.desde === "2026-10-03" && semana.anterior.hasta === "2026-10-08", "mismos días de la semana corren 7 días");
 assert(parseComparacion("semana anterior") === "semana" && parseComparacion("semana_anterior") === "semana", "semana anterior no es el periodo inmediato");

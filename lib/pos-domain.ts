@@ -1,5 +1,5 @@
 import { resolverComparacion, type ModoComparacion } from "@/lib/consumo-metricas";
-import { addDaysToDayKey, diffDayKeys, isDayKey, isoWeekdayMonday1, localDayKey, todayDayKey, STAFF_TIMEZONE } from "@/lib/local-day";
+import { addDaysToDayKey, diffDayKeys, isDayKey, isoWeekdayMonday1, localDayKey, todayDayKey, yesterdayDayKey, STAFF_TIMEZONE } from "@/lib/local-day";
 
 export const POS_MAX_LINEAS = 1500;
 export const POS_MAX_SESIONES = 1;
@@ -103,11 +103,16 @@ export type OrdenConsumo =
   | "unidades_asc"
   | "margen"
   | "margen_asc"
+  | "margen_pct"
+  | "margen_pct_asc"
   | "variacion"
-  | "variacion_asc";
+  | "variacion_asc"
+  | "venta_neta"
+  | "venta_neta_asc"
+  | "costo_ventas"
+  | "costo_ventas_asc";
 export type MetricaHorario = "venta" | "ordenes" | "unidades";
-export type PresetPeriodo = "7d" | "30d" | "mes" | "mes_anterior" | "custom";
-export const TAMANOS_PAGINA = [25, 50, 100] as const;
+export type PresetPeriodo = "7d" | "30d" | "7c" | "30c" | "mes" | "mes_anterior" | "custom";
 
 export type PosLinea = {
   odooId: number;
@@ -1039,21 +1044,27 @@ export function resolverPeriodo(
   now = Date.now(),
 ): ConsumoPeriodo {
   const hoy = todayDayKey(now);
-  let hasta = input.hasta && isDayKey(input.hasta) ? input.hasta : hoy;
+  const ayer = yesterdayDayKey(now);
   const preset: PresetPeriodo =
-    input.preset === "30d" || input.preset === "mes" || input.preset === "mes_anterior" || input.preset === "custom" || input.preset === "7d"
+    input.preset === "30d" ||
+    input.preset === "mes" ||
+    input.preset === "mes_anterior" ||
+    input.preset === "custom" ||
+    input.preset === "7d" ||
+    input.preset === "7c" ||
+    input.preset === "30c"
       ? input.preset
       : input.desde || input.hasta
         ? "custom"
         : "7d";
-  let desde = addDaysToDayKey(hasta, -6);
-  if (preset === "30d") {
-    desde = addDaysToDayKey(hasta, -29);
-  } else if (preset === "mes") {
-    desde = `${hasta.slice(0, 7)}-01`;
-  } else if (preset === "mes_anterior") {
-    const primero = `${hoy.slice(0, 7)}-01`;
-    hasta = addDaysToDayKey(primero, -1);
+  let hasta = input.hasta && isDayKey(input.hasta) ? input.hasta : hoy;
+  if (preset === "mes_anterior") {
+    hasta = addDaysToDayKey(`${hoy.slice(0, 7)}-01`, -1);
+  } else if ((preset === "7c" || preset === "30c") && !(input.hasta && isDayKey(input.hasta))) {
+    hasta = ayer;
+  }
+  let desde = addDaysToDayKey(hasta, preset === "30d" || preset === "30c" ? -29 : -6);
+  if (preset === "mes" || preset === "mes_anterior") {
     desde = `${hasta.slice(0, 7)}-01`;
   } else if (preset === "custom" && input.desde && isDayKey(input.desde)) {
     desde = input.desde;
@@ -1112,32 +1123,28 @@ export function parseLimit(raw: string | null, fallback = CONSUMO_PAGE_DEFAULT):
   return Math.min(CONSUMO_PAGE_MAX, parsed);
 }
 
-const ORDENES_CONSUMO: readonly OrdenConsumo[] = [
+const ORDENES_CONSUMO = new Set<OrdenConsumo>([
   "venta",
   "venta_asc",
   "unidades",
   "unidades_asc",
   "margen",
   "margen_asc",
+  "margen_pct",
+  "margen_pct_asc",
   "variacion",
   "variacion_asc",
-];
+  "venta_neta",
+  "venta_neta_asc",
+  "costo_ventas",
+  "costo_ventas_asc",
+]);
 
 export function parseOrden(raw: string | null): OrdenConsumo {
-  return ORDENES_CONSUMO.includes(raw as OrdenConsumo) ? (raw as OrdenConsumo) : "venta";
-}
-
-export function parseTamano(raw: string | null): (typeof TAMANOS_PAGINA)[number] {
-  const parsed = Number(raw);
-  return TAMANOS_PAGINA.includes(parsed as (typeof TAMANOS_PAGINA)[number]) ? (parsed as (typeof TAMANOS_PAGINA)[number]) : 50;
-}
-
-export function parsePagina(raw: string | null): number {
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    return 1;
+  if (raw && ORDENES_CONSUMO.has(raw as OrdenConsumo)) {
+    return raw as OrdenConsumo;
   }
-  return Math.min(parsed, 10000);
+  return "venta";
 }
 
 export function parseMetrica(raw: string | null): MetricaHorario {

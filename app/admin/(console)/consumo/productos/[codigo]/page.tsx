@@ -5,7 +5,7 @@ import { cargarProducto, paramsDe, periodoDesdeParams } from "@/lib/pos-consumo"
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Producto | Consumo",
+  title: "Producto | Analítica",
 };
 
 export default async function ConsumoProductoPage({
