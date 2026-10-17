@@ -15,6 +15,97 @@ export const MILES_ESTADOS_MILES_INVESTIGACION = ["en_analisis", "requiere_infor
 
 export const PANTALLAS_EVIDENCIA = ["resumen", "productos", "horarios", "canasta"] as const;
 
+/** Nombres que Miles puede citar en evidencia.consultas. Son las lecturas del dashboard y las funciones que las calculan. */
+export const CONSULTAS_MILES = [
+  "analytics/coverage",
+  "analytics/summary",
+  "analytics/products",
+  "analytics/hours",
+  "analytics/baskets",
+  "consumo_margen_periodo",
+  "consumo_top_productos",
+  "consumo_productos_totales",
+  "consumo_venta_alcance",
+  "consumo_mapa_horas",
+  "consumo_producto_horas",
+  "consumo_categorias",
+  "consumo_canasta",
+  "consumo_canasta_par",
+  "consumo_calidad_conteos",
+  "consumo_horarios",
+  "consumo_sin_costo",
+  "consumo_sin_match",
+  "consumo_sin_movimiento",
+] as const;
+
+const ALIAS_CONSULTA: Record<string, (typeof CONSULTAS_MILES)[number]> = {
+  coverage: "analytics/coverage",
+  cobertura: "analytics/coverage",
+  "/api/agent/analytics/coverage": "analytics/coverage",
+  summary: "analytics/summary",
+  resumen: "analytics/summary",
+  "/api/agent/analytics/summary": "analytics/summary",
+  products: "analytics/products",
+  productos: "analytics/products",
+  "/api/agent/analytics/products": "analytics/products",
+  hours: "analytics/hours",
+  horas: "analytics/hours",
+  "/api/agent/analytics/hours": "analytics/hours",
+  baskets: "analytics/baskets",
+  canasta: "analytics/baskets",
+  "/api/agent/analytics/baskets": "analytics/baskets",
+};
+
+function listaConsultas(): string {
+  return CONSULTAS_MILES.join(", ");
+}
+
+function canonicaConsulta(nombre: string): string | null {
+  const base = nombre.trim().split("?")[0].replace(/\/+$/, "").replace(/^public\./, "");
+  if ((CONSULTAS_MILES as readonly string[]).includes(base)) {
+    return base;
+  }
+  return ALIAS_CONSULTA[base] ?? null;
+}
+
+function textoConsulta(item: unknown): string | null {
+  if (typeof item === "string") {
+    return item;
+  }
+  if (item && typeof item === "object" && !Array.isArray(item)) {
+    const raw = item as Record<string, unknown>;
+    const nombre = raw.nombre ?? raw.consulta ?? raw.name;
+    return typeof nombre === "string" ? nombre : null;
+  }
+  return null;
+}
+
+function parseConsultas(value: unknown): string[] {
+  const entrada = Array.isArray(value) || typeof value === "string" || (value != null && typeof value === "object");
+  if (!entrada) {
+    throw new MilesError(400, `evidencia.consultas tiene que ser una lista de nombres. Válidas: ${listaConsultas()}`);
+  }
+  const lista = Array.isArray(value) ? value : [value];
+  if (lista.length === 0) {
+    throw new MilesError(400, `evidencia.consultas tiene que incluir al menos una consulta. Válidas: ${listaConsultas()}`);
+  }
+  const nombres: string[] = [];
+  for (const item of lista) {
+    const textoItem = textoConsulta(item);
+    if (textoItem == null || textoItem.trim() === "") {
+      throw new MilesError(400, `evidencia.consultas tiene que ser una lista de nombres. Válidas: ${listaConsultas()}`);
+    }
+    const canonica = canonicaConsulta(textoItem);
+    if (!canonica) {
+      throw new MilesError(400, `evidencia.consultas no reconoce «${textoItem.trim().slice(0, 80)}». Válidas: ${listaConsultas()}`);
+    }
+    if (!nombres.includes(canonica)) {
+      nombres.push(canonica);
+    }
+  }
+  return nombres;
+}
+
 const PROHIBIDOS = new Set(["agent_id", "agentId", "autor", "confianza", "confidence", "estado", "resolucion", "recomendacionEstado", "recomendacion_estado"]);
 
 export class MilesError extends Error {
@@ -43,19 +134,24 @@ export function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 
-export function rechazarSuplantacion(body: Record<string, unknown>) {
+export function rechazarSuplantacion(body: Record<string, unknown>, permitidos: readonly string[] = []) {
+  const permite = new Set(permitidos);
   for (const key of Object.keys(body)) {
-    if (PROHIBIDOS.has(key)) {
+    if (PROHIBIDOS.has(key) && !permite.has(key)) {
       throw new MilesError(400, `Miles no acepta el campo ${key}`);
     }
   }
 }
 
 function texto(value: unknown, campo: string, max: number): string {
-  if (typeof value !== "string" || value.trim() === "" || value.length > max) {
+  if (typeof value !== "string" || value.trim() === "") {
     throw new MilesError(400, `${campo} es obligatorio`);
   }
-  return value.trim();
+  const limpio = value.trim();
+  if (limpio.length > max) {
+    throw new MilesError(400, `${campo} admite hasta ${max} caracteres`);
+  }
+  return limpio;
 }
 
 function opcional(value: unknown, campo: string, max: number): string | null {
@@ -87,9 +183,7 @@ export type EvidenciaMiles = {
 
 export function parseEvidencia(value: unknown): EvidenciaMiles {
   const raw = objeto(value, "evidencia");
-  if (!Array.isArray(raw.consultas) || raw.consultas.length === 0 || raw.consultas.some((item) => typeof item !== "string" || item.length > 80)) {
-    throw new MilesError(400, "evidencia.consultas tiene que listar las consultas usadas");
-  }
+  const consultas = parseConsultas(raw.consultas);
   const filtros = objeto(raw.filtros ?? {}, "evidencia.filtros");
   const enlaces: EvidenciaMiles["enlaces"] = [];
   if (raw.enlaces != null) {
@@ -109,7 +203,7 @@ export function parseEvidencia(value: unknown): EvidenciaMiles {
       enlaces.push({ pantalla: pantalla as EvidenciaMiles["enlaces"][number]["pantalla"], query });
     }
   }
-  return { consultas: raw.consultas.map(String), filtros, enlaces };
+  return { consultas, filtros, enlaces };
 }
 
 export function hrefEvidencia(pantalla: EvidenciaMiles["enlaces"][number]["pantalla"], query: string): string {
@@ -215,7 +309,7 @@ export function parseRun(body: unknown): { idempotencyKey: string; datosHasta: s
 
 export function parseCierreRun(body: unknown): { version: number; estado: "completada" | "fallida"; error: string | null; datosHasta: string | null; corte: string | null } {
   const raw = objeto(body, "cuerpo");
-  rechazarSuplantacion(raw);
+  rechazarSuplantacion(raw, ["estado"]);
   const version = raw.version;
   if (typeof version !== "number" || !Number.isInteger(version) || version < 1) {
     throw new MilesError(400, "version es obligatoria");
@@ -234,7 +328,7 @@ export function parseCierreRun(body: unknown): { version: number; estado: "compl
 
 export function parseAvanceInvestigacion(body: unknown): { version: number; estado: (typeof MILES_ESTADOS_MILES_INVESTIGACION)[number]; respuesta: string | null } {
   const raw = objeto(body, "cuerpo");
-  rechazarSuplantacion(raw);
+  rechazarSuplantacion(raw, ["estado"]);
   const version = raw.version;
   if (typeof version !== "number" || !Number.isInteger(version) || version < 1) {
     throw new MilesError(400, "version es obligatoria");

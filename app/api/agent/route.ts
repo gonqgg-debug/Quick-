@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AGENT_EVENT_TYPES } from "@/lib/agent-events";
 import { agentRolFromRequest, requireAgentApi } from "@/lib/agent-auth";
+import { CONSULTAS_MILES } from "@/lib/miles-domain";
 import { MILES_AGENT_ENDPOINTS } from "@/lib/miles-api";
 import { EXPANSION_AGENT_ENDPOINTS } from "@/lib/expansion-shared";
 import { FACTURAS_AGENT_ENDPOINTS } from "@/lib/facturas-shared";
@@ -21,6 +22,7 @@ export async function GET(request: NextRequest) {
       agente: "Miles — Analista Comercial",
       auth: "Authorization: Bearer <token de Miles>",
       nota: "Este token solo ve las funciones de Miles. No escribe ventas, costos, precios, inventario ni decisiones humanas.",
+      consultas: CONSULTAS_MILES,
       endpoints: MILES_AGENT_ENDPOINTS,
     });
   }

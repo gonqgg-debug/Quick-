@@ -9,8 +9,8 @@ Miles consulta el consumo y publica hallazgos. No hay un modelo de IA dentro de 
 - Tickets: esas órdenes. Ticket promedio: venta con ITBIS / tickets. Unidades por ticket: unidades / tickets.
 - Fecha comercial: `America/Santo_Domingo`. `pos_ordenes.fecha` es `timestamptz`. La hora real se obtiene con una sola conversión `AT TIME ZONE 'America/Santo_Domingo'`. `hora_local` y `fecha_operativa` ya quedaron grabadas en esa zona al ingerir; no se convierten otra vez. El día de caja es el día en que se abrió la sesión: una venta después de medianoche sigue en ese día.
 - Costo: manual si existe; si no, la última factura. No es el costo del día de la venta. Usarlo hacia atrás es una estimación. Sin costo, el margen es null, no cero. La cobertura es venta con ITBIS que tiene costo / venta con ITBIS del periodo. No se extrapola.
-- Periodo anterior: la misma cantidad de días completos, terminando el día antes. El día en curso no entra en la comparación.
-- Mismos días: la ventana se corre un múltiplo de 7, el menor que no se solapa.
+- Periodo anterior: la misma cantidad de días completos, terminando el día antes. El día en curso no entra en la comparación. En el resumen se pide con `comparacion=anterior`.
+- Semana anterior: `comparacion=semana` o `comparacion=semana anterior`. La ventana se corre un múltiplo de 7, el menor que no se solapa. La tarjeta del resumen compara la semana en curso, de lunes a la fecha de corte, con esos mismos días de la semana anterior.
 - Año anterior: las mismas fechas. El 29 de febrero cae en el 28.
 - Un día sin fila de resumen no es una venta en cero. Si al comparado le falta un día, la comparación dice “Comparación no disponible”. Si la base es cero, se muestran los importes y “Sin base anterior”, sin un porcentaje.
 - Participación: venta del producto con ITBIS / venta con ITBIS de todo el periodo. El porcentaje de la página era la suma de esa página, no del periodo: 85,700 sobre 1,123,656 es 7.6%, no 14.2%.
@@ -38,6 +38,16 @@ POST /api/agent/miles/runs
 Authorization: Bearer <token de Miles>
 
 { "idempotencyKey": "corrida-2026-10-16" }
+```
+
+Para leerla, `GET /api/agent/miles/runs/<id>`. Responde `id`, `estado`, `version`, `datosHasta`, `corte` y `error`.
+
+Para cerrarla hace falta `version` y `estado`. En este cierre `estado` sí se acepta, y solo puede ser `completada` o `fallida`.
+
+```http
+PATCH /api/agent/miles/runs/<id>
+
+{ "version": 1, "estado": "completada" }
 ```
 
 ```http
@@ -69,6 +79,17 @@ Authorization: Bearer <token de Miles>
   "corte": "2026-10-15"
 }
 ```
+
+`titulo` admite hasta 160 caracteres. Si pasa de ahí, la respuesta dice el tope. Un título vacío sigue siendo «titulo es obligatorio».
+
+`evidencia.consultas` es una lista con al menos un nombre. También vale un string o `{ "nombre": "..." }`. Un nombre desconocido responde la lista. `GET /api/agent` la publica en `consultas`. Los nombres válidos son:
+
+- `analytics/coverage`, `analytics/summary`, `analytics/products`, `analytics/hours`, `analytics/baskets`
+- `consumo_margen_periodo`, `consumo_top_productos`, `consumo_productos_totales`, `consumo_venta_alcance`
+- `consumo_mapa_horas`, `consumo_producto_horas`, `consumo_categorias`, `consumo_canasta`, `consumo_canasta_par`
+- `consumo_calidad_conteos`, `consumo_horarios`, `consumo_sin_costo`, `consumo_sin_match`, `consumo_sin_movimiento`
+
+Una ruta `/api/agent/analytics/summary?desde=...` cuenta como `analytics/summary`. Los filtros van en `evidencia.filtros`, no dentro del nombre.
 
 La misma clave con el mismo cuerpo devuelve el hallazgo. La misma clave con otro cuerpo responde 409. Otra semana del mismo `patronClave` crea un hallazgo nuevo y apunta al anterior.
 

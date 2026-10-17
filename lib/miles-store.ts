@@ -148,6 +148,16 @@ export async function abrirEjecucion(input: { idempotencyKey: string; datosHasta
   return { row: insertado.data, reintento: false };
 }
 
+export async function leerEjecucion(id: string) {
+  const { data, error } = await client()
+    .from("miles_ejecuciones")
+    .select("id, estado, version, iniciada_en, terminada_en, datos_hasta, corte, error")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) fallar(error);
+  return data;
+}
+
 export async function cerrarEjecucion(
   id: string,
   input: { version: number; estado: "completada" | "fallida"; error: string | null; datosHasta: string | null; corte: string | null },

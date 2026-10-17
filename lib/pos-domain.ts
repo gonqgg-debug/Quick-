@@ -1005,12 +1005,31 @@ export function ventaDelDia(estado: EstadoPos, tienda: string, fecha: string): n
   return round2(suma);
 }
 
+function normalizarModo(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/á/g, "a")
+    .replace(/é/g, "e")
+    .replace(/í/g, "i")
+    .replace(/ó/g, "o")
+    .replace(/ú/g, "u")
+    .replace(/[\s-]+/g, "_");
+}
+
 export function parseComparacion(raw: string | null | undefined, comparar?: string | null): ModoComparacion | "off" {
-  if (comparar === "0" || comparar === "false" || raw === "off") {
+  if (comparar === "0" || comparar === "false") {
     return "off";
   }
-  if (raw === "semana" || raw === "anio" || raw === "anterior") {
-    return raw;
+  const modo = normalizarModo(raw ?? "");
+  if (modo === "off" || modo === "sin_comparar" || modo === "sin_comparacion") {
+    return "off";
+  }
+  if (modo === "semana" || modo === "semana_anterior" || modo === "mismos_dias") {
+    return "semana";
+  }
+  if (modo === "anio" || modo === "ano" || modo === "anio_anterior" || modo === "ano_anterior") {
+    return "anio";
   }
   return "anterior";
 }
@@ -1069,6 +1088,17 @@ export function lunesDe(fecha: string): string {
     return fecha;
   }
   return addDaysToDayKey(fecha, -(dow - 1));
+}
+
+/** Semana de lunes a `hasta`, contra los mismos días de la semana anterior. */
+export function ventanasSemana(hasta: string): { actual: { desde: string; hasta: string }; anterior: { desde: string; hasta: string } } {
+  const lunes = lunesDe(hasta);
+  const domingo = addDaysToDayKey(lunes, 6);
+  const fin = hasta < domingo ? hasta : domingo;
+  return {
+    actual: { desde: lunes, hasta: fin },
+    anterior: { desde: addDaysToDayKey(lunes, -7), hasta: addDaysToDayKey(fin, -7) },
+  };
 }
 
 export function parseLimit(raw: string | null, fallback = CONSUMO_PAGE_DEFAULT): number {

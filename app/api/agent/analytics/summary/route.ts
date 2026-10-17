@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
             tramoComparado: data.kpisComparados,
             mix: data.mix,
             dias: data.dias,
+            tendencias: data.tendencias,
           },
         },
       ),
