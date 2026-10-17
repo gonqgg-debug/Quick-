@@ -15,7 +15,6 @@ import {
   formatPctPlano,
   claveLista,
   subtituloProducto,
-  variacionProducto,
 } from "@/lib/consumo-productos-ui";
 import {
   avisoCobertura,
@@ -389,17 +388,10 @@ export function ResumenAnalitica({ inicial, consultaInicial }: { inicial: Payloa
           detalle={detallePendiente ? null : data.detalle}
           error={detallePendiente ? null : data.detalleError}
           cargando={detallePendiente}
-          desde={periodoVisible.desde}
-          hasta={periodoVisible.hasta}
-          desdeComparado={periodoVisible.comparacion === "off" ? null : periodoVisible.anterior.desde}
-          hastaComparado={periodoVisible.comparacion === "off" ? null : periodoVisible.anterior.hasta}
+          periodo={periodoVisible}
           mostrarComparacion={!detallePendiente && (estado === "ok" || estado === "sin_base")}
-          variacion={
-            !detallePendiente && data.detalle
-              ? variacionProducto(estado, data.detalle.variacion, data.detalle.ventaAnterior)
-              : null
-          }
-          enlaceHorario={`/admin/consumo/productos/${encodeURIComponent(detalleCodigo)}?${consultaCompartida(consulta)}`}
+          tiendaEtiqueta={null}
+          enlaceCompleto={`/admin/consumo/productos/${encodeURIComponent(detalleCodigo)}?${consultaCompartida(consulta)}`}
           onClose={cerrarProducto}
         />
       ) : null}

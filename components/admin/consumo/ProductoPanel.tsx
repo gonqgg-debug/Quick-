@@ -2,74 +2,32 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef } from "react";
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { diasInclusivos } from "@/lib/consumo-metricas";
-import {
-  DEFINICION_COSTO,
-  detalleEstadoCosto,
-  dinero,
-  estadoCosto,
-  etiquetaEstadoCosto,
-  formatPctPlano,
-  subtituloProducto,
-  textoFuenteCosto,
-  type TextoVariacion,
-} from "@/lib/consumo-productos-ui";
-import { addDaysToDayKey, formatDayKey } from "@/lib/local-day";
-import { formatUnidades } from "@/lib/pos-domain";
+import { EvolucionProducto } from "@/components/admin/consumo/EvolucionProducto";
+import { DatosTecnicos, PrecioCostoProducto } from "@/components/admin/consumo/PrecioCostoProducto";
+import { lineaProducto, nombreProducto, serieProducto, variacionDetalle } from "@/lib/consumo-producto-ui";
+import { describirPeriodo, dinero, formatPctPlano, type TextoVariacion } from "@/lib/consumo-productos-ui";
+import { formatUnidades, type ConsumoPeriodo } from "@/lib/pos-domain";
 import type { DetalleProducto } from "@/lib/pos-consumo";
-import { brand } from "@/lib/theme";
-
-type Punto = { dia: string; actual: number | null; comparado: number | null };
-
-function puntosDe(
-  desde: string,
-  hasta: string,
-  actual: Array<{ fecha: string; venta: number }>,
-  comparado: Array<{ fecha: string; venta: number }> | null,
-  desdeComparado: string | null,
-): Punto[] {
-  const mapaActual = new Map(actual.map((punto) => [punto.fecha, punto.venta]));
-  const mapaComparado = new Map((comparado ?? []).map((punto) => [punto.fecha, punto.venta]));
-  const total = Math.max(0, diasInclusivos(desde, hasta));
-  const puntos: Punto[] = [];
-  for (let index = 0; index < total; index += 1) {
-    const fecha = addDaysToDayKey(desde, index);
-    const fechaComparada = desdeComparado ? addDaysToDayKey(desdeComparado, index) : null;
-    puntos.push({
-      dia: fecha.slice(5),
-      actual: mapaActual.has(fecha) ? (mapaActual.get(fecha) as number) : null,
-      comparado: fechaComparada && mapaComparado.has(fechaComparada) ? (mapaComparado.get(fechaComparada) as number) : null,
-    });
-  }
-  return puntos;
-}
 
 export function ProductoPanel({
   codigo,
   detalle,
   error,
   cargando,
-  desde,
-  hasta,
-  desdeComparado,
-  hastaComparado,
+  periodo,
   mostrarComparacion,
-  variacion,
-  enlaceHorario,
+  tiendaEtiqueta,
+  enlaceCompleto,
   onClose,
 }: {
   codigo: string;
   detalle: DetalleProducto | null;
   error: string | null;
   cargando: boolean;
-  desde: string;
-  hasta: string;
-  desdeComparado: string | null;
-  hastaComparado: string | null;
+  periodo: ConsumoPeriodo;
   mostrarComparacion: boolean;
-  variacion: TextoVariacion | null;
-  enlaceHorario: string;
+  tiendaEtiqueta: string | null;
+  enlaceCompleto: string;
   onClose: () => void;
 }) {
   const tituloId = useId();
@@ -113,12 +71,31 @@ export function ProductoPanel({
     };
   }, [codigo]);
 
-  const subtitulo = detalle ? subtituloProducto(detalle) : null;
-  const costoEstado = detalle ? estadoCosto(detalle.costoOrigen, detalle.costo) : "sin_costo";
-  const fuente = detalle ? textoFuenteCosto(detalle.costoOrigen, detalle.costoFecha, detalle.costoRef) : null;
-  const serieComparada = mostrarComparacion ? detalle?.serieAnterior ?? null : null;
-  const puntos = detalle && detalle.serie.length > 0 ? puntosDe(desde, hasta, detalle.serie, serieComparada, desdeComparado) : [];
-  const hayComparado = puntos.some((punto) => punto.comparado != null);
+  const titulo = detalle ? nombreProducto(detalle.nombre, detalle.codigo) : cargando ? "Cargando producto" : "Producto";
+  const linea = detalle ? lineaProducto(detalle.categoria, detalle.presentacion) : null;
+
+  const texto = describirPeriodo(periodo);
+  const serie = detalle
+    ? serieProducto({
+        desde: periodo.desde,
+        hasta: periodo.hasta,
+        dias: detalle.serie.map((dia) => ({ fecha: dia.fecha, venta: dia.venta, unidades: dia.unidades })),
+        diasComparados: (detalle.serieAnterior ?? []).map((dia) => ({ fecha: dia.fecha, venta: dia.venta, unidades: dia.unidades })),
+        cobertura: detalle.cobertura,
+        coberturaComparada: detalle.coberturaAnterior,
+        comparacion: periodo.comparacion,
+        tramo: periodo.tramo,
+        anterior: periodo.anterior,
+        mostrarComparacion,
+      })
+    : null;
+  const contexto = [
+    texto.rango,
+    texto.comparado ? `Comparado ${texto.comparado}` : null,
+    tiendaEtiqueta ? `Tienda ${tiendaEtiqueta}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div className="fixed inset-0 z-50">
@@ -128,34 +105,43 @@ export function ProductoPanel({
         role="dialog"
         aria-modal="true"
         aria-labelledby={tituloId}
-        className="absolute inset-0 flex flex-col bg-white shadow-xl md:inset-y-0 md:left-auto md:w-[440px] md:border-l md:border-[#E6E8E6]"
+        aria-busy={cargando}
+        className="absolute inset-0 flex flex-col bg-[#F4F5F3] shadow-xl md:inset-y-0 md:left-auto md:w-[420px] md:border-l md:border-[#E6E8E6] lg:w-[480px]"
       >
-        <div className="flex items-start justify-between gap-3 border-b border-[#EEF1EE] px-4 py-3">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted">Producto</p>
-            <h2 id={tituloId} className="mt-1 text-lg font-semibold leading-snug text-brand-ink">
-              {detalle?.nombre ?? codigo}
+        <div className="flex shrink-0 items-start gap-3 border-b border-[#E6E8E6] bg-white px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <h2 id={tituloId} className="text-lg font-semibold leading-snug text-brand-ink">
+              {titulo}
             </h2>
-            {subtitulo ? <p className="mt-1 text-sm text-brand-muted">{subtitulo}</p> : null}
+            {linea ? <p className="mt-0.5 text-sm text-brand-muted">{linea}</p> : null}
+            <Link
+              href={enlaceCompleto}
+              onClick={() => sessionStorage.setItem("analitica-foco-producto", codigo)}
+              className="mt-2 inline-flex h-8 items-center rounded-md bg-brand-green px-2.5 text-xs font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
+            >
+              Ver análisis completo
+            </Link>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-xl text-brand-ink hover:bg-black/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-xl text-brand-ink hover:bg-black/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
             aria-label="Cerrar"
           >
             ×
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
           {cargando ? (
             <div className="space-y-3" aria-hidden>
-              <div className="h-16 animate-pulse rounded-md bg-[#F3F4F6]" />
-              <div className="grid grid-cols-2 gap-3">
-                <div className="h-16 animate-pulse rounded-md bg-[#F3F4F6]" />
-                <div className="h-16 animate-pulse rounded-md bg-[#F3F4F6]" />
+              <div className="h-10 animate-pulse rounded-md bg-white" />
+              <div className="grid grid-cols-2 gap-2">
+                <div className="h-16 animate-pulse rounded-md bg-white" />
+                <div className="h-16 animate-pulse rounded-md bg-white" />
+                <div className="h-16 animate-pulse rounded-md bg-white" />
+                <div className="h-16 animate-pulse rounded-md bg-white" />
               </div>
-              <div className="h-40 animate-pulse rounded-md bg-[#F3F4F6]" />
+              <div className="h-44 animate-pulse rounded-md bg-white" />
             </div>
           ) : error ? (
             <p className="rounded-md bg-[#FEE2E2] px-3 py-2 text-sm text-brand-error" role="alert">
@@ -163,83 +149,50 @@ export function ProductoPanel({
             </p>
           ) : detalle ? (
             <div className="space-y-4">
-              <dl className="grid grid-cols-2 gap-3 text-sm">
-                <Dato etiqueta="Categoría" valor={detalle.categoria || "—"} />
-                <Dato etiqueta="SKU" valor={detalle.codigo} />
-                {detalle.codigoBarras ? <Dato etiqueta="Código de barras" valor={detalle.codigoBarras} /> : null}
-              </dl>
-              <p className="text-xs text-brand-muted">
-                Periodo: {formatDayKey(desde)} – {formatDayKey(hasta)}
-                {mostrarComparacion && desdeComparado && hastaComparado
-                  ? `. Comparado: ${formatDayKey(desdeComparado)} – ${formatDayKey(hastaComparado)}.`
-                  : ""}
-              </p>
-              <dl className="grid grid-cols-2 gap-3">
-                <Metrica etiqueta="Ventas" valor={dinero(detalle.venta)} nota="Con ITBIS" />
-                <Metrica etiqueta="Unidades" valor={formatUnidades(detalle.unidades)} />
+              <p className="text-xs text-brand-muted">{contexto}</p>
+              <dl className="grid grid-cols-2 gap-2">
                 <Metrica
-                  etiqueta="Utilidad bruta"
-                  valor={detalle.margen == null ? "—" : dinero(detalle.margen)}
-                  nota={detalle.margen == null ? "Sin costo" : "Solo con costo de referencia"}
+                  etiqueta="Ventas"
+                  valor={dinero(detalle.venta)}
+                  nota="Con ITBIS"
+                  variacion={variacionDetalle(detalle.venta, detalle.ventaAnterior, mostrarComparacion)}
+                  ayuda={mostrarComparacion && detalle.ventaAnterior != null ? `Comparado ${dinero(detalle.ventaAnterior)}` : null}
                 />
-                <Metrica etiqueta="Margen bruto" valor={formatPctPlano(detalle.margenPct)} nota="Sobre la venta neta con costo" />
+                <Metrica
+                  etiqueta="Unidades vendidas"
+                  valor={formatUnidades(detalle.unidades)}
+                  variacion={variacionDetalle(detalle.unidades, detalle.unidadesAnterior, mostrarComparacion)}
+                />
+                <Metrica
+                  etiqueta="Utilidad bruta estimada"
+                  valor={detalle.margen == null ? "—" : dinero(detalle.margen)}
+                  nota={detalle.margen == null ? "Sin costo" : "Con el costo de referencia"}
+                />
+                <Metrica
+                  etiqueta="Margen bruto estimado"
+                  valor={detalle.margen == null ? "—" : formatPctPlano(detalle.margenPct)}
+                  nota={detalle.margen == null ? "Sin costo" : "Sobre la venta neta"}
+                />
               </dl>
-              {variacion ? (
-                <p className="text-sm text-brand-ink">
-                  Variación de ventas: <Variacion item={variacion} />
-                </p>
-              ) : null}
-              <section className="rounded-md border border-[#E6E8E6] px-3 py-3">
-                <h3 className="text-sm font-semibold text-brand-ink">Costo de referencia</h3>
-                <p className="mt-1 text-sm text-brand-ink">{etiquetaEstadoCosto(costoEstado)}</p>
-                <p className="mt-1 text-xs text-brand-muted">{detalleEstadoCosto(costoEstado)}</p>
-                {fuente ? <p className="mt-2 text-sm text-brand-ink">{fuente}</p> : null}
-                {detalle.costo != null ? <p className="mt-1 text-sm tabular-nums text-brand-ink">{dinero(detalle.costo)} por unidad</p> : null}
-                <p className="mt-2 text-xs leading-5 text-brand-muted">{DEFINICION_COSTO}</p>
-                {detalle.productId ? (
-                  <Link href={`/admin/catalogo/productos/${detalle.productId}`} className="mt-2 inline-block text-sm font-semibold text-brand-green">
-                    Abrir en el catálogo
-                  </Link>
-                ) : null}
-              </section>
-              {detalle.serie.length > 0 ? (
-                <section>
-                  <h3 className="text-sm font-semibold text-brand-ink">Ventas por día</h3>
-                  <p className="mt-1 text-xs text-brand-muted">Solo se grafican los días con ventas registradas. Un hueco no es cero.</p>
-                  <div className="mt-3 h-44">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={puntos}>
-                        <XAxis dataKey="dia" tick={{ fontSize: 10, fill: "#6B7280" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                        <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} width={48} />
-                        <Tooltip
-                          formatter={(value, name) => [
-                            typeof value === "number" ? dinero(value) : "Sin registro",
-                            name === "comparado" ? "Comparado" : "Periodo",
-                          ]}
-                          contentStyle={{ borderRadius: 8, borderColor: "#E5E7EB", fontSize: 12 }}
-                        />
-                        <Bar dataKey="actual" name="Periodo" fill={brand.green} radius={[3, 3, 0, 0]} />
-                        {hayComparado ? <Bar dataKey="comparado" name="Comparado" fill="#D1D5DB" radius={[3, 3, 0, 0]} /> : null}
-                      </BarChart>
-                    </ResponsiveContainer>
+              {serie && serie.puntos.length > 0 ? (
+                <section className="rounded-lg border border-[#E6E8E6] bg-white p-3 shadow-sm">
+                  <h3 className="text-sm font-semibold text-brand-ink">Evolución</h3>
+                  <div className="mt-2">
+                    <EvolucionProducto
+                      puntos={serie.puntos}
+                      granularidad={serie.granularidad}
+                      mostrarComparacion={mostrarComparacion}
+                      etiquetaActual={texto.rango}
+                      etiquetaComparada={texto.comparado}
+                      compacto
+                    />
                   </div>
-                  <p className="mt-1 flex gap-4 text-[11px] text-brand-muted">
-                    <span>
-                      <span className="mr-1 inline-block h-2 w-2 rounded-sm align-middle" style={{ backgroundColor: brand.green }} />
-                      Periodo
-                    </span>
-                    {hayComparado ? (
-                      <span>
-                        <span className="mr-1 inline-block h-2 w-2 rounded-sm bg-[#D1D5DB] align-middle" />
-                        Comparado
-                      </span>
-                    ) : null}
-                  </p>
                 </section>
-              ) : null}
-              <Link href={enlaceHorario} className="inline-block text-sm font-semibold text-brand-green">
-                Ver venta por hora
-              </Link>
+              ) : (
+                <p className="rounded-lg border border-[#E6E8E6] bg-white px-3 py-3 text-sm text-brand-muted">Sin ventas de este producto en el periodo.</p>
+              )}
+              <PrecioCostoProducto producto={detalle} compacto />
+              <DatosTecnicos producto={detalle} />
             </div>
           ) : (
             <p className="text-sm text-brand-muted">No hay detalle para este producto.</p>
@@ -250,26 +203,33 @@ export function ProductoPanel({
   );
 }
 
-function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
+function Metrica({
+  etiqueta,
+  valor,
+  nota,
+  variacion,
+  ayuda,
+}: {
+  etiqueta: string;
+  valor: string;
+  nota?: string;
+  variacion?: TextoVariacionDetalleVista;
+  ayuda?: string | null;
+}) {
   return (
-    <div className="min-w-0">
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted">{etiqueta}</dt>
-      <dd className="mt-0.5 break-words text-sm text-brand-ink">{valor}</dd>
-    </div>
-  );
-}
-
-function Metrica({ etiqueta, valor, nota }: { etiqueta: string; valor: string; nota?: string }) {
-  return (
-    <div className="rounded-md border border-[#EEF1EE] px-3 py-2">
+    <div className="rounded-lg border border-[#E6E8E6] bg-white px-3 py-2 shadow-sm">
       <dt className="text-[11px] font-semibold uppercase tracking-wide text-brand-muted">{etiqueta}</dt>
       <dd className="mt-1 text-base font-semibold tabular-nums text-brand-ink">{valor}</dd>
+      {variacion ? <p className="mt-0.5 text-xs"><Variacion item={variacion} /></p> : null}
       {nota ? <p className="mt-0.5 text-[11px] text-brand-muted">{nota}</p> : null}
+      {ayuda ? <p className="text-[11px] text-brand-muted">{ayuda}</p> : null}
     </div>
   );
 }
 
-export function Variacion({ item }: { item: TextoVariacion }) {
+type TextoVariacionDetalleVista = { texto: string; tono: "sube" | "baja" | "igual" | "neutro" };
+
+export function Variacion({ item }: { item: TextoVariacion | TextoVariacionDetalleVista }) {
   const color = item.tono === "sube" ? "#166534" : item.tono === "baja" ? "#B91C1C" : "#6B7280";
   const marca = item.tono === "sube" ? "▲ " : item.tono === "baja" ? "▼ " : "";
   return (

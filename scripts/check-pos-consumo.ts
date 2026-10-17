@@ -31,6 +31,7 @@ import { parseCorreccionPropuesta, parsePropuesta } from "../lib/promo-domain";
 import { indicadoresPromo, ordenAtencion, probabilidadCompleta } from "../lib/promo-presentacion";
 import { clasificarHallazgo, formatoDiaComercial, formatoInstante, graficoAlcanza, leerVisual, recomendacionActual, visualCoherente } from "../lib/miles-presentacion";
 import { avisoCobertura, cascadaVenta, conclusionCambio, diferenciaPagos, elegirDestacados, fechaComparadaDe, franjasHorario, granularidadDe, prepararHallazgo, serieEvolucion, solapaPeriodo } from "../lib/consumo-resumen-ui";
+import { acumularProducto, enlaceCosto, horasProducto, identificadoresProducto, lineaProducto, nombreProducto, precioMedio, serieProducto, variacionDetalle } from "../lib/consumo-producto-ui";
 
 function assert(condition: unknown, message: string) {
   if (!condition) {
@@ -627,3 +628,76 @@ assert(revisarAritmetica({ ingreso: 118, costo: 0, tasa: 18, margen: 10 }).aritm
 assert(probabilidadCompleta({ valor: 0.8, solidez: "alta" }) == null, "ni el lift ni la solidez son una probabilidad");
 assert(ordenAtencion({ estado: "por_revisar", pruebas: [{ estado: "finalizada" }] }) > ordenAtencion({ estado: "archivada", pruebas: [{ estado: "pendiente_evaluacion" }] }), "una prueba por evaluar va antes que el estado de la propuesta");
 assert(indicadoresPromo([{ estado: "por_revisar", pruebas: [{ estado: "finalizada" }], evaluaciones: [] }]).evaluadas === 0, "una prueba finalizada sin evaluación no cuenta como evaluada");
+
+assert(precioMedio(100, 4) === 25 && precioMedio(100, 0) == null, "el precio medio es venta entre unidades y no divide entre cero");
+assert(identificadoresProducto("__export__.product_template_10974_16d96a08").sku == null, "el identificador externo de Odoo no es un SKU");
+assert(identificadoresProducto("AGUA-16").sku === "AGUA-16", "un código comercial se muestra como SKU");
+assert(enlaceCosto("factura", "11111111-1111-1111-1111-111111111111")?.includes("/admin/facturas/"), "la factura de origen tiene enlace");
+assert(enlaceCosto("manual", "odoo") == null, "el costo manual no fabrica un enlace");
+assert(variacionDetalle(10, 0, true).texto === "Sin base porcentual", "base cero y venta actual no es infinito");
+assert(variacionDetalle(10, null, true).texto === "Sin comparación" && variacionDetalle(10, 5, false).texto === "Sin comparación", "sin dato comparado no hay porcentaje");
+assert(!Number.isFinite(Number(variacionDetalle(10, 0, true).texto)), "la etiqueta de base cero no es un número infinito");
+
+const coberturaTres = new Set(["2026-10-01", "2026-10-02"]);
+const tres = acumularProducto(
+  ["2026-10-01", "2026-10-02", "2026-10-03"],
+  new Map([["2026-10-01", { fecha: "2026-10-01", venta: 10, unidades: 2 }]]),
+  coberturaTres,
+);
+assert(tres.venta === 10 && tres.unidades === 2 && tres.precio === 5, "un día cubierto sin venta suma cero y no cambia el precio");
+const hueco = acumularProducto(["2026-10-03"], new Map(), new Set());
+assert(hueco.venta == null && hueco.precio == null, "un día sin cobertura no es cero");
+
+const diasLargos = Array.from({ length: 50 }, (_, index) => {
+  const fecha = new Date(Date.UTC(2026, 0, 1 + index)).toISOString().slice(0, 10);
+  return fecha;
+});
+const serieLarga = serieProducto({
+  desde: diasLargos[0],
+  hasta: diasLargos[diasLargos.length - 1],
+  dias: [
+    { fecha: "2026-01-05", venta: 100, unidades: 1 },
+    { fecha: "2026-01-06", venta: 50, unidades: 2 },
+  ],
+  diasComparados: [],
+  cobertura: ["2026-01-05", "2026-01-06"],
+  coberturaComparada: [],
+  comparacion: "off",
+  tramo: null,
+  anterior: null,
+  mostrarComparacion: false,
+});
+const cuboSemana = serieLarga.puntos.find((punto) => punto.desde <= "2026-01-05" && punto.hasta >= "2026-01-06");
+assert(serieLarga.granularidad === "semana" && cuboSemana?.precio === 50 && cuboSemana.venta === 150, "el precio semanal sale de la suma, no del promedio de precios");
+
+const horas = horasProducto(
+  [
+    { hora: 0, venta: 0, unidades: 0, ordenes: 0, ocurrencias: 2 },
+    { hora: 23, venta: 40, unidades: 1, ordenes: 1, ocurrencias: 2 },
+  ],
+  true,
+);
+assert(horas[0]?.estado === "abierto_sin_ventas" && horas[0].venta === 0, "medianoche cubierta sin ventas es cero");
+assert(horas[1]?.estado === "sin_datos" && horas[1].venta == null, "una hora sin cobertura no es cero");
+assert(horas[23]?.estado === "con_ventas" && horas[23].venta === 40, "las 23:00 no se mezclan con las 00:00");
+assert(horas.length === 24 && new Set(horas.map((hora) => hora.hora)).size === 24, "las horas no se solapan");
+assert(nombreProducto("__export__.product_template_10974_16d96a08", "__export__.product_template_10974_16d96a08") === "Producto sin nombre", "el identificador externo no ocupa el nombre");
+assert(nombreProducto("Agua Brava", "__export__.product_template_1") === "Agua Brava", "el nombre del catálogo se conserva");
+assert(lineaProducto("Sin categoría", null) == null && lineaProducto("Sin match", "") == null, "un marcador interno no es una categoría");
+assert(lineaProducto("Bebidas", "caja") === "Bebidas · caja", "categoría y presentación se muestran juntas");
+const alineada = serieProducto({
+  desde: "2024-02-29",
+  hasta: "2024-03-01",
+  dias: [{ fecha: "2024-02-29", venta: 10, unidades: 1 }],
+  diasComparados: [{ fecha: "2023-02-28", venta: 4, unidades: 1 }],
+  cobertura: ["2024-02-29", "2024-03-01"],
+  coberturaComparada: ["2023-02-28", "2023-03-01"],
+  comparacion: "anio",
+  tramo: { desde: "2024-02-29", hasta: "2024-03-01" },
+  anterior: { desde: "2023-02-28", hasta: "2023-03-01" },
+  mostrarComparacion: true,
+});
+const febrero = alineada.puntos.find((punto) => punto.desde === "2024-02-29");
+const marzo = alineada.puntos.find((punto) => punto.desde === "2024-03-01");
+assert(febrero?.ventaComparada === 4 && febrero.fechaComparadaDesde === "2023-02-28", "el comparado del producto usa la fecha y no el índice");
+assert(marzo?.venta === 0 && marzo.ventaComparada === 0 && marzo.precio == null, "un día cubierto sin unidades es cero en ventas y vacío en precio");

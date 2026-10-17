@@ -1,4 +1,5 @@
-import { COSTO_METODO, coberturaDeFechas, estadoComparacion, estadoHora, promedioOcurrencia, variacionPct, type EstadoComparacion, type EstadoHora } from "@/lib/consumo-metricas";
+import { COSTO_METODO, asociacionCanasta, coberturaDeFechas, estadoComparacion, estadoHora, promedioOcurrencia, variacionPct, type EstadoComparacion, type EstadoHora } from "@/lib/consumo-metricas";
+import { precioMedio, semanaDe } from "@/lib/consumo-producto-ui";
 import { addDaysToDayKey, isDayKey, yesterdayDayKey } from "@/lib/local-day";
 import {
   CONSUMO_PAGE_DEFAULT,
@@ -12,6 +13,7 @@ import {
   parseMetrica,
   parseOrden,
   resolverPeriodo,
+  tasaCatalogo,
   type ConsumoPeriodo,
   type OrdenConsumo,
 } from "@/lib/pos-domain";
@@ -574,7 +576,7 @@ export async function cargarProductos(input: {
 export async function cargarProducto(codigo: string, periodo: ConsumoPeriodo, tienda = TIENDA_DEFAULT) {
   const supabase = getSupabaseAdminClient();
   const comparar = periodo.comparar;
-  const [dias, diasAnt, horas, producto] = await Promise.all([
+  const [dias, diasAnt, producto, cobertura, coberturaAnterior] = await Promise.all([
     paginar((from, to) =>
       supabase
         .from("resumen_producto_dia")
@@ -599,18 +601,21 @@ export async function cargarProducto(codigo: string, periodo: ConsumoPeriodo, ti
             .range(from, to),
         )
       : Promise.resolve([]),
-    supabase.rpc("consumo_producto_horas", {
-      p_tienda: tienda,
-      p_codigo: codigo,
-      p_desde: periodo.desde,
-      p_hasta: periodo.hasta,
-    }),
-    supabase.from("products").select("id, nombre, marca, categoria, codigo_odoo, codigo_barras").eq("codigo_odoo", codigo).limit(1).maybeSingle(),
+    supabase.from("products").select("id, nombre, marca, categoria, precio, tasa_itbis, codigo_odoo, codigo_barras").eq("codigo_odoo", codigo).limit(1).maybeSingle(),
+    fechasResumen(tienda, periodo.desde, periodo.hasta),
+    comparar ? fechasResumen(tienda, periodo.anterior.desde, periodo.anterior.hasta) : Promise.resolve([] as string[]),
   ]);
-  if (horas.error) fallar(horas.error);
   if (producto.error) fallar(producto.error);
 
   const productId = producto.data?.id ? String(producto.data.id) : dias.find((row) => row.product_id)?.product_id ?? null;
+  let presentacion: string | null = null;
+  if (productId) {
+    const presentaciones = await supabase.from("producto_presentaciones").select("presentacion").eq("producto_id", productId).limit(12);
+    if (!presentaciones.error) {
+      const unicas = Array.from(new Set((presentaciones.data ?? []).map((row) => String(row.presentacion ?? "")).filter(Boolean)));
+      presentacion = unicas.length > 0 ? unicas.join(" · ") : null;
+    }
+  }
   const costo = productId
     ? await supabase.from("costo_producto_vigente").select("costo_unit, origen, fecha, ref").eq("product_id", productId).maybeSingle()
     : { data: null, error: null };
@@ -636,8 +641,23 @@ export async function cargarProducto(codigo: string, periodo: ConsumoPeriodo, ti
         venta: num(row.venta),
       }))
     : null;
-  const ventaAnterior = !comparar ? null : serieAnterior && serieAnterior.length > 0 ? Math.round(serieAnterior.reduce((sum, row) => sum + row.venta, 0) * 100) / 100 : null;
+  const anteriorCompleta = comparar && coberturaDeFechas(coberturaAnterior, periodo.anterior.desde, periodo.anterior.hasta).completa;
+  const ventaAnterior = !comparar
+    ? null
+    : serieAnterior && serieAnterior.length > 0
+      ? Math.round(serieAnterior.reduce((sum, row) => sum + row.venta, 0) * 100) / 100
+      : anteriorCompleta
+        ? 0
+        : null;
+  const unidadesAnterior = !comparar
+    ? null
+    : serieAnterior && serieAnterior.length > 0
+      ? Math.round(serieAnterior.reduce((sum, row) => sum + row.unidades, 0) * 1000) / 1000
+      : anteriorCompleta
+        ? 0
+        : null;
   const margen = costoUnit == null ? null : Math.round((ventaNeta - costoUnit * unidadesSinItbis) * 100) / 100;
+  const medio = precioMedio(venta, unidades);
   return {
     codigo,
     productId: productId ? String(productId) : null,
@@ -646,11 +666,16 @@ export async function cargarProducto(codigo: string, periodo: ConsumoPeriodo, ti
     categoria: producto.data ? String(producto.data.categoria ?? "Sin categoría") : "Sin match",
     matchEstado: producto.data ? ("match" as const) : ("sin_match" as const),
     codigoBarras: producto.data?.codigo_barras ? String(producto.data.codigo_barras) : null,
+    presentacion,
+    precioCatalogo: producto.data?.precio == null ? null : num(producto.data.precio),
+    tasaItbis: producto.data ? tasaCatalogo(producto.data.tasa_itbis) : null,
     venta,
     ventaNeta,
     unidades,
     ordenes: serie.reduce((sum, row) => sum + row.ordenes, 0),
-    precioRealizado: unidades !== 0 ? Math.round((venta / unidades) * 100) / 100 : null,
+    precioRealizado: medio,
+    precioMedio: medio,
+    precioMedioAnterior: comparar && ventaAnterior != null && unidadesAnterior != null ? precioMedio(ventaAnterior, unidadesAnterior) : null,
     costo: costoUnit,
     costoOrigen: costo.data?.origen ? String(costo.data.origen) : null,
     costoFecha: costo.data?.fecha ? dia(costo.data.fecha) : null,
@@ -658,15 +683,13 @@ export async function cargarProducto(codigo: string, periodo: ConsumoPeriodo, ti
     margen,
     margenPct: margen == null || ventaNeta === 0 ? null : Math.round((margen / ventaNeta) * 10000) / 10000,
     ventaAnterior,
+    unidadesAnterior,
     variacion: variacionPct(venta, ventaAnterior),
+    cobertura,
+    coberturaAnterior,
+    encontrado: Boolean(producto.data) || dias.length > 0,
     serie,
     serieAnterior,
-    horas: ((horas.data ?? []) as Record<string, unknown>[]).map((row) => ({
-      hora: num(row.hora),
-      ordenes: num(row.n_ordenes),
-      venta: num(row.venta),
-      unidades: num(row.unidades),
-    })),
   };
 }
 
@@ -1114,6 +1137,209 @@ export async function estadoComparacionProductos(tienda: string, periodo: Consum
 }
 
 export type DetalleProducto = Awaited<ReturnType<typeof cargarProducto>>;
+
+export type HoraDetalle = { hora: number; ordenes: number; venta: number; unidades: number; ocurrencias: number | null };
+
+export type AsociadoProducto = {
+  codigo: string;
+  nombre: string;
+  ticketsCompartidos: number;
+  ticketsBase: number;
+  ticketsElegibles: number;
+  proporcion: number | null;
+  lift: number | null;
+  muestraPequena: boolean;
+  limitacion: string | null;
+};
+
+export type VinculoMiles = {
+  origen: "hallazgo" | "propuesta";
+  id: string;
+  titulo: string;
+  tipo: string;
+  resumen: string;
+  periodoDesde: string | null;
+  periodoHasta: string | null;
+  estado: string;
+  actualizadoEn: string | null;
+};
+
+function esUuid(value: string | null): value is string {
+  return Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value));
+}
+
+function faltaFuncion(error: RpcError): boolean {
+  return /does not exist|schema cache|Could not find the function|PGRST202|42P01/i.test(error?.message ?? "");
+}
+
+export async function cargarHorasProducto(
+  codigo: string,
+  periodo: ConsumoPeriodo,
+  tienda: string,
+  reloj: "real" | "caja",
+): Promise<{ reloj: "real" | "caja"; distingueCero: boolean; filas: HoraDetalle[] }> {
+  const supabase = getSupabaseAdminClient();
+  const vista = await supabase.rpc("consumo_producto_horas_vista", {
+    p_tienda: tienda,
+    p_codigo: codigo,
+    p_desde: periodo.desde,
+    p_hasta: periodo.hasta,
+    p_reloj: reloj,
+  });
+  if (!vista.error) {
+    return {
+      reloj,
+      distingueCero: true,
+      filas: ((vista.data ?? []) as Record<string, unknown>[]).map((row) => ({
+        hora: num(row.hora),
+        ordenes: num(row.n_ordenes),
+        venta: num(row.venta),
+        unidades: num(row.unidades),
+        ocurrencias: num(row.ocurrencias),
+      })),
+    };
+  }
+  if (!faltaFuncion(vista.error)) fallar(vista.error);
+  const legacy = await supabase.rpc("consumo_producto_horas", {
+    p_tienda: tienda,
+    p_codigo: codigo,
+    p_desde: periodo.desde,
+    p_hasta: periodo.hasta,
+  });
+  if (legacy.error) fallar(legacy.error);
+  return {
+    reloj: "caja",
+    distingueCero: false,
+    filas: ((legacy.data ?? []) as Record<string, unknown>[]).map((row) => ({
+      hora: num(row.hora),
+      ordenes: num(row.n_ordenes),
+      venta: num(row.venta),
+      unidades: num(row.unidades),
+      ocurrencias: null,
+    })),
+  };
+}
+
+export async function cargarAsociadosProducto(
+  codigo: string,
+  periodo: ConsumoPeriodo,
+  tienda: string,
+): Promise<{ asociados: AsociadoProducto[]; nota: string | null }> {
+  const supabase = getSupabaseAdminClient();
+  const filtro = (columna: "producto_a" | "producto_b") =>
+    supabase
+      .from("resumen_canasta_semana")
+      .select("producto_a, producto_b, n_ordenes_juntos")
+      .eq("tienda", tienda)
+      .eq(columna, codigo)
+      .gte("semana", semanaDe(periodo.desde))
+      .lte("semana", semanaDe(periodo.hasta))
+      .limit(40);
+  const [comoA, comoB] = await Promise.all([filtro("producto_a"), filtro("producto_b")]);
+  if (comoA.error || comoB.error) return { asociados: [], nota: null };
+  const juntos = new Map<string, number>();
+  for (const row of [...(comoA.data ?? []), ...(comoB.data ?? [])]) {
+    const otro = String(row.producto_a) === codigo ? String(row.producto_b ?? "") : String(row.producto_a ?? "");
+    if (!otro || otro === codigo) continue;
+    juntos.set(otro, (juntos.get(otro) ?? 0) + num(row.n_ordenes_juntos));
+  }
+  const top = Array.from(juntos.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 5);
+  if (top.length === 0) return { asociados: [], nota: null };
+  const medidos = await Promise.all(
+    top.map(async ([companero]) => {
+      const { data, error } = await supabase.rpc("consumo_canasta_par", {
+        p_tienda: tienda,
+        p_desde: periodo.desde,
+        p_hasta: periodo.hasta,
+        p_a: codigo,
+        p_b: companero,
+      });
+      if (error) return null;
+      const row = Array.isArray(data) ? data[0] : null;
+      const cuentas = {
+        elegibles: num(row?.elegibles),
+        conA: num(row?.con_a),
+        conB: num(row?.con_b),
+        conAmbos: num(row?.con_ambos),
+      };
+      const asociacion = asociacionCanasta(cuentas);
+      if (cuentas.conAmbos <= 0) return null;
+      return { codigo: companero, cuentas, asociacion };
+    }),
+  );
+  const vigentes = medidos.filter((item): item is NonNullable<typeof item> => item != null);
+  if (vigentes.length === 0) {
+    return {
+      asociados: [],
+      nota: "La canasta semanal registra este producto junto a otros, pero en el periodo seleccionado no hay tickets compartidos.",
+    };
+  }
+  const nombres = await supabase.from("products").select("codigo_odoo, nombre").in(
+    "codigo_odoo",
+    vigentes.map((item) => item.codigo),
+  );
+  const porCodigo = new Map(
+    ((nombres.data ?? []) as Array<{ codigo_odoo?: string; nombre?: string }>).map((row) => [String(row.codigo_odoo ?? ""), String(row.nombre ?? "")]),
+  );
+  return {
+    nota: "Pares de la canasta semanal que toca este periodo, contados otra vez en los tickets del periodo. Compartir ticket no significa que un descuento vaya a funcionar.",
+    asociados: vigentes.map((item) => ({
+      codigo: item.codigo,
+      nombre: porCodigo.get(item.codigo) || item.codigo,
+      ticketsCompartidos: item.cuentas.conAmbos,
+      ticketsBase: item.cuentas.conA,
+      ticketsElegibles: item.cuentas.elegibles,
+      proporcion: item.asociacion.dadoA,
+      lift: item.asociacion.fuerza,
+      muestraPequena: item.asociacion.muestraPequena,
+      limitacion: item.asociacion.limitacion,
+    })),
+  };
+}
+
+export async function cargarMilesProducto(codigo: string, productId: string | null, tienda: string): Promise<VinculoMiles[]> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.rpc("miles_producto_vinculos", {
+    p_tienda: tienda,
+    p_codigo: codigo,
+    p_product_id: esUuid(productId) ? productId : null,
+  });
+  if (error) return [];
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    origen: row.origen === "propuesta" ? ("propuesta" as const) : ("hallazgo" as const),
+    id: String(row.id ?? ""),
+    titulo: String(row.titulo ?? ""),
+    tipo: String(row.tipo ?? ""),
+    resumen: String(row.resumen ?? ""),
+    periodoDesde: row.periodo_desde ? dia(row.periodo_desde) : null,
+    periodoHasta: row.periodo_hasta ? dia(row.periodo_hasta) : null,
+    estado: String(row.estado ?? ""),
+    actualizadoEn: row.actualizado_en ? String(row.actualizado_en) : null,
+  })).filter((item) => item.id && item.titulo);
+}
+
+export async function consultarProducto(codigo: string, params: { get(name: string): string | null }, now = Date.now()) {
+  let tiendas = [TIENDA_DEFAULT];
+  try {
+    tiendas = await tiendasConsumo();
+  } catch {
+    tiendas = [TIENDA_DEFAULT];
+  }
+  const periodo = periodoDesdeParams(params, now);
+  const tienda = tiendaPermitida(params.get("tienda"), tiendas, TIENDA_DEFAULT);
+  const reloj = params.get("reloj") === "caja" ? "caja" : "real";
+  const producto = await cargarProducto(codigo, periodo, tienda);
+  const [frescura, comparacionEstado, horas, canasta, miles] = await Promise.all([
+    cargarFrescura(now, tienda),
+    estadoComparacionProductos(tienda, periodo, producto.ventaAnterior),
+    cargarHorasProducto(codigo, periodo, tienda, reloj),
+    cargarAsociadosProducto(codigo, periodo, tienda),
+    cargarMilesProducto(codigo, producto.productId, tienda),
+  ]);
+  return { producto, periodo, tienda, tiendas, frescura, comparacionEstado, horas, asociados: canasta.asociados, canastaNota: canasta.nota, miles };
+}
 
 export async function cargarPaginaProductos(input: {
   periodo: ConsumoPeriodo;

@@ -59,7 +59,7 @@ export function ConsumoEncabezado({ frescura }: { frescura: FrescuraConsumo | nu
     router.push(conQuery(pathname, params, patch));
   }
 
-  if (esListaProductos || esResumen) {
+  if (esListaProductos || esResumen || esDetalleProducto) {
     return null;
   }
 

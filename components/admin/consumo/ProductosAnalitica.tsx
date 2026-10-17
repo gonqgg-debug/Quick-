@@ -171,7 +171,7 @@ export function ProductosAnalitica({ inicial, consultaInicial }: { inicial: Payl
   const margenPct = margenAgregado(data.resumen.margen, data.resumen.ventaNetaConCosto);
   const columnasVisibles = useMemo(() => new Set(columnas), [columnas]);
   const exportHref = `/api/admin/consumo/productos/export?${consultaExportacion(consulta)}`;
-  const enlaceHorario = detalleCodigo
+  const enlaceCompleto = detalleCodigo
     ? `/admin/consumo/productos/${encodeURIComponent(detalleCodigo)}?${consultaExportacion(consulta)}`
     : "/admin/consumo/productos";
 
@@ -549,17 +549,10 @@ export function ProductosAnalitica({ inicial, consultaInicial }: { inicial: Payl
           detalle={!detallePendiente && data.detalleCodigo === detalleCodigo ? data.detalle : null}
           error={!detallePendiente && data.detalleCodigo === detalleCodigo ? data.detalleError : null}
           cargando={detallePendiente}
-          desde={periodoVisible.desde}
-          hasta={periodoVisible.hasta}
-          desdeComparado={mostrarVariacion ? periodoVisible.anterior.desde : null}
-          hastaComparado={mostrarVariacion ? periodoVisible.anterior.hasta : null}
+          periodo={periodoVisible}
           mostrarComparacion={mostrarVariacion}
-          variacion={
-            data.detalle && data.detalleCodigo === detalleCodigo
-              ? variacionProducto(data.comparacionEstado, data.detalle.variacion, data.detalle.ventaAnterior)
-              : null
-          }
-          enlaceHorario={enlaceHorario}
+          tiendaEtiqueta={tiendas.length > 1 ? etiquetaTienda(leida.tienda) : null}
+          enlaceCompleto={enlaceCompleto}
           onClose={() => aplicar({ detalle: null })}
         />
       ) : null}
