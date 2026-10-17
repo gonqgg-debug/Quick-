@@ -3,8 +3,36 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #1a1a1a;
+  /* primary brand.green #7EB341 · foreground brand.ink #1A1A1A
+     muted-foreground brand.muted #6B7280 · destructive brand.error #DC2626
+     warning brand.orange #F79521 · border #E5E7EB · radius 0.75rem */
+  --background: 0 0% 100%;
+  --foreground: 0 0% 10.2%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 10.2%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 10.2%;
+  --primary: 88 46.7% 47.8%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 14.3% 95.9%;
+  --secondary-foreground: 0 0% 10.2%;
+  --muted: 220 14.3% 95.9%;
+  --muted-foreground: 220 8.9% 46.1%;
+  --accent: 88 44.8% 94.3%;
+  --accent-foreground: 0 0% 10.2%;
+  --destructive: 0 72.2% 50.6%;
+  --destructive-foreground: 0 0% 100%;
+  --warning: 33 93% 54.9%;
+  --warning-foreground: 0 0% 10.2%;
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
+  --ring: 88 46.7% 47.8%;
+  --chart-1: 88 46.7% 47.8%;
+  --chart-2: 220 8.9% 46.1%;
+  --chart-3: 33 93% 54.9%;
+  --chart-4: 204.2 72.8% 44.7%;
+  --chart-5: 0 0% 10.2%;
+  --radius: 0.75rem;
   --brand-green: #7eb341;
   --brand-orange: #f79521;
   --brand-blue: #1f82c5;
@@ -178,5 +206,14 @@ body {
     bottom: 24px;
     height: 60px;
     width: 60px;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
   }
 }

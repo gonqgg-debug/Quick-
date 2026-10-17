@@ -2,17 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Bar, CartesianGrid, ComposedChart, Line, LineChart, XAxis, YAxis } from "recharts";
 import { daysRemaining, formatDaysRemaining } from "@/lib/admin-compras-shared";
 import {
   formatPercent,
@@ -27,21 +17,28 @@ import {
 } from "@/lib/admin-dashboard-shared";
 import { formatDayKey, todayDayKey } from "@/lib/local-day";
 import { formatPrice } from "@/lib/money";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import { cn } from "@/lib/utils";
 
-const INK = "#111827";
-const MUTED = "#6B7280";
-const BORDER = "#E5E7EB";
-const GREEN = "#059669";
-const RED = "#DC2626";
-const ORANGE = "#D97706";
-const BAR = "#374151";
-const META_LINE = "#9CA3AF";
-
-const SEMAFORO: Record<SemaforoNivel, { accent: string; label: string }> = {
-  ok: { accent: GREEN, label: "Dentro del presupuesto" },
-  cuidado: { accent: ORANGE, label: "Cuidado" },
-  stop: { accent: RED, label: "Stop" },
+const SEMAFORO: Record<
+  SemaforoNivel,
+  { badge: "success" | "warning" | "stop"; label: string; rail: string }
+> = {
+  ok: { badge: "success", label: "Dentro del presupuesto", rail: "border-l-primary" },
+  cuidado: { badge: "warning", label: "Cuidado", rail: "border-l-warning" },
+  stop: { badge: "stop", label: "Stop", rail: "border-l-destructive" },
 };
+
+const sparklineConfig = {
+  value: { label: "Venta", color: "hsl(var(--foreground))" },
+} satisfies ChartConfig;
+
+const tendenciaConfig = {
+  ventaReal: { label: "Venta real", color: "hsl(var(--chart-1))" },
+  metaDelDia: { label: "Meta del día", color: "hsl(var(--chart-2))" },
+} satisfies ChartConfig;
 
 export function AdminDashboard({ data }: { data: AdminDashboardData }) {
   const [chartReady, setChartReady] = useState(false);
@@ -135,26 +132,24 @@ function MetricCard({
   sparklineCumulative?: boolean;
   chartReady?: boolean;
 }) {
-  const tone = signed == null ? INK : signed >= 0 ? GREEN : RED;
+  const tone = signed == null ? "text-foreground" : signed >= 0 ? "text-primary" : "text-destructive";
   const arrow = signed == null ? null : signed >= 0 ? "↑" : "↓";
   return (
-    <section className="min-w-0 rounded-lg border border-[#E5E7EB] bg-white px-3 py-3 shadow-sm sm:px-4 sm:py-4">
-      <p className="text-[10px] font-medium uppercase tracking-wide sm:text-xs" style={{ color: MUTED }}>
-        {label}
-      </p>
-      <p className="mt-1.5 text-[15px] font-semibold leading-tight tabular-nums sm:text-xl lg:text-2xl" style={{ color: tone }}>
-        {arrow ? <span className="mr-1 text-base font-medium">{arrow}</span> : null}
-        {value}
-        {hint ? (
-          <span className="ml-1 text-sm font-medium" style={{ color: MUTED }}>
-            {hint}
-          </span>
+    <Card className="min-w-0 shadow-sm">
+      <CardHeader className="space-y-0 p-3 pb-0 sm:p-4 sm:pb-0">
+        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:text-xs">{label}</p>
+      </CardHeader>
+      <CardContent className="p-3 pt-1.5 sm:p-4 sm:pt-1.5">
+        <p className={cn("text-[15px] font-semibold leading-tight tabular-nums sm:text-xl lg:text-2xl", tone)}>
+          {arrow ? <span className="mr-1 text-base font-medium">{arrow}</span> : null}
+          {value}
+          {hint ? <span className="ml-1 text-sm font-medium text-muted-foreground">{hint}</span> : null}
+        </p>
+        {sparkline && sparkline.length > 0 ? (
+          <Sparkline points={sparkline} cumulative={sparklineCumulative} ready={chartReady} />
         ) : null}
-      </p>
-      {sparkline && sparkline.length > 0 ? (
-        <Sparkline points={sparkline} cumulative={sparklineCumulative} ready={chartReady} />
-      ) : null}
-    </section>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -172,16 +167,22 @@ function Sparkline({
     running += point.ventaReal;
     return { fecha: point.fecha, value: cumulative ? running : point.ventaReal };
   });
+  if (!ready) {
+    return <div className="mt-3 h-10 w-full" />;
+  }
   return (
-    <div className="mt-3 h-10 w-full">
-      {ready ? (
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={series} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-            <Line type="monotone" dataKey="value" stroke={INK} strokeWidth={1.5} dot={false} isAnimationActive={false} />
-          </LineChart>
-        </ResponsiveContainer>
-      ) : null}
-    </div>
+    <ChartContainer config={sparklineConfig} className="mt-3 aspect-auto h-10 w-full">
+      <LineChart data={series} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+        <Line
+          type="monotone"
+          dataKey="value"
+          stroke="var(--color-value)"
+          strokeWidth={1.5}
+          dot={false}
+          isAnimationActive={false}
+        />
+      </LineChart>
+    </ChartContainer>
   );
 }
 
@@ -201,32 +202,39 @@ function DisponibleCard({
   const tone = SEMAFORO[nivel];
   const arrow = disponible >= 0 ? "↑" : "↓";
   return (
-    <section
-      className="col-span-2 min-w-0 rounded-lg border border-[#E5E7EB] bg-white px-3 py-3 shadow-sm sm:px-4 sm:py-4 md:col-span-3 lg:col-span-2"
-      style={{ borderLeftWidth: 4, borderLeftColor: tone.accent }}
+    <Card
+      className={cn(
+        "col-span-2 min-w-0 border-l-4 shadow-sm md:col-span-3 lg:col-span-2",
+        tone.rail
+      )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-xs font-medium uppercase tracking-wide" style={{ color: MUTED }}>
-          {title}
-        </p>
-        <span
-          className="rounded-full border px-2 py-0.5 text-[10px] font-medium tracking-wide"
-          style={{ borderColor: `${tone.accent}55`, color: tone.accent }}
+      <CardHeader className="flex-row items-start justify-between space-y-0 p-3 pb-0 sm:p-4 sm:pb-0">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
+        <Badge
+          variant={tone.badge}
+          className="rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide shadow-none"
         >
           {tone.label}
-        </span>
-      </div>
-      <p className="mt-2 text-2xl font-semibold leading-tight tabular-nums sm:text-4xl lg:text-5xl" style={{ color: INK }}>
-        <span className="mr-1 text-lg font-medium sm:text-2xl lg:text-3xl" style={{ color: disponible >= 0 ? GREEN : RED }}>
-          {arrow}
-        </span>
-        {formatSignedPrice(disponible)}
-      </p>
-      <p className="mt-1 text-xs" style={{ color: MUTED }}>
-        Presupuesto {formatPrice(presupuesto)}
-        {compras != null ? ` · Compras ${formatPrice(compras)}` : null}
-      </p>
-    </section>
+        </Badge>
+      </CardHeader>
+      <CardContent className="p-3 pt-2 sm:p-4 sm:pt-2">
+        <p className="text-2xl font-semibold leading-tight tabular-nums text-foreground sm:text-4xl lg:text-5xl">
+          <span
+            className={cn(
+              "mr-1 text-lg font-medium sm:text-2xl lg:text-3xl",
+              disponible >= 0 ? "text-primary" : "text-destructive"
+            )}
+          >
+            {arrow}
+          </span>
+          {formatSignedPrice(disponible)}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Presupuesto {formatPrice(presupuesto)}
+          {compras != null ? ` · Compras ${formatPrice(compras)}` : null}
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -238,20 +246,18 @@ function AlertasSection({
   porVencer: DashboardFactura[];
 }) {
   return (
-    <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold" style={{ color: INK }}>
-          Alertas
-        </h2>
-        <Link href="/admin/compras" className="text-sm font-medium" style={{ color: MUTED }}>
+    <Card className="shadow-sm">
+      <CardHeader className="flex-row flex-wrap items-center justify-between space-y-0 p-5 pb-0">
+        <CardTitle className="text-base font-semibold">Alertas</CardTitle>
+        <Link href="/admin/compras" className="text-sm font-medium text-muted-foreground">
           Ver compras
         </Link>
-      </div>
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+      </CardHeader>
+      <CardContent className="grid gap-3 p-5 pt-4 lg:grid-cols-2">
         <FacturaList title="Facturas vencidas" empty="No hay facturas vencidas" facturas={vencidas} tone="stop" />
         <FacturaList title="Por vencer en 3 días" empty="No hay facturas por vencer" facturas={porVencer} tone="cuidado" />
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -266,35 +272,33 @@ function FacturaList({
   facturas: DashboardFactura[];
   tone: Exclude<SemaforoNivel, "ok">;
 }) {
-  const color = SEMAFORO[tone].accent;
   const today = todayDayKey();
 
   return (
-    <div className="rounded-lg border border-[#E5E7EB] px-4 py-3" style={{ borderLeftWidth: 3, borderLeftColor: color }}>
-      <p className="text-xs font-medium uppercase tracking-wide" style={{ color: MUTED }}>
+    <div
+      className={cn(
+        "rounded-lg border border-l-[3px] px-4 py-3",
+        tone === "stop" ? "border-l-destructive" : "border-l-warning"
+      )}
+    >
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {title}
         {facturas.length > 0 ? ` · ${facturas.length}` : null}
       </p>
       {facturas.length === 0 ? (
-        <p className="mt-2 text-sm" style={{ color: MUTED }}>
-          {empty}
-        </p>
+        <p className="mt-2 text-sm text-muted-foreground">{empty}</p>
       ) : (
         <ul className="mt-2 space-y-2">
           {facturas.map((factura) => (
             <li key={factura.id}>
               <Link href="/admin/compras" className="flex items-start justify-between gap-3 text-sm">
                 <div className="min-w-0">
-                  <p className="truncate font-medium" style={{ color: INK }}>
-                    {factura.proveedorNombre}
-                  </p>
-                  <p className="text-xs" style={{ color: MUTED }}>
+                  <p className="truncate font-medium text-foreground">{factura.proveedorNombre}</p>
+                  <p className="text-xs text-muted-foreground">
                     {formatDayKey(factura.dueDate)} · {formatDaysRemaining(daysRemaining(factura.dueDate, today))}
                   </p>
                 </div>
-                <p className="shrink-0 font-semibold tabular-nums" style={{ color: INK }}>
-                  {formatPrice(factura.monto)}
-                </p>
+                <p className="shrink-0 font-semibold tabular-nums text-foreground">{formatPrice(factura.monto)}</p>
               </Link>
             </li>
           ))}
@@ -317,28 +321,23 @@ function TendenciaSection({
   const today = todayDayKey();
 
   return (
-    <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-sm">
-      <h2 className="text-base font-semibold" style={{ color: INK }}>
-        Últimos 7 días
-      </h2>
-      <p className="mt-1 text-sm" style={{ color: MUTED }}>
-        Venta real vs meta del día, con el déficit o superávit acumulado del mes.
-      </p>
-
-      {dias.length === 0 ? (
-        <p className="mt-6 text-sm" style={{ color: MUTED }}>
-          Todavía no hay días transcurridos en el mes activo.
-        </p>
-      ) : (
-        <>
-          <div className="mt-4 h-52 w-full">
+    <Card className="shadow-sm">
+      <CardHeader className="space-y-1 p-5 pb-0">
+        <CardTitle className="text-base font-semibold">Últimos 7 días</CardTitle>
+        <CardDescription>Venta real vs meta del día, con el déficit o superávit acumulado del mes.</CardDescription>
+      </CardHeader>
+      <CardContent className="p-5 pt-4">
+        {dias.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">Todavía no hay días transcurridos en el mes activo.</p>
+        ) : (
+          <>
             {chartReady ? (
-              <ResponsiveContainer width="100%" height="100%">
+              <ChartContainer config={tendenciaConfig} className="aspect-auto h-52 w-full">
                 <ComposedChart data={dias} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={BORDER} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: MUTED }} axisLine={false} tickLine={false} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                   <YAxis
-                    tick={{ fontSize: 11, fill: MUTED }}
+                    tick={{ fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                     width={64}
@@ -346,114 +345,119 @@ function TendenciaSection({
                       new Intl.NumberFormat("es-DO", { notation: "compact", maximumFractionDigits: 1 }).format(value)
                     }
                   />
-                  <Tooltip
-                    cursor={{ fill: "#F9FAFB" }}
-                    formatter={(value, name) => [
-                      formatPrice(typeof value === "number" ? value : 0),
-                      name === "ventaReal" ? "Venta real" : "Meta del día",
-                    ]}
-                    contentStyle={{ borderRadius: 8, borderColor: BORDER, fontSize: 13 }}
+                  <ChartTooltip
+                    cursor={{ fill: "hsl(var(--muted))" }}
+                    content={
+                      <ChartTooltipContent
+                        formatter={(value, name) => (
+                          <div className="flex w-full items-center justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              {name === "ventaReal" ? "Venta real" : "Meta del día"}
+                            </span>
+                            <span className="font-mono font-medium tabular-nums text-foreground">
+                              {formatPrice(typeof value === "number" ? value : Number(value) || 0)}
+                            </span>
+                          </div>
+                        )}
+                      />
+                    }
                   />
-                  <Bar dataKey="ventaReal" name="ventaReal" fill={BAR} radius={[3, 3, 0, 0]} maxBarSize={28} />
+                  <Bar
+                    dataKey="ventaReal"
+                    name="ventaReal"
+                    fill="var(--color-ventaReal)"
+                    radius={[3, 3, 0, 0]}
+                    maxBarSize={28}
+                  />
                   <Line
                     type="monotone"
                     dataKey="metaDelDia"
                     name="metaDelDia"
-                    stroke={META_LINE}
+                    stroke="var(--color-metaDelDia)"
                     strokeWidth={2}
-                    dot={{ r: 3, fill: META_LINE }}
+                    dot={{ r: 3, fill: "var(--color-metaDelDia)" }}
                     isAnimationActive={false}
                   />
                 </ComposedChart>
-              </ResponsiveContainer>
-            ) : null}
-          </div>
+              </ChartContainer>
+            ) : (
+              <div className="h-52 w-full" />
+            )}
 
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead>
-                <tr className="text-xs font-medium uppercase tracking-wide" style={{ color: MUTED }}>
-                  <th className="border-b border-[#E5E7EB] px-3 py-2 font-medium">Fecha</th>
-                  <th className="border-b border-[#E5E7EB] px-3 py-2 text-right font-medium">Venta real</th>
-                  <th className="border-b border-[#E5E7EB] px-3 py-2 text-right font-medium">Meta del día</th>
-                  <th className="border-b border-[#E5E7EB] px-3 py-2 text-right font-medium">Diferencia</th>
-                  <th className="border-b border-[#E5E7EB] px-3 py-2 text-right font-medium">Acum. del mes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dias.map((dia) => (
-                  <tr key={dia.fecha}>
-                    <td className="border-b border-[#F3F4F6] px-3 py-2.5 font-medium" style={{ color: INK }}>
-                      {dia.label}
-                    </td>
-                    <td className="border-b border-[#F3F4F6] px-3 py-2.5 text-right tabular-nums" style={{ color: INK }}>
-                      {formatPrice(dia.ventaReal)}
-                    </td>
-                    <td className="border-b border-[#F3F4F6] px-3 py-2.5 text-right tabular-nums" style={{ color: MUTED }}>
-                      {formatPrice(dia.metaDelDia)}
-                    </td>
-                    <SignedCell value={dia.diferencia} />
-                    <SignedCell value={dia.acumuladoMes} />
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead>
+                  <tr className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <th className="border-b border-border px-3 py-2 font-medium">Fecha</th>
+                    <th className="border-b border-border px-3 py-2 text-right font-medium">Venta real</th>
+                    <th className="border-b border-border px-3 py-2 text-right font-medium">Meta del día</th>
+                    <th className="border-b border-border px-3 py-2 text-right font-medium">Diferencia</th>
+                    <th className="border-b border-border px-3 py-2 text-right font-medium">Acum. del mes</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-
-      <div className="mt-8 border-t border-[#E5E7EB] pt-5">
-        <h3 className="text-base font-semibold" style={{ color: INK }}>
-          Próximos 7 días
-        </h3>
-        <p className="mt-1 text-sm" style={{ color: MUTED }}>
-          Solo fechas y meta, para ver qué viene.
-        </p>
-        {proximos.length === 0 ? (
-          <p className="mt-4 text-sm" style={{ color: MUTED }}>
-            No hay metas cargadas para los próximos días.
-          </p>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[320px] text-left text-sm">
-              <thead>
-                <tr className="text-xs font-medium uppercase tracking-wide" style={{ color: MUTED }}>
-                  <th className="border-b border-[#E5E7EB] px-3 py-2 font-medium">Fecha</th>
-                  <th className="border-b border-[#E5E7EB] px-3 py-2 text-right font-medium">Meta</th>
-                </tr>
-              </thead>
-              <tbody>
-                {proximos.map((dia) => (
-                  <tr key={dia.fecha}>
-                    <td className="border-b border-[#F3F4F6] px-3 py-2.5 font-medium" style={{ color: INK }}>
-                      {dia.label}
-                      {dia.fecha === today ? (
-                        <span className="ml-2 text-xs font-medium" style={{ color: MUTED }}>
-                          Hoy
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="border-b border-[#F3F4F6] px-3 py-2.5 text-right tabular-nums" style={{ color: INK }}>
-                      {formatPrice(dia.metaDelDia)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td className="px-3 py-2.5 text-sm font-semibold" style={{ color: INK }}>
-                    Total 7 días
-                  </td>
-                  <td className="px-3 py-2.5 text-right text-sm font-semibold tabular-nums" style={{ color: INK }}>
-                    {formatPrice(metaProximos)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {dias.map((dia) => (
+                    <tr key={dia.fecha}>
+                      <td className="border-b border-muted px-3 py-2.5 font-medium text-foreground">{dia.label}</td>
+                      <td className="border-b border-muted px-3 py-2.5 text-right tabular-nums text-foreground">
+                        {formatPrice(dia.ventaReal)}
+                      </td>
+                      <td className="border-b border-muted px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                        {formatPrice(dia.metaDelDia)}
+                      </td>
+                      <SignedCell value={dia.diferencia} />
+                      <SignedCell value={dia.acumuladoMes} />
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
-      </div>
-    </section>
+
+        <div className="mt-8 border-t border-border pt-5">
+          <h3 className="text-base font-semibold text-foreground">Próximos 7 días</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Solo fechas y meta, para ver qué viene.</p>
+          {proximos.length === 0 ? (
+            <p className="mt-4 text-sm text-muted-foreground">No hay metas cargadas para los próximos días.</p>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[320px] text-left text-sm">
+                <thead>
+                  <tr className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <th className="border-b border-border px-3 py-2 font-medium">Fecha</th>
+                    <th className="border-b border-border px-3 py-2 text-right font-medium">Meta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {proximos.map((dia) => (
+                    <tr key={dia.fecha}>
+                      <td className="border-b border-muted px-3 py-2.5 font-medium text-foreground">
+                        {dia.label}
+                        {dia.fecha === today ? (
+                          <span className="ml-2 text-xs font-medium text-muted-foreground">Hoy</span>
+                        ) : null}
+                      </td>
+                      <td className="border-b border-muted px-3 py-2.5 text-right tabular-nums text-foreground">
+                        {formatPrice(dia.metaDelDia)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td className="px-3 py-2.5 text-sm font-semibold text-foreground">Total 7 días</td>
+                    <td className="px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-foreground">
+                      {formatPrice(metaProximos)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -461,8 +465,10 @@ function SignedCell({ value }: { value: number }) {
   const positive = value >= 0;
   return (
     <td
-      className="border-b border-[#F3F4F6] px-3 py-2.5 text-right font-medium tabular-nums"
-      style={{ color: positive ? GREEN : RED }}
+      className={cn(
+        "border-b border-muted px-3 py-2.5 text-right font-medium tabular-nums",
+        positive ? "text-primary" : "text-destructive"
+      )}
     >
       {positive ? "↑ " : "↓ "}
       {formatSignedPrice(value)}
