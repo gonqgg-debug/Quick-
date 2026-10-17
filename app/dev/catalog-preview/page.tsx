@@ -141,7 +141,7 @@ const categories: CatalogCategoryChip[] = [
 const byId = Object.fromEntries(products.map((product) => [product.id, product]));
 
 const recommendations: CatalogRecommendations = {
-  bestSellers: [byId["p-agua"], byId["p-arroz"], byId["p-coca"], byId["p-leche"]],
+  bestSellers: [],
   lastOrder: {
     orderId: "preview-order",
     createdAt: new Date().toISOString(),
@@ -156,27 +156,27 @@ const recommendations: CatalogRecommendations = {
 
 const collections: CatalogCollectionRail[] = [
   {
+    id: "lo-mas-pedido",
+    title: "Lo más pedido en Quick!",
+    subtitle: "Los favoritos de todos en el residencial",
+    products: [byId["p-agua"], byId["p-arroz"], byId["p-coca"], byId["p-leche"]],
+  },
+  {
     id: "desayuno",
     title: "Para el desayuno",
     subtitle: "Café, leche, pan y lo que se pide a primera hora",
-    match: { kind: "keywords", keys: ["leche", "yogurt", "cereal"] },
-    categoryNames: ["Lácteos y derivados", "Cereales y desayunos"],
     products: [byId["p-leche"], byId["p-yogurt"], byId["p-cereal"]],
   },
   {
     id: "picar",
     title: "Para picar",
     subtitle: "Snacks, chips y antojos del residencial",
-    match: { kind: "keywords", keys: ["chips", "galleta"] },
-    categoryNames: ["Snacks y dulces"],
     products: [byId["p-chips"], byId["p-galleta"]],
   },
   {
     id: "cocinar",
     title: "Para cocinar",
     subtitle: "Aceites, granos y lo básico de la cocina",
-    match: { kind: "keywords", keys: ["aceite", "arroz"] },
-    categoryNames: ["Aceites y Grasas", "Artículos de Conveniencia"],
     products: [byId["p-aceite"], byId["p-arroz"]],
   },
 ];

@@ -2,42 +2,41 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchCatalogProductsPage } from "@/lib/catalog-products-client";
-import { getCatalogCollection, productMatchesCollection } from "@/lib/catalog-collections-shared";
+import { filterCollectionProducts } from "@/lib/catalog-collections-shared";
 import type { CatalogCategoryChip, CatalogProductSort } from "@/lib/catalog-products-shared";
 import type { Product } from "@/lib/types";
 
 function filterLocalCatalogProducts({
   products,
   categoria,
+  collectionProducts,
   collection,
   q,
   sort,
 }: {
   products: Product[];
   categoria: string | null;
+  collectionProducts?: Product[];
   collection?: string | null;
   q: string;
   sort?: CatalogProductSort | null;
 }): Product[] {
   const needle = q.trim().toLowerCase();
-  const def = getCatalogCollection(collection);
-  let next = products.filter((product) => {
-    if (categoria && product.categoria !== categoria) {
-      return false;
-    }
-    if (!categoria && def && !productMatchesCollection(product, def) && def.match.kind === "keywords") {
-      return false;
-    }
-    if (!needle) {
-      return true;
-    }
-    return (
-      product.nombre.toLowerCase().includes(needle) ||
-      (product.marca ?? "").toLowerCase().includes(needle) ||
-      product.categoria.toLowerCase().includes(needle) ||
-      (product.descripcion ?? "").toLowerCase().includes(needle)
-    );
-  });
+  let next =
+    collection && !categoria
+      ? [...(collectionProducts ?? [])]
+      : products.filter((product) => {
+          if (categoria && product.categoria !== categoria) {
+            return false;
+          }
+          return true;
+        });
+
+  next = filterCollectionProducts(next, needle);
+
+  if (collection && !categoria) {
+    return next;
+  }
 
   if (sort === "alpha" || needle) {
     next = [...next].sort(
@@ -55,6 +54,7 @@ export function useCatalogProductPages({
   sessionId,
   categoria,
   collection,
+  collectionProducts,
   q,
   sort,
   localProducts,
@@ -65,6 +65,7 @@ export function useCatalogProductPages({
   sessionId: string;
   categoria: string | null;
   collection?: string | null;
+  collectionProducts?: Product[];
   q: string;
   sort?: CatalogProductSort | null;
   localProducts?: Product[];
@@ -105,6 +106,7 @@ export function useCatalogProductPages({
         products: localProducts,
         categoria,
         collection,
+        collectionProducts,
         q,
         sort,
       });
@@ -164,7 +166,7 @@ export function useCatalogProductPages({
     return () => {
       controller.abort();
     };
-  }, [sessionId, categoria, collection, q, sort, localProducts, enabled]);
+  }, [sessionId, categoria, collection, collectionProducts, q, sort, localProducts, enabled]);
 
   const loadMore = useCallback(() => {
     if (
