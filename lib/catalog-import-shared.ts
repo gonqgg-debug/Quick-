@@ -1,4 +1,4 @@
-export type ImportField = "nombre" | "marca" | "categoria" | "precio" | "codigoBarras" | "costo";
+export type ImportField = "nombre" | "marca" | "categoria" | "precio" | "codigoBarras" | "costo" | "tasaItbis";
 
 export type ImportRow = {
   codigo: string;
@@ -9,6 +9,8 @@ export type ImportRow = {
   codigoBarras: string | null;
   /** Null cuando el archivo no trae costo: no se toca el costo manual. */
   costo: number | null;
+  /** Null cuando el archivo no trae tasa: no se toca products.tasa_itbis. */
+  tasaItbis: number | null;
 };
 
 export type FieldChange = {

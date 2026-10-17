@@ -9,8 +9,10 @@ import {
 } from "../lib/facturas-pendientes";
 import type { FacturaLinea } from "../lib/facturas-shared";
 import { elegirCosto } from "../lib/admin-catalog-products-shared";
+import { productoAgenteCatalogo } from "../lib/agent-read";
 import { buildImportPreview } from "../lib/catalog-import";
-import { productosACsv } from "../lib/catalog-import-http";
+import { catalogoError, productosACsv } from "../lib/catalog-import-http";
+import { margenConsumo, tasaCatalogo, ventaSinItbis } from "../lib/pos-domain";
 import { documentosDesdeValor } from "../lib/factura-documentos";
 import { distanciaVentana, leerEstadoCuenta, leerFechaBanco, leerMontoBanco, llavesMovimientos, ventanaBanco } from "../lib/banco-shared";
 import { revisarNcf } from "../lib/ncf";
@@ -593,6 +595,7 @@ const vistaCatalogo = buildImportPreview(Buffer.from(csvCatalogo), "productos.cs
 ]);
 assert(vistaCatalogo.created.length === 1 && vistaCatalogo.created[0].nombre === "Agua, 16oz", "Rodrigo crea productos desde JSON, con comas en el nombre");
 assert(vistaCatalogo.created[0]?.costo == null, "sin costo en el JSON no se propone un costo manual");
+assert(vistaCatalogo.created[0]?.tasaItbis == null, "sin tasaItbis en el JSON no se propone una tasa");
 assert(vistaCatalogo.updated[0]?.changes.map((change) => change.field).join() === "precio", "un código existente solo cambia lo que difiere");
 assert(vistaCatalogo.invalid[0]?.codigo === "C3", "sin precio no se importa");
 
@@ -628,6 +631,88 @@ const vistaOdoo = buildImportPreview(
   []
 );
 assert(vistaOdoo.created[0]?.costo === 7.5, "standard_price de Odoo se lee como costo");
+assert(vistaOdoo.created[0]?.tasaItbis == null, "sin columna de tasa no se propone una tasa");
+
+const productoBase = {
+  id: "p-a1",
+  codigo_odoo: "A1",
+  codigo_barras: null,
+  nombre: "Agua, 16oz",
+  marca: null,
+  categoria: "Bebidas",
+  precio: 25,
+  tasa_itbis: 18,
+};
+const vistaTasa0 = buildImportPreview(
+  Buffer.from(productosACsv([{ codigo: "A1", nombre: "Agua, 16oz", precio: 25, categoria: "Bebidas", tasaItbis: 0 }])),
+  "productos.csv",
+  [productoBase]
+);
+const cambioTasa = vistaTasa0.updated.find((item) => item.codigo === "A1")?.changes.find((change) => change.field === "tasaItbis");
+assert(
+  vistaTasa0.updated.length === 1 && cambioTasa?.from === 18 && cambioTasa.to === 0 && cambioTasa.fromLabel === "18" && cambioTasa.toLabel === "0",
+  "el dry-run muestra la tasa 18 → 0"
+);
+assert(vistaTasa0.created.length === 0 && vistaTasa0.updated[0]?.tasaItbis === 0, "una tasa 0 queda en el producto a guardar");
+const csvTasa = buildImportPreview(
+  Buffer.from("codigo,nombre,precio,categoria,tasa_itbis\nB2,Pan,55,Panadería,16\n"),
+  "odoo.csv",
+  [{ ...productoBase, id: "p-b2", codigo_odoo: "B2", nombre: "Pan", categoria: "Panadería", precio: 55, tasa_itbis: 18 }]
+);
+assert(
+  csvTasa.updated[0]?.changes.some((change) => change.field === "tasaItbis" && change.fromLabel === "18" && change.toLabel === "16"),
+  "la columna tasa_itbis del CSV también actualiza la tasa"
+);
+const sinCampo = buildImportPreview(
+  Buffer.from(productosACsv([{ codigo: "A1", nombre: "Agua, 16oz", precio: 25, categoria: "Bebidas" }])),
+  "productos.csv",
+  [{ ...productoBase, tasa_itbis: 0 }]
+);
+assert(
+  sinCampo.unchanged.length === 1 && sinCampo.updated.length === 0 && sinCampo.created.length === 0,
+  "sin tasaItbis no se toca una tasa 0"
+);
+const mismaTasa = buildImportPreview(
+  Buffer.from("codigo,nombre,precio,categoria,tasaItbis\nA1,\"Agua, 16oz\",25,Bebidas,18\n"),
+  "productos.csv",
+  [productoBase]
+);
+assert(mismaTasa.unchanged.length === 1, "la misma tasa no cuenta como cambio");
+const nuevoCero = buildImportPreview(
+  Buffer.from(productosACsv([{ codigo: "Z9", nombre: "Exento", precio: 40, categoria: "Bebidas", tasaItbis: 0 }])),
+  "productos.csv",
+  []
+);
+assert(nuevoCero.created[0]?.tasaItbis === 0, "un producto nuevo con tasa 0 no hereda 18 en la importación");
+let tasaInvalida = false;
+let mensajeTasa = "";
+try {
+  buildImportPreview(
+    Buffer.from(productosACsv([{ codigo: "A1", nombre: "Agua, 16oz", precio: 25, categoria: "Bebidas", tasaItbis: 7 }])),
+    "productos.csv",
+    [productoBase]
+  );
+} catch (error) {
+  tasaInvalida = error instanceof Error;
+  mensajeTasa = error instanceof Error ? error.message : "";
+}
+const respuestaTasa = catalogoError(tasaInvalida ? new Error(mensajeTasa) : "fallo", "No pudimos importar el catálogo", "test tasa");
+assert(
+  tasaInvalida && mensajeTasa.includes("A1") && mensajeTasa.includes("7") && respuestaTasa.status === 400,
+  "una tasa distinta de 0, 16 o 18 responde 400 e indica el producto"
+);
+const precio = 100;
+const costo = 12;
+const unidades = 4;
+const tasaImportada = vistaTasa0.updated[0]?.tasaItbis ?? 18;
+assert(tasaImportada === 0 && ventaSinItbis(precio, tasaImportada) === precio, "con tasa 0 el precio sin ITBIS es el precio con ITBIS");
+assert(ventaSinItbis(costo, tasaImportada) === costo, "con tasa 0 el costo sin ITBIS es el costo con ITBIS");
+assert(margenConsumo(precio, unidades, costo, tasaImportada) === 52, "con tasa 0 el margen es venta menos costo");
+const leido = productoAgenteCatalogo(
+  { id: "p-a1", nombre: "Agua, 16oz", marca: null, categoria: "Bebidas", precio: 25, tasa_itbis: 0, codigo_odoo: "A1", codigo_barras: null, activo: true },
+  true
+);
+assert(leido.tasaItbis === 0 && leido.tasa_itbis === 0 && tasaCatalogo(0) === 0, "GET del producto muestra la tasa 0 guardada");
 
 const costoBase = {
   facturaCosto: 12,

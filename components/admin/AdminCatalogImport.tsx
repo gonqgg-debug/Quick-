@@ -18,6 +18,7 @@ const FIELD_LABEL = {
   precio: "precio",
   codigoBarras: "código de barras",
   costo: "costo",
+  tasaItbis: "tasa de ITBIS",
 } as const;
 
 const EXPECTED_COLUMNS: Array<{ key: keyof ImportPreview["columns"] | "codigo"; label: string; hint: string }> = [
@@ -28,6 +29,7 @@ const EXPECTED_COLUMNS: Array<{ key: keyof ImportPreview["columns"] | "codigo"; 
   { key: "precio", label: "Precio", hint: "Precio de venta" },
   { key: "codigoBarras", label: "Código de barras", hint: "EAN / barcode, opcional" },
   { key: "costo", label: "Costo", hint: "Opcional. Se guarda como costo de Odoo" },
+  { key: "tasaItbis", label: "Tasa de ITBIS", hint: "Opcional. 0, 16 o 18. Si no viene, se conserva" },
 ];
 
 type Result = {

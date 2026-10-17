@@ -6,14 +6,14 @@ import { getSupabaseAdminClient } from "@/lib/supabase";
 /** Lo que el agente ve de cada lista; el total completo va en totales. */
 const MUESTRA = 50;
 
-const COLUMNAS = ["codigo", "nombre", "precio", "categoria", "marca", "codigo de barras", "costo"] as const;
+const COLUMNAS = ["codigo", "nombre", "precio", "categoria", "marca", "codigo de barras", "costo", "tasaItbis"] as const;
 
 function csvCelda(value: unknown): string {
   const text = value == null ? "" : String(value);
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-/** Convierte productos: [{ codigo, nombre, precio, categoria, marca, codigoBarras }] al mismo CSV que lee el import. */
+/** Convierte productos: [{ codigo, nombre, precio, categoria, marca, codigoBarras, costo, tasaItbis }] al mismo CSV que lee el import. */
 export function productosACsv(productos: unknown[]): string {
   const filas = productos.map((raw) => {
     const item = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -25,6 +25,7 @@ export function productosACsv(productos: unknown[]): string {
       item.marca,
       item.codigoBarras ?? item.barras,
       item.costo ?? item.cost,
+      item.tasaItbis ?? item.tasa_itbis,
     ]
       .map(csvCelda)
       .join(",");
@@ -70,7 +71,7 @@ async function leerEntrada(request: NextRequest): Promise<Entrada> {
     buffer = Buffer.from(body.base64.replace(/^data:[^,]*,/, ""), "base64");
   }
   if (!buffer) {
-    throw new Error("Manda productos: [{ codigo, nombre, precio, categoria, costo }], csv, o base64 con nombre");
+    throw new Error("Manda productos: [{ codigo, nombre, precio, categoria, costo, tasaItbis }], csv, o base64 con nombre");
   }
   if (buffer.length > IMPORT_MAX_BYTES) {
     throw new Error("El archivo pasa de 4 MB");
@@ -111,7 +112,9 @@ export function catalogoError(error: unknown, fallback: string, logLabel: string
 
 /**
  * Rodrigo importa productos al catálogo con el mismo lector que el admin: código Odoo, nombre, precio y categoría
- * son obligatorios. costo es opcional: si viene, se guarda como costo manual con fuente odoo y la fecha de esta importación. Si no viene, el costo manual no se toca. Sin confirmar solo muestra qué cambiaría. Nunca borra: lo que no viene en el archivo se queda igual.
+ * son obligatorios. costo es opcional: si viene, se guarda como costo manual con fuente odoo y la fecha de esta importación. Si no viene, el costo manual no se toca.
+ * tasaItbis es opcional (0, 16 o 18): si viene, actualiza la tasa del producto; si no viene, la tasa actual se queda. Un valor distinto rechaza el pedido.
+ * Sin confirmar solo muestra qué cambiaría. Nunca borra: lo que no viene en el archivo se queda igual.
  */
 export async function handleImportarCatalogo(request: NextRequest, actor: Actor) {
   const entrada = await leerEntrada(request);

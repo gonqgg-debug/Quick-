@@ -38,6 +38,7 @@ type DbProduct = {
   categoria: string;
   precio: number;
   costo_manual?: number | null;
+  tasa_itbis?: number | null;
 };
 
 const HEADER_ALIASES: Record<"codigo" | ImportField, string[]> = {
@@ -107,6 +108,7 @@ const HEADER_ALIASES: Record<"codigo" | ImportField, string[]> = {
     "costo de compra",
     "purchase price",
   ],
+  tasaItbis: ["tasaitbis", "tasa itbis", "tasa de itbis"],
 };
 
 function normalizeHeader(value: string): string {
@@ -219,6 +221,31 @@ function moneyEqual(left: number, right: number): boolean {
   return Math.round(toMoney(left) * 100) === Math.round(toMoney(right) * 100);
 }
 
+function tasaGuardada(value: unknown): number | null {
+  if (value == null || value === "") {
+    return null;
+  }
+  const number = typeof value === "number" ? value : Number(value);
+  if (number === 0 || number === 16 || number === 18) {
+    return number;
+  }
+  return null;
+}
+
+/** Vacío es “no vino”. 0, 16 y 18 se aceptan. Cualquier otro valor rechaza el archivo. */
+function leerTasaItbis(raw: string, codigo: string, nombre: string, rowNumber: number): number | null {
+  const text = raw.trim();
+  if (!text) {
+    return null;
+  }
+  const number = Number(text.replace(",", "."));
+  if (number === 0 || number === 16 || number === 18) {
+    return number;
+  }
+  const quien = codigo ? (nombre ? `${codigo} (${nombre})` : codigo) : nombre || `fila ${rowNumber}`;
+  throw new Error(`Tasa de ITBIS inválida para ${quien}: ${text}. Solo se acepta 0, 16 o 18.`);
+}
+
 function textOrNull(value: string): string | null {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
@@ -241,7 +268,7 @@ export async function fetchImportProducts(supabase: SupabaseClient): Promise<DbP
   for (let from = 0; from < 50_000; from += pageSize) {
     const { data, error } = await supabase
       .from("products")
-      .select("id, codigo_odoo, codigo_barras, nombre, marca, categoria, precio, costo_manual")
+      .select("id, codigo_odoo, codigo_barras, nombre, marca, categoria, precio, costo_manual, tasa_itbis")
       .order("nombre", { ascending: true })
       .range(from, from + pageSize - 1);
     if (error) {
@@ -253,6 +280,7 @@ export async function fetchImportProducts(supabase: SupabaseClient): Promise<DbP
         ...row,
         precio: toMoney(row.precio),
         costo_manual: row.costo_manual == null ? null : toMoney(row.costo_manual),
+        tasa_itbis: tasaGuardada(row.tasa_itbis),
         marca: row.marca ? String(row.marca) : null,
         codigo_odoo: row.codigo_odoo ? String(row.codigo_odoo).trim() : null,
         codigo_barras: row.codigo_barras ? String(row.codigo_barras).trim() : null,
@@ -310,6 +338,7 @@ export function buildImportPreview(buffer: Buffer, fileName: string, existing: D
     const nombre = cell(raw, columns.nombre);
     const precioRaw = cell(raw, columns.precio);
     const precio = parsePrice(precioRaw);
+    const tasaItbis = leerTasaItbis(columns.tasaItbis == null ? "" : cell(raw, columns.tasaItbis), codigo, nombre, rowNumber);
 
     if (!codigo) {
       invalid.push({ row: rowNumber, codigo: "", reason: "Falta el código Odoo" });
@@ -364,6 +393,7 @@ export function buildImportPreview(buffer: Buffer, fileName: string, existing: D
         current?.codigo_barras ||
         null,
       costo,
+      tasaItbis,
     };
     if (!current) {
       created.push(incoming);
@@ -424,6 +454,15 @@ export function buildImportPreview(buffer: Buffer, fileName: string, existing: D
         to: costo,
         fromLabel: current.costo_manual == null ? "—" : formatPrice(current.costo_manual),
         toLabel: formatPrice(costo),
+      });
+    }
+    if (tasaItbis != null && current.tasa_itbis !== tasaItbis) {
+      changes.push({
+        field: "tasaItbis",
+        from: current.tasa_itbis ?? null,
+        to: tasaItbis,
+        fromLabel: current.tasa_itbis == null ? "—" : String(current.tasa_itbis),
+        toLabel: String(tasaItbis),
       });
     }
 
@@ -504,6 +543,21 @@ export async function applyImportPreview(
           .update({ costo_manual: item.costo, costo_manual_fuente: "odoo", costo_manual_en: ahora })
           .eq("codigo_odoo", item.codigo)
       )
+    );
+    const fallo = resultados.find((resultado) => resultado.error);
+    if (fallo?.error) {
+      throw fallo.error;
+    }
+  }
+
+  const conTasa = [
+    ...preview.created.filter((item) => item.tasaItbis != null),
+    ...preview.updated.filter((item) => item.changes.some((change) => change.field === "tasaItbis")),
+  ];
+  for (let i = 0; i < conTasa.length; i += 20) {
+    const batch = conTasa.slice(i, i + 20);
+    const resultados = await Promise.all(
+      batch.map((item) => supabase.from("products").update({ tasa_itbis: item.tasaItbis }).eq("codigo_odoo", item.codigo))
     );
     const fallo = resultados.find((resultado) => resultado.error);
     if (fallo?.error) {

@@ -162,6 +162,24 @@ type FilaCatalogo = {
   activo: boolean | null;
 };
 
+/** La tasa guardada sale tal cual. 0 no se convierte en 18. */
+export function productoAgenteCatalogo(row: FilaCatalogo, conTasa: boolean) {
+  const tasa = conTasa ? tasaCatalogo(row.tasa_itbis) : null;
+  return {
+    id: String(row.id),
+    nombre: String(row.nombre),
+    marca: row.marca ? String(row.marca) : null,
+    categoria: String(row.categoria ?? ""),
+    precio: toMoney(row.precio),
+    tasaItbis: tasa,
+    tasa_itbis: tasa,
+    codigoOdoo: row.codigo_odoo ? String(row.codigo_odoo) : null,
+    codigoBarras: row.codigo_barras ? String(row.codigo_barras) : null,
+    activo: Boolean(row.activo),
+    stock: null,
+  };
+}
+
 export async function listAgentCatalogo(search: URLSearchParams) {
   const q = (search.get("q") ?? "").trim().replace(/[%_,()]/g, " ").replace(/\s+/g, " ").slice(0, 80);
   const cursor = (search.get("cursor") ?? "").trim();
@@ -208,22 +226,7 @@ export async function listAgentCatalogo(search: URLSearchParams) {
   const next = rows.length > PAGE_SIZE ? String(page[page.length - 1]?.id ?? "") : null;
   return {
     nota: "El catálogo no guarda existencias. activo indica si el producto se ofrece. precio es el de venta e incluye ITBIS. tasaItbis y tasa_itbis son la misma tasa: 0, 16 o 18. Si la columna todavía no está en la base, vienen en null. El costo no viaja aquí.",
-    productos: page.map((row) => {
-      const tasa = conTasa ? tasaCatalogo(row.tasa_itbis) : null;
-      return {
-        id: String(row.id),
-        nombre: String(row.nombre),
-        marca: row.marca ? String(row.marca) : null,
-        categoria: String(row.categoria ?? ""),
-        precio: toMoney(row.precio),
-        tasaItbis: tasa,
-        tasa_itbis: tasa,
-        codigoOdoo: row.codigo_odoo ? String(row.codigo_odoo) : null,
-        codigoBarras: row.codigo_barras ? String(row.codigo_barras) : null,
-        activo: Boolean(row.activo),
-        stock: null,
-      };
-    }),
+    productos: page.map((row) => productoAgenteCatalogo(row, conTasa)),
     nextCursor: next || null,
   };
 }
