@@ -9,6 +9,7 @@ const migrationMiles = join(root, "supabase/migrations/20261016200000_miles_cons
 const migrationVuelto = join(root, "supabase/migrations/20261016210000_pagos_con_vuelto.sql");
 const migrationVisual = join(root, "supabase/migrations/20261016220000_miles_visual.sql");
 const migrationPromos = join(root, "supabase/migrations/20261016230000_miles_promos.sql");
+const migrationAnalitica = join(root, "supabase/migrations/20261017130000_consumo_productos_analitica.sql");
 const DB = "quick_pos_test";
 
 function quote(value: string): string {
@@ -122,6 +123,7 @@ sqlFile(DB, migrationMiles);
 sqlFile(DB, migrationVuelto);
 sqlFile(DB, migrationVisual);
 sqlFile(DB, migrationPromos);
+sqlFile(DB, migrationAnalitica);
 
 sql(
   DB,
@@ -350,6 +352,16 @@ begin
   where t.codigo_odoo = 'cod-18';
   if margen is distinct from 44.07 then
     raise exception 'el listado no quita el ITBIS del costo, margen %', margen;
+  end if;
+  update public.products set codigo_barras = '7501234567890' where codigo_odoo = 'cod-18';
+  if not exists (
+    select 1
+    from public.consumo_top_productos(
+      'quick', '2026-10-11', '2026-10-11', null, null, 'venta', null, '7501234567890', 20, null, null, null
+    ) t
+    where t.codigo_odoo = 'cod-18'
+  ) then
+    raise exception 'la busqueda por codigo de barras no encontro el producto';
   end if;
   select m.margen into margen from public.consumo_margen_periodo('quick', '2026-10-11', '2026-10-11') m;
   if margen is distinct from (
@@ -640,6 +652,31 @@ begin
   if (select efectivo + banco + tarjeta + credito + otro from public.resumen_dia where fecha = '2026-09-01')
      is distinct from (select venta from public.resumen_dia where fecha = '2026-09-01') then
     raise exception 'el mix del dia no suma la venta';
+  end if;
+end
+$test$;
+`,
+);
+
+sql(
+  DB,
+  `
+do $test$
+declare
+  margen numeric;
+  esperado numeric;
+begin
+  select m.margen into esperado from public.consumo_margen_periodo('quick', '2026-10-11', '2026-10-11') m;
+  select r.margen into margen
+  from public.consumo_productos_resumen('quick', '2026-10-11', '2026-10-11', null, null, null, null, null, null, false) r;
+  if margen is distinct from esperado then
+    raise exception 'el resumen filtrado no usa el mismo margen del periodo, fue % esperado %', margen, esperado;
+  end if;
+
+  select r.margen into margen
+  from public.consumo_productos_resumen('quick', '2026-10-11', '2026-10-11', null, null, null, null, null, null, true) r;
+  if margen is not null then
+    raise exception 'el filtro sin costo no puede fabricar un margen, fue %', margen;
   end if;
 end
 $test$;

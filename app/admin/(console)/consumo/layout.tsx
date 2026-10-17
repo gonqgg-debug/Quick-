@@ -12,7 +12,7 @@ export default async function ConsumoLayout({ children }: { children: React.Reac
     frescura = null;
   }
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto w-full max-w-[1600px]">
       <Suspense fallback={<div className="h-24 animate-pulse rounded-lg bg-[#F3F4F6]" />}>
         <ConsumoEncabezado frescura={frescura} />
       </Suspense>

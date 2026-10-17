@@ -41,7 +41,9 @@ export function ConsumoEncabezado({ frescura }: { frescura: FrescuraConsumo | nu
   const pathname = usePathname();
   const params = useSearchParams();
   const router = useRouter();
-  const muestraPeriodo = pathname === "/admin/consumo" || pathname.startsWith("/admin/consumo/productos") || pathname.startsWith("/admin/consumo/horarios");
+  const esListaProductos = pathname === "/admin/consumo/productos";
+  const esDetalleProducto = pathname.startsWith("/admin/consumo/productos/");
+  const muestraPeriodo = pathname === "/admin/consumo" || esDetalleProducto || pathname.startsWith("/admin/consumo/horarios");
   const preset = params.get("preset") ?? (params.get("desde") || params.get("hasta") ? "custom" : "7d");
   const comparacion = params.get("comparar") === "0" ? "off" : (params.get("comparacion") ?? "anterior");
   const resuelto = resolverPeriodo({
@@ -56,12 +58,21 @@ export function ConsumoEncabezado({ frescura }: { frescura: FrescuraConsumo | nu
     router.push(conQuery(pathname, params, patch));
   }
 
+  if (esListaProductos) {
+    return null;
+  }
+
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      {esDetalleProducto ? (
+        <Link href={conQuery("/admin/consumo/productos", params)} className="text-sm font-semibold" style={{ color: brand.green }}>
+          ← Ventas por producto
+        </Link>
+      ) : null}
+      <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Consumo</p>
-          <h1 className="font-display mt-1 text-2xl font-bold">Qué se vende en la caja</h1>
+          <p className="text-xs font-bold uppercase tracking-wide text-brand-muted">Analítica</p>
+          <h1 className="font-display mt-1 text-2xl font-bold">{esDetalleProducto ? "Detalle del producto" : "Qué se vende en la caja"}</h1>
         </div>
         {frescura ? (
           <p
@@ -91,7 +102,8 @@ export function ConsumoEncabezado({ frescura }: { frescura: FrescuraConsumo | nu
         </p>
       ) : null}
 
-      <nav className="mt-5 flex flex-wrap gap-1.5" aria-label="Consumo">
+      {esDetalleProducto ? null : (
+      <nav className="mt-5 flex flex-wrap gap-1.5" aria-label="Analítica">
         {TABS.map((tab) => {
           const on = activo(pathname, tab.href);
           return (
@@ -109,6 +121,7 @@ export function ConsumoEncabezado({ frescura }: { frescura: FrescuraConsumo | nu
           );
         })}
       </nav>
+      )}
 
       {muestraPeriodo ? (
         <div className="mt-4 flex flex-wrap items-end gap-2">

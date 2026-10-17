@@ -13,9 +13,11 @@ type DataTableProps = {
   tableClassName?: string;
   /** Optional bar above the table, clipped by the same rounded card. */
   toolbar?: ReactNode;
+  /** Classes for the scrollport around the table. */
+  viewportClassName?: string;
 };
 
-export function DataTable({ children, className, tableClassName, toolbar }: DataTableProps) {
+export function DataTable({ children, className, tableClassName, toolbar, viewportClassName }: DataTableProps) {
   return (
     <div
       className={cx(
@@ -24,17 +26,23 @@ export function DataTable({ children, className, tableClassName, toolbar }: Data
       )}
     >
       {toolbar}
-      <div className="overflow-x-auto">
+      <div className={cx("overflow-auto", viewportClassName)}>
         <table className={cx("w-full text-left text-sm", tableClassName)}>{children}</table>
       </div>
     </div>
   );
 }
 
-export function DataTableHead({ children }: { children: ReactNode }) {
+export function DataTableHead({ children, plain = false }: { children: ReactNode; plain?: boolean }) {
   return (
     <thead>
-      <tr className="bg-[#F9FAFB] text-xs font-medium uppercase tracking-wider text-[#6B7280]">
+      <tr
+        className={
+          plain
+            ? "bg-[#F9FAFB] text-xs font-semibold text-[#6B7280]"
+            : "bg-[#F9FAFB] text-xs font-medium uppercase tracking-wider text-[#6B7280]"
+        }
+      >
         {children}
       </tr>
     </thead>
