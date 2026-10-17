@@ -5,13 +5,10 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { DEFINICIONES_CONSUMO, participacion } from "@/lib/consumo-metricas";
 import {
   COLUMNAS_EXTRA,
-  COMPARACIONES,
   DEFINICION_PARTICIPACION,
   DEFINICION_VARIACION,
   LIMITES_PAGINA,
   NOTA_RENTABILIDAD,
-  PRESETS_ANALITICA,
-  PRESETS_LEGACY,
   claveLista,
   columnasGuardadas,
   consultaExportacion,
@@ -35,14 +32,13 @@ import {
   type ColumnaExtra,
   type ConsultaProductos,
 } from "@/lib/consumo-productos-ui";
-import { formatoInstante } from "@/lib/miles-presentacion";
-import { formatDayKey } from "@/lib/local-day";
 import { formatUnidades, resolverPeriodo } from "@/lib/pos-domain";
 import type { DetalleProducto, FrescuraConsumo, ProductoConsumo, ResumenProductos } from "@/lib/pos-consumo";
 import type { EstadoComparacion } from "@/lib/consumo-metricas";
 import type { ConsumoPeriodo } from "@/lib/pos-domain";
 import { brand } from "@/lib/theme";
 import { DataTableCell, DataTableHead, DataTableRow, DataTableTh } from "@/components/admin/DataTable";
+import { BarraPeriodo, LineaDatos } from "@/components/admin/consumo/BarraPeriodo";
 import { Definicion } from "@/components/admin/consumo/ui";
 import { ProductoPanel, Variacion } from "@/components/admin/consumo/ProductoPanel";
 
@@ -225,84 +221,21 @@ export function ProductosAnalitica({ inicial, consultaInicial }: { inicial: Payl
         </div>
       </header>
 
-      <section className="mt-4 rounded-lg border border-[#E6E8E6] bg-white px-3 py-3 shadow-sm" aria-label="Periodo y comparación">
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="text-xs font-medium text-brand-muted">
-            Periodo
-            <select value={PRESETS_LEGACY[presetActual] ? presetActual : presetActual} onChange={(event) => cambiarPeriodo(event.target.value)} className={`mt-1 block ${control}`}>
-              {PRESETS_LEGACY[presetActual] ? <option value={presetActual}>{PRESETS_LEGACY[presetActual]}</option> : null}
-              {PRESETS_ANALITICA.map((preset) => (
-                <option key={preset.id} value={preset.id}>
-                  {preset.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs font-medium text-brand-muted">
-            Comparar
-            <select
-              value={comparacionActual}
-              onChange={(event) =>
-                aplicar(event.target.value === "off" ? { comparar: "0", comparacion: "off", pagina: null } : { comparar: null, comparacion: event.target.value, pagina: null })
-              }
-              className={`mt-1 block min-w-[12rem] ${control}`}
-            >
-              {COMPARACIONES.map((modo) => (
-                <option key={modo.id} value={modo.id}>
-                  {modo.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {presetActual === "custom" ? (
-            <>
-              <label className="text-xs font-medium text-brand-muted">
-                Desde
-                <input
-                  type="date"
-                  value={params.get("desde") || periodoVisible.desde}
-                  onChange={(event) => aplicar({ preset: "custom", desde: event.target.value || null, pagina: null })}
-                  className={`mt-1 block ${control}`}
-                />
-              </label>
-              <label className="text-xs font-medium text-brand-muted">
-                Hasta
-                <input
-                  type="date"
-                  value={params.get("hasta") || periodoVisible.hasta}
-                  onChange={(event) => aplicar({ preset: "custom", hasta: event.target.value || null, pagina: null })}
-                  className={`mt-1 block ${control}`}
-                />
-              </label>
-            </>
-          ) : null}
-          <p className="pb-2 text-xs text-brand-muted md:ml-auto">
-            {textoPeriodo.rango} · {textoPeriodo.dias} {textoPeriodo.dias === 1 ? "día" : "días"}
-            {textoPeriodo.comparado ? ` · Comparado ${textoPeriodo.comparado} · ${textoPeriodo.diasComparados} días` : ""}
-          </p>
-        </div>
-        {textoPeriodo.aviso ? <p className="mt-2 text-xs text-[#92400E]">{textoPeriodo.aviso}</p> : null}
-        {data.comparacionEstado === "no_disponible" && !listaPendiente ? (
-          <p className="mt-2 text-xs text-[#92400E]">Comparación no disponible: falta algún día del periodo o del comparado. Un día sin datos no se toma como venta en cero.</p>
-        ) : null}
-      </section>
-
-      <p className="mt-2 text-xs text-brand-muted">
-        {data.frescura?.ultimaFecha ? (
-          <>
-            Datos hasta {formatDayKey(data.frescura.ultimaFecha)}
-            {data.frescura.ultimaFecha < periodoVisible.hasta ? `. El periodo seleccionado termina el ${formatDayKey(periodoVisible.hasta)}` : ""}
-            .{" "}
-          </>
-        ) : (
-          "Todavía no hay sesiones de caja. "
-        )}
-        {data.frescura?.sincronizadoEn ? <>Sincronizado {formatoInstante(data.frescura.sincronizadoEn)}. </> : null}
-        Moneda: RD$.
-        {data.frescura && data.frescura.partesAbiertas > 0
-          ? ` Hay ${data.frescura.partesAbiertas} ${data.frescura.partesAbiertas === 1 ? "sesión" : "sesiones"} en partes sin envío final.`
-          : ""}
-      </p>
+      <BarraPeriodo
+        presetActual={presetActual}
+        comparacionActual={comparacionActual}
+        desde={params.get("desde") || periodoVisible.desde}
+        hasta={params.get("hasta") || periodoVisible.hasta}
+        texto={textoPeriodo}
+        comparacionNoDisponible={data.comparacionEstado === "no_disponible" && !listaPendiente}
+        onPreset={cambiarPeriodo}
+        onComparacion={(modo) =>
+          aplicar(modo === "off" ? { comparar: "0", comparacion: "off", pagina: null } : { comparar: null, comparacion: modo, pagina: null })
+        }
+        onDesde={(fecha) => aplicar({ preset: "custom", desde: fecha || null, pagina: null })}
+        onHasta={(fecha) => aplicar({ preset: "custom", hasta: fecha || null, pagina: null })}
+      />
+      <LineaDatos frescura={data.frescura} hasta={periodoVisible.hasta} />
 
       {error ? (
         <div className="mt-4 rounded-lg border border-[#FECACA] bg-white px-4 py-3 text-sm text-brand-error" role="alert">

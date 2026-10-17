@@ -1,65 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Bar, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { CeldaHorario } from "@/lib/pos-consumo";
 import { formatNumero, formatRd } from "@/lib/pos-domain";
-import { brand } from "@/lib/theme";
-
-export function VentaDiaChart({
-  dias,
-  anterior,
-}: {
-  dias: Array<{ fecha: string; venta: number; ordenes: number }>;
-  anterior: Array<{ fecha: string; venta: number }>;
-}) {
-  const router = useRouter();
-  const [listo, setListo] = useState(false);
-  const data = dias.map((dia, index) => ({
-    fecha: dia.fecha,
-    etiqueta: dia.fecha.slice(5),
-    venta: dia.venta,
-    ordenes: dia.ordenes,
-    anterior: anterior[index]?.venta ?? null,
-  }));
-
-  if (!listo) {
-    return <div ref={() => setListo(true)} className="h-72 animate-pulse rounded-lg bg-[#F3F4F6]" />;
-  }
-
-  return (
-    <div className="h-72">
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart
-          data={data}
-          onClick={(state) => {
-            const fecha = state?.activePayload?.[0]?.payload?.fecha as string | undefined;
-            if (fecha) {
-              router.push(`/admin/consumo?preset=custom&desde=${fecha}&hasta=${fecha}`);
-            }
-          }}
-        >
-          <XAxis dataKey="etiqueta" tick={{ fontSize: 12, fill: "#6B7280" }} axisLine={false} tickLine={false} />
-          <YAxis
-            tick={{ fontSize: 12, fill: "#6B7280" }}
-            axisLine={false}
-            tickLine={false}
-            width={56}
-            tickFormatter={(value: number) => `${Math.round(value / 1000)}k`}
-          />
-          <Tooltip
-            formatter={(value: number, name: string) => [formatRd(value), name === "anterior" ? "Periodo anterior" : "Venta"]}
-            labelFormatter={(_label, payload) => String(payload?.[0]?.payload?.fecha ?? "")}
-            contentStyle={{ borderRadius: 16, borderColor: "#E5E7EB" }}
-          />
-          <Bar dataKey="venta" fill={brand.green} radius={[4, 4, 0, 0]} />
-          <Line dataKey="anterior" stroke="#111827" strokeDasharray="4 4" dot={false} strokeWidth={1.5} />
-        </ComposedChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
 
 const DIAS = ["", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 

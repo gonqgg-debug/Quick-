@@ -30,6 +30,7 @@ import { calcularPromo, revisarAritmetica, supuestosVacios } from "../lib/promo-
 import { parseCorreccionPropuesta, parsePropuesta } from "../lib/promo-domain";
 import { indicadoresPromo, ordenAtencion, probabilidadCompleta } from "../lib/promo-presentacion";
 import { clasificarHallazgo, formatoDiaComercial, formatoInstante, graficoAlcanza, leerVisual, recomendacionActual, visualCoherente } from "../lib/miles-presentacion";
+import { avisoCobertura, cascadaVenta, conclusionCambio, diferenciaPagos, elegirDestacados, fechaComparadaDe, franjasHorario, granularidadDe, prepararHallazgo, serieEvolucion, solapaPeriodo } from "../lib/consumo-resumen-ui";
 
 function assert(condition: unknown, message: string) {
   if (!condition) {
@@ -353,6 +354,54 @@ assert(estadoComparacion({ pedida: true, coberturaCompleta: false, base: 10 }) =
 assert(!coberturaDeFechas(["2026-10-01"], "2026-10-01", "2026-10-02").completa, "un día sin fila no cuenta como cero");
 const efectos = desgloseVenta({ tickets: 12, ticket: 110 }, { tickets: 10, ticket: 100 });
 assert(efectos.efectoTickets === 200 && efectos.efectoTicket === 120 && efectos.delta === 320, "tickets y ticket promedio se desglosan en pesos");
+const cascada = cascadaVenta({ venta: 100.1, tickets: 3 }, { venta: 50.05, tickets: 2 });
+assert(cascada != null && Math.round((cascada.efectoTickets + cascada.efectoTicket) * 100) === Math.round(cascada.delta * 100), "las contribuciones suman el cambio de ventas");
+assert(cascadaVenta({ venta: 10, tickets: 0 }, { venta: 10, tickets: 2 }) == null, "sin tickets no hay descomposición");
+assert(conclusionCambio(200, 50, 250).includes("tickets") && conclusionCambio(-40, -10, -50).includes("tickets"), "la conclusión usa el efecto monetario mayor");
+assert(granularidadDe(7) === "dia" && granularidadDe(60) === "semana" && granularidadDe(200) === "mes", "la granularidad sigue la duración");
+assert(fechaComparadaDe("2024-02-29", "anio", { desde: "2024-02-28", hasta: "2024-03-01" }, { desde: "2023-02-28", hasta: "2023-03-01" }) === "2023-02-28", "el año anterior alinea el 29 de febrero con el 28");
+assert(fechaComparadaDe("2024-03-01", "anio", { desde: "2024-02-28", hasta: "2024-03-01" }, { desde: "2023-02-28", hasta: "2023-03-01" }) === "2023-03-01", "el año anterior no usa el índice de la serie");
+const serie = serieEvolucion({
+  desde: "2026-10-01",
+  hasta: "2026-10-03",
+  dias: [
+    { fecha: "2026-10-01", venta: 10, ordenes: 1 },
+    { fecha: "2026-10-03", venta: 30, ordenes: 2 },
+  ],
+  diasComparados: [{ fecha: "2026-09-28", venta: 8, ordenes: 1 }],
+  comparacion: "anterior",
+  tramo: { desde: "2026-10-01", hasta: "2026-10-03" },
+  anterior: { desde: "2026-09-28", hasta: "2026-09-30" },
+  mostrarComparacion: true,
+});
+assert(serie.puntos[1]?.venta == null && serie.puntos[0]?.venta === 10, "un día sin fila no se dibuja como cero");
+assert(serie.puntos[0]?.ventaComparada === 8 && serie.puntos[2]?.ventaComparada == null, "el comparado falta si no está el día alineado");
+assert(solapaPeriodo("2026-09-01", "2026-09-07", "2026-10-01", "2026-10-07") === "fuera", "un hallazgo anterior queda fuera del periodo");
+assert(solapaPeriodo(null, null, "2026-10-01", "2026-10-07") === "sin_periodo", "sin fechas el hallazgo no se atribuye al periodo");
+assert(elegirDestacados([{ alcance: "fuera" as const }, { alcance: "periodo" as const }])[0]?.alcance === "periodo", "se prefieren hallazgos del periodo");
+const hallazgoPago = prepararHallazgo(
+  {
+    id: "h-pago",
+    titulo: "Pagos por encima de ventas",
+    tipo: "anomalia",
+    estado: "vigente",
+    resumen: "Texto que no debe convertirse en cifra 180%.",
+    periodo_desde: "2026-08-01",
+    periodo_hasta: "2026-08-07",
+    evidencia: { enlaces: [{ pantalla: "horarios", query: "preset=custom&desde=2026-08-01&hasta=2026-08-07" }] },
+  },
+  { desde: "2026-10-01", hasta: "2026-10-07" },
+);
+assert(hallazgoPago?.alcance === "fuera" && hallazgoPago.cifra == null && hallazgoPago.accion.etiqueta === "Explorar horario", "el hallazgo histórico no presta cifras del texto");
+assert(avisoCobertura(0.9, 0.7)?.includes("no indica") && avisoCobertura(0.71, 0.7) == null, "un cambio de cobertura limita la comparación de utilidad");
+assert(diferenciaPagos({ efectivo: 80, tarjeta: 30, banco: 0, credito: 0, otro: 0 }, 100) === 10, "la diferencia de pagos no se fuerza a cero");
+const franja = franjasHorario([
+  { dow: 5, hora: 18, venta: 0, ordenes: 0, ocurrencias: 2, incompletas: 0 },
+  { dow: 6, hora: 19, venta: 20, ordenes: 1, ocurrencias: 1, incompletas: 0 },
+]);
+assert(franja.find((item) => item.dow === 1 && item.desdeHora === 8)?.estado === "sin_datos", "una franja no observada no es cero");
+assert(franja.find((item) => item.dow === 5 && item.desdeHora === 18)?.estado === "abierto_sin_ventas", "cero ventas con cobertura sigue siendo cero");
+assert((franja.find((item) => item.dow === 6 && item.desdeHora === 18)?.promedio ?? 0) === 20, "el promedio de la franja usa las horas observadas");
 assert(participacion(85700, 1123656) != null && Math.round((participacion(85700, 1123656) ?? 0) * 1000) / 10 === 7.6, "la participación usa la venta del periodo");
 assert(promedioOcurrencia(100, 4) === 25 && promedioOcurrencia(0, 2) === 0 && promedioOcurrencia(10, 0) === null, "el promedio horario incluye ocurrencias en cero y no divide entre nada");
 assert(estadoHora({ ocurrencias: 0, ordenes: 0, incompletas: 0 }) === "sin_datos", "sin sesión no es cerrado");

@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { elegirDestacados, prepararHallazgo, type HallazgoDestacado } from "@/lib/consumo-resumen-ui";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import {
   MILES_NOMBRE,
@@ -442,6 +443,22 @@ export async function cambiarHallazgo(id: string, version: number, patch: Record
   if (!data) throw new MilesError(409, "El hallazgo cambió. Vuelve a leerlo.");
   await evento("hallazgo", id, actor, accion, patch);
   return data;
+}
+
+export async function destacadosMiles(ventana: { desde: string; hasta: string }): Promise<{ destacados: HallazgoDestacado[]; recomendaciones: number }> {
+  const supabase = client();
+  const campos =
+    "id, titulo, tipo, resumen, periodo_desde, periodo_hasta, publicado_en, actualizado_en, visual, metricas, evidencia, estado, resolucion, recomendacion_estado, recomendacion, limitaciones";
+  const [hallazgos, recomendaciones] = await Promise.all([
+    supabase.from("miles_hallazgos").select(campos).eq("estado", "vigente").order("publicado_en", { ascending: false }).limit(24),
+    supabase.from("miles_hallazgos").select("id", { count: "exact", head: true }).eq("estado", "vigente").not("recomendacion", "is", null),
+  ]);
+  if (hallazgos.error) fallar(hallazgos.error);
+  if (recomendaciones.error) fallar(recomendaciones.error);
+  const preparados = ((hallazgos.data ?? []) as Record<string, unknown>[])
+    .map((row) => prepararHallazgo(row, ventana))
+    .filter((row): row is HallazgoDestacado => row != null);
+  return { destacados: elegirDestacados(preparados), recomendaciones: recomendaciones.count ?? 0 };
 }
 
 export async function resumenMiles() {

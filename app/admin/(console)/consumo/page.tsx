@@ -1,13 +1,13 @@
-import { ConsumoResumenVista } from "@/components/admin/consumo/ConsumoResumenVista";
+import { redirect } from "next/navigation";
+import { ResumenAnalitica } from "@/components/admin/consumo/ResumenAnalitica";
 import { ErrorPanel } from "@/components/admin/consumo/ui";
-import { resumenMiles } from "@/lib/miles-store";
-import { cargarResumen, paramsDe, periodoDesdeParams } from "@/lib/pos-consumo";
+import { consultarResumen, paramsDe } from "@/lib/pos-consumo";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Consumo | Administración",
-  description: "Venta, margen y horario de la caja",
+  title: "Resumen del negocio | Analítica",
+  description: "Cómo va el negocio, qué explica el cambio y qué requiere atención.",
 };
 
 export default async function ConsumoPage({
@@ -15,16 +15,15 @@ export default async function ConsumoPage({
 }: {
   searchParams: Record<string, string | string[] | undefined>;
 }) {
+  const params = paramsDe(searchParams);
+  if (!params.get("preset") && !params.get("desde") && !params.get("hasta")) {
+    params.set("preset", "7c");
+    redirect(`/admin/consumo?${params.toString()}`);
+  }
   try {
-    const data = await cargarResumen(periodoDesdeParams(paramsDe(searchParams)));
-    let miles = null;
-    try {
-      miles = await resumenMiles();
-    } catch {
-      miles = null;
-    }
-    return <ConsumoResumenVista data={data} miles={miles} />;
+    const data = await consultarResumen(params);
+    return <ResumenAnalitica inicial={data} consultaInicial={params.toString()} />;
   } catch (error) {
-    return <ErrorPanel message={error instanceof Error ? error.message : "No pudimos cargar el consumo"} />;
+    return <ErrorPanel message={error instanceof Error ? error.message : "No pudimos cargar el resumen"} />;
   }
 }
