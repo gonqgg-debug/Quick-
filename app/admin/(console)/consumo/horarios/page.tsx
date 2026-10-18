@@ -1,12 +1,13 @@
+import { redirect } from "next/navigation";
 import { ConsumoHorariosVista } from "@/components/admin/consumo/ConsumoHorariosVista";
 import { ErrorPanel } from "@/components/admin/consumo/ui";
-import { parseMetrica } from "@/lib/pos-domain";
-import { cargarHorarios, paramsDe, periodoDesdeParams } from "@/lib/pos-consumo";
+import { consultarHorarios, paramsDe } from "@/lib/pos-consumo";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Horarios | Consumo",
+  title: "Ventas por día y hora | Analítica",
+  description: "Cuándo se concentra la demanda y qué cambia frente al periodo comparado.",
 };
 
 export default async function ConsumoHorariosPage({
@@ -15,24 +16,13 @@ export default async function ConsumoHorariosPage({
   searchParams: Record<string, string | string[] | undefined>;
 }) {
   const params = paramsDe(searchParams);
+  if (!params.get("preset") && !params.get("desde") && !params.get("hasta")) {
+    params.set("preset", "7c");
+    redirect(`/admin/consumo/horarios?${params.toString()}`);
+  }
   try {
-    const periodo = periodoDesdeParams(params);
-    const reloj = params.get("reloj") === "caja" ? "caja" : "real";
-    const metricaRaw = params.get("metrica");
-    const metrica = metricaRaw === "promedio" || metricaRaw === "ticket" ? metricaRaw : parseMetrica(metricaRaw);
-    const data = await cargarHorarios(periodo, (params.get("categoria") ?? "").slice(0, 80), reloj);
-    return (
-      <ConsumoHorariosVista
-        celdas={data.celdas}
-        turnos={data.turnos}
-        categorias={data.categorias}
-        categoria={params.get("categoria") ?? ""}
-        metrica={metrica}
-        reloj={reloj}
-        desde={periodo.desde}
-        hasta={periodo.hasta}
-      />
-    );
+    const data = await consultarHorarios(params);
+    return <ConsumoHorariosVista inicial={data} consultaInicial={params.toString()} />;
   } catch (error) {
     return <ErrorPanel message={error instanceof Error ? error.message : "No pudimos cargar los horarios"} />;
   }

@@ -18,6 +18,18 @@ import {
   type OrdenConsumo,
 } from "@/lib/pos-domain";
 import { leerConsultaProductos, tiendaPermitida } from "@/lib/consumo-productos-ui";
+import {
+  cerrarTurnos,
+  coberturaDe,
+  construirMapa,
+  elegirHallazgoHorario,
+  type FilaHora,
+  type HallazgoHorarioVista,
+  type MapaHorario,
+  type ProductoFranja,
+  type RelojId,
+  type TurnoCaja,
+} from "@/lib/consumo-horarios-ui";
 import { destacadosMiles } from "@/lib/miles-store";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
@@ -772,6 +784,177 @@ export async function cargarHorarios(periodo: ConsumoPeriodo, categoria: string,
       };
     }),
     categorias: ((categorias.data ?? []) as Record<string, unknown>[]).map((row) => String(row.categoria ?? "")),
+  };
+}
+
+async function filasHoras(tienda: string, desde: string, hasta: string, categoria: string, reloj: RelojId): Promise<FilaHora[]> {
+  const supabase = getSupabaseAdminClient();
+  const pagina = 1000;
+  const filas: FilaHora[] = [];
+  for (let offset = 0; offset < 20000; offset += pagina) {
+    const { data, error } = await supabase.rpc("consumo_horas_fecha", {
+      p_tienda: tienda,
+      p_desde: desde,
+      p_hasta: hasta,
+      p_categoria: categoria || null,
+      p_reloj: reloj,
+      p_limit: pagina,
+      p_offset: offset,
+    });
+    if (error) fallar(error);
+    const rows = (data ?? []) as Record<string, unknown>[];
+    for (const row of rows) {
+      const fecha = dia(row.fecha);
+      const hora = num(row.hora);
+      if (!isDayKey(fecha) || hora < 0 || hora > 23) continue;
+      filas.push({
+        fecha,
+        hora,
+        venta: num(row.venta),
+        tickets: num(row.n_ordenes),
+        unidades: num(row.unidades),
+        cobertura: coberturaDe(row.cobertura),
+      });
+    }
+    if (rows.length < pagina) break;
+  }
+  return filas;
+}
+
+function mapTurno(turno: "am" | "pm", row: Record<string, unknown> | undefined): Omit<TurnoCaja, "participacion"> {
+  const sesiones = num(row?.n_sesiones);
+  const tickets = num(row?.n_ordenes);
+  const venta = sesiones > 0 ? num(row?.venta) : null;
+  const unidades = sesiones > 0 ? num(row?.unidades) : null;
+  return {
+    turno,
+    venta,
+    tickets: sesiones > 0 ? tickets : null,
+    unidades,
+    ticket: venta != null && tickets > 0 ? Math.round((venta / tickets) * 100) / 100 : null,
+    unidadesPorTicket: unidades != null && tickets > 0 ? Math.round((unidades / tickets) * 1000) / 1000 : null,
+    sesiones,
+    aperturaMin: row?.apertura_min ? String(row.apertura_min) : null,
+    aperturaMax: row?.apertura_max ? String(row.apertura_max) : null,
+    cierreMin: row?.cierre_min ? String(row.cierre_min) : null,
+    cierreMax: row?.cierre_max ? String(row.cierre_max) : null,
+  };
+}
+
+export async function cargarProductosFranja(input: {
+  tienda: string;
+  desde: string;
+  hasta: string;
+  categoria: string;
+  reloj: RelojId;
+  dow: number;
+  hora: number;
+}): Promise<{ productos: ProductoFranja[]; truncado: boolean }> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.rpc("consumo_productos_franja", {
+    p_tienda: input.tienda,
+    p_desde: input.desde,
+    p_hasta: input.hasta,
+    p_categoria: input.categoria || null,
+    p_reloj: input.reloj,
+    p_dow: input.dow,
+    p_hora: input.hora,
+    p_limit: 201,
+  });
+  if (error) fallar(error);
+  const rows = ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    codigo: String(row.codigo ?? ""),
+    productId: row.product_id ? String(row.product_id) : null,
+    nombre: String(row.nombre ?? row.codigo ?? ""),
+    unidades: num(row.unidades),
+    venta: num(row.venta),
+    tickets: num(row.n_ordenes),
+  }));
+  return { productos: rows.slice(0, 200), truncado: rows.length > 200 };
+}
+
+export type PayloadHorarios = {
+  mapa: MapaHorario;
+  turnos: TurnoCaja[];
+  categorias: string[];
+  frescura: FrescuraConsumo | null;
+  periodo: ConsumoPeriodo;
+  tienda: string;
+  tiendas: string[];
+  categoria: string;
+  reloj: RelojId;
+  miles: HallazgoHorarioVista | null;
+  milesError: string | null;
+};
+
+export async function consultarHorarios(params: { get(name: string): string | null }, now = Date.now()): Promise<PayloadHorarios> {
+  let tiendas = [TIENDA_DEFAULT];
+  try {
+    tiendas = await tiendasConsumo();
+  } catch {
+    tiendas = [TIENDA_DEFAULT];
+  }
+  const periodo = periodoDesdeParams(params, now);
+  const tienda = tiendaPermitida(params.get("tienda"), tiendas, TIENDA_DEFAULT);
+  const categoria = (params.get("categoria") ?? "").slice(0, 80);
+  const reloj: RelojId = params.get("reloj") === "caja" ? "caja" : "real";
+  const supabase = getSupabaseAdminClient();
+  const comparar = Boolean(periodo.comparar && periodo.tramo && periodo.anterior);
+  const [filas, filasComparadas, turnosRaw, categorias, frescura] = await Promise.all([
+    filasHoras(tienda, periodo.desde, periodo.hasta, categoria, reloj),
+    comparar && periodo.anterior ? filasHoras(tienda, periodo.anterior.desde, periodo.anterior.hasta, categoria, reloj) : Promise.resolve([] as FilaHora[]),
+    supabase.rpc("consumo_turnos_periodo", {
+      p_tienda: tienda,
+      p_desde: periodo.desde,
+      p_hasta: periodo.hasta,
+      p_categoria: categoria || null,
+      p_reloj: reloj,
+    }),
+    supabase.rpc("consumo_categorias", { p_tienda: tienda, p_desde: periodo.desde, p_hasta: periodo.hasta }),
+    cargarFrescura(now, tienda).catch(() => null),
+  ]);
+  if (turnosRaw.error) fallar(turnosRaw.error);
+  if (categorias.error) fallar(categorias.error);
+  const porTurno = new Map<string, Record<string, unknown>>();
+  for (const row of (turnosRaw.data ?? []) as Record<string, unknown>[]) porTurno.set(String(row.turno), row);
+  const mapa = construirMapa({
+    desde: periodo.desde,
+    hasta: periodo.hasta,
+    filas,
+    filasComparadas,
+    comparar,
+    modo: periodo.comparacion,
+    tramo: periodo.tramo,
+    anterior: comparar ? periodo.anterior : null,
+  });
+  let miles: HallazgoHorarioVista | null = null;
+  let milesError: string | null = null;
+  try {
+    const hallazgos = await supabase
+      .from("miles_hallazgos")
+      .select("id, titulo, tipo, resumen, periodo_desde, periodo_hasta, publicado_en, actualizado_en, visual, metricas, evidencia, estado, resolucion, recomendacion_estado, recomendacion, limitaciones, muestras, tienda")
+      .eq("estado", "vigente")
+      .eq("tienda", tienda)
+      .order("publicado_en", { ascending: false })
+      .limit(60);
+    if (hallazgos.error) throw new Error(hallazgos.error.message);
+    miles = elegirHallazgoHorario((hallazgos.data ?? []) as Record<string, unknown>[], { desde: periodo.desde, hasta: periodo.hasta });
+  } catch (error) {
+    milesError = error instanceof Error ? error.message : "No pudimos leer los hallazgos";
+  }
+  const nombres = ((categorias.data ?? []) as Record<string, unknown>[]).map((row) => String(row.categoria ?? "")).filter(Boolean);
+  return {
+    mapa,
+    turnos: cerrarTurnos(["am", "pm"].map((turno) => mapTurno(turno as "am" | "pm", porTurno.get(turno)))),
+    categorias: nombres.includes("Sin match") ? nombres : [...nombres, "Sin match"],
+    frescura,
+    periodo,
+    tienda,
+    tiendas,
+    categoria,
+    reloj,
+    miles,
+    milesError,
   };
 }
 
