@@ -10,8 +10,8 @@ Miles consulta el consumo y publica hallazgos. No hay un modelo de IA dentro de 
 - Fecha comercial: `America/Santo_Domingo`. `pos_ordenes.fecha` es `timestamptz`. La hora real se obtiene con una sola conversión `AT TIME ZONE 'America/Santo_Domingo'`. `hora_local` y `fecha_operativa` ya quedaron grabadas en esa zona al ingerir; no se convierten otra vez. El día de caja es el día en que se abrió la sesión: una venta después de medianoche sigue en ese día.
 - Costo: manual si existe; si no, la última factura. No es el costo del día de la venta. Usarlo hacia atrás es una estimación. Sin costo, el margen es null, no cero. La cobertura es venta con ITBIS que tiene costo / venta con ITBIS del periodo. No se extrapola.
 - Periodo anterior: la misma cantidad de días completos, terminando el día antes. El día en curso no entra en la comparación. En el resumen se pide con `comparacion=anterior`.
-- Semana anterior: `comparacion=semana` o `comparacion=semana anterior`. La ventana se corre un múltiplo de 7, el menor que no se solapa. La tarjeta del resumen compara la semana en curso, de lunes a la fecha de corte, con esos mismos días de la semana anterior.
-- Año anterior: las mismas fechas. El 29 de febrero cae en el 28.
+- Semana anterior: `comparacion=semana`, `comparacion=semana anterior` o `comparar=semana_anterior`. La ventana se corre un múltiplo de 7, el menor que no se solapa. El 15 de octubre se compara con el 8, no con el 14. La tarjeta del resumen compara la semana en curso, de lunes a la fecha de corte, con esos mismos días de la semana anterior. El modo resuelto vuelve en `filtros.comparacion`.
+- Año anterior: `comparacion=anio`. Las mismas fechas. El 29 de febrero cae en el 28. Si ese año no tiene filas, el estado es `no_disponible` o `sin_base`. No se rellena con cero.
 - Un día sin fila de resumen no es una venta en cero. Si al comparado le falta un día, la comparación dice “Comparación no disponible”. Si la base es cero, se muestran los importes y “Sin base anterior”, sin un porcentaje.
 - Participación: venta del producto con ITBIS / venta con ITBIS de todo el periodo. El porcentaje de la página era la suma de esa página, no del periodo: 85,700 sobre 1,123,656 es 7.6%, no 14.2%.
 - `ventas_diarias` es el libro de finanzas. Consumo no lo suma encima de las órdenes.
@@ -29,7 +29,9 @@ Cada entorno emite el suyo. No se copia el de desarrollo a producción y no se c
 5. Miles se identifica solo por `Authorization: Bearer <token>`. Un `agent_id` en el cuerpo se rechaza.
 6. En Vercel el valor va en `AGENT_TOKEN_MILES`, el token solo, sin el prefijo `Bearer`. El hash de `agent_credenciales` sigue valiendo si la variable no está.
 
-`GET /api/agent` con ese token devuelve solo las funciones de Miles.
+`GET /api/agent` con ese token devuelve solo las funciones de Miles, la lista `consultas`, los `limites` de los campos y `baseUrl`.
+
+Las llamadas van a `https://www.quickminimarket.com`. `https://quickminimarket.com` responde 308 hacia www. Un POST o PATCH que siga ese redirect puede perder el body.
 
 ## Publicar un hallazgo
 
@@ -80,9 +82,9 @@ Authorization: Bearer <token de Miles>
 }
 ```
 
-`titulo` admite hasta 160 caracteres. Si pasa de ahí, la respuesta dice el tope. Un título vacío sigue siendo «titulo es obligatorio».
+`titulo` admite hasta 160 caracteres. Si se pasa, la respuesta es «titulo supera 160 caracteres». Un título vacío sigue siendo «titulo es obligatorio». El tope también está en `limites.titulo` del discovery.
 
-`evidencia.consultas` es una lista con al menos un nombre. También vale un string o `{ "nombre": "..." }`. Un nombre desconocido responde la lista. `GET /api/agent` la publica en `consultas`. Los nombres válidos son:
+`evidencia.consultas` es una lista con al menos un nombre. También vale un string, `{ "nombre": "..." }`, la ruta `/api/agent/analytics/summary?desde=...` o una nota que contenga el nombre, por ejemplo `GET analytics/products semanal 2025-09-08..2026-10-11`. Si el texto no trae ningún nombre, el error cita lo recibido y la lista. `GET /api/agent` la publica en `consultas`. Los nombres válidos son:
 
 - `analytics/coverage`, `analytics/summary`, `analytics/products`, `analytics/hours`, `analytics/baskets`
 - `consumo_margen_periodo`, `consumo_top_productos`, `consumo_productos_totales`, `consumo_venta_alcance`

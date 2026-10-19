@@ -1022,11 +1022,11 @@ function normalizarModo(raw: string): string {
     .replace(/[\s-]+/g, "_");
 }
 
-export function parseComparacion(raw: string | null | undefined, comparar?: string | null): ModoComparacion | "off" {
-  if (comparar === "0" || comparar === "false") {
-    return "off";
+function modoDe(raw: string | null | undefined): ModoComparacion | "off" | null {
+  if (raw == null || raw.trim() === "") {
+    return null;
   }
-  const modo = normalizarModo(raw ?? "");
+  const modo = normalizarModo(raw);
   if (modo === "off" || modo === "sin_comparar" || modo === "sin_comparacion") {
     return "off";
   }
@@ -1036,7 +1036,17 @@ export function parseComparacion(raw: string | null | undefined, comparar?: stri
   if (modo === "anio" || modo === "ano" || modo === "anio_anterior" || modo === "ano_anterior") {
     return "anio";
   }
-  return "anterior";
+  if (modo === "anterior" || modo === "periodo_anterior" || modo === "inmediato") {
+    return "anterior";
+  }
+  return null;
+}
+
+export function parseComparacion(raw: string | null | undefined, comparar?: string | null): ModoComparacion | "off" {
+  if (comparar === "0" || comparar === "false") {
+    return "off";
+  }
+  return modoDe(raw) ?? modoDe(comparar) ?? "anterior";
 }
 
 export function resolverPeriodo(

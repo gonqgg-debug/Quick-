@@ -345,6 +345,12 @@ assert(parseComparacion("semana anterior") === "semana" && parseComparacion("sem
 const diaSemana = resolverComparacion("2026-10-16", "2026-10-16", parseComparacion("semana anterior"), Date.parse("2026-10-17T12:00:00Z"));
 assert(diaSemana.anterior?.desde === "2026-10-09" && diaSemana.anterior.hasta === "2026-10-09", "un día con semana anterior cae en el mismo día de la semana pasada");
 assert(diaSemana.anterior?.desde !== "2026-10-15", "semana anterior no es el día previo");
+const quince = resolverPeriodo({ desde: "2026-10-15", hasta: "2026-10-15", comparacion: "semana" }, Date.parse("2026-10-19T16:00:00Z"));
+assert(quince.comparacion === "semana" && quince.anterior.desde === "2026-10-08" && quince.anterior.hasta === "2026-10-08", "comparacion=semana del 15 cae en el 8, no en el 14");
+const quinceAlias = resolverPeriodo({ desde: "2026-10-15", hasta: "2026-10-15", comparar: "semana_anterior" }, Date.parse("2026-10-19T16:00:00Z"));
+assert(quinceAlias.comparacion === "semana" && quinceAlias.anterior.desde === "2026-10-08", "comparar=semana_anterior usa el mismo modo");
+const quinceAnio = resolverPeriodo({ desde: "2026-10-15", hasta: "2026-10-15", comparacion: "anio" }, Date.parse("2026-10-19T16:00:00Z"));
+assert(quinceAnio.comparacion === "anio" && quinceAnio.anterior.desde === "2025-10-15" && quinceAnio.anterior.hasta === "2025-10-15", "comparacion=anio repite la fecha del año previo");
 const viernes = ventanasSemana("2026-10-16");
 assert(viernes.actual.desde === "2026-10-12" && viernes.actual.hasta === "2026-10-16", "la semana del resumen llega hasta el corte");
 assert(viernes.anterior.desde === "2026-10-05" && viernes.anterior.hasta === "2026-10-09", "la semana anterior del resumen repite lunes a viernes");
@@ -456,7 +462,7 @@ try {
 } catch (error) {
   tituloLargo = error instanceof MilesError ? error.message : "";
 }
-assert(tituloLargo.includes("admite hasta 160") && !tituloLargo.includes("obligatorio"), "un título de 170 caracteres dice el tope");
+assert(tituloLargo.includes("supera 160") && !tituloLargo.includes("obligatorio"), "un título de 170 caracteres dice que supera 160");
 let tituloVacio = "";
 try {
   parseHallazgo({ ...hallazgo, titulo: "   " });
@@ -476,7 +482,14 @@ try {
 } catch (error) {
   consultaMala = error instanceof MilesError ? error.message : "";
 }
-assert(consultaMala.includes("no reconoce") && consultaMala.includes("consumo_margen_periodo") && consultaMala.includes(CONSULTAS_MILES[0]), "una consulta desconocida devuelve los nombres válidos");
+assert(consultaMala.includes("no reconoce") && consultaMala.includes("Falta un nombre") && consultaMala.includes("consumo_margen_periodo") && consultaMala.includes(CONSULTAS_MILES[0]), "una consulta desconocida devuelve los nombres válidos");
+const notaProductos = parseEvidencia({
+  consultas: ["GET analytics/products semanal 2025-09-08..2026-10-11 (paginado), categoria Tabaco y Accesorios"],
+  filtros: { categoria: "Tabaco y Accesorios" },
+  enlaces: [{ pantalla: "productos", query: "desde=2026-07-01&hasta=2026-09-30&categoria=Tabaco y Accesorios" }],
+});
+assert(notaProductos.consultas.join(",") === "analytics/products", "una nota larga cuenta si contiene el nombre de la consulta");
+assert(parseEvidencia({ consultas: ["consumo_canasta y consumo_canasta_par"], filtros: {} }).consultas.join(",") === "consumo_canasta_par,consumo_canasta", "el nombre más largo no se parte en el corto");
 const grafico = leerVisual({
   tipo: "comparacion",
   metrica: { nombre: "venta", valor: 100, unidad: "rd" },
