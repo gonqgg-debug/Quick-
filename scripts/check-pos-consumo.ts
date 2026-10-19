@@ -31,6 +31,7 @@ import { parseCorreccionPropuesta, parsePropuesta } from "../lib/promo-domain";
 import { indicadoresPromo, ordenAtencion, probabilidadCompleta } from "../lib/promo-presentacion";
 import { clasificarHallazgo, formatoDiaComercial, formatoInstante, graficoAlcanza, leerVisual, recomendacionActual, visualCoherente } from "../lib/miles-presentacion";
 import { avisoCobertura, cascadaVenta, conclusionCambio, diferenciaPagos, elegirDestacados, fechaComparadaDe, franjasHorario, granularidadDe, prepararHallazgo, serieEvolucion, solapaPeriodo } from "../lib/consumo-resumen-ui";
+import { CRITERIO_TURNO, TEXTO_RELOJ, calculoAplicado, cambioVisible, celdaEn, construirMapa, elegirHallazgoHorario, etiquetaFranja, textoCambio, type FilaHora } from "../lib/consumo-horarios-ui";
 import { acumularProducto, enlaceCosto, horasProducto, identificadoresProducto, lineaProducto, nombreProducto, precioMedio, serieProducto, variacionDetalle } from "../lib/consumo-producto-ui";
 
 function assert(condition: unknown, message: string) {
@@ -701,3 +702,180 @@ const febrero = alineada.puntos.find((punto) => punto.desde === "2024-02-29");
 const marzo = alineada.puntos.find((punto) => punto.desde === "2024-03-01");
 assert(febrero?.ventaComparada === 4 && febrero.fechaComparadaDesde === "2023-02-28", "el comparado del producto usa la fecha y no el índice");
 assert(marzo?.venta === 0 && marzo.ventaComparada === 0 && marzo.precio == null, "un día cubierto sin unidades es cero en ventas y vacío en precio");
+
+function fila(fecha: string, hora: number, venta: number, tickets: number, cobertura: FilaHora["cobertura"] = "completa", unidades = tickets): FilaHora {
+  return { fecha, hora, venta, tickets, unidades, cobertura };
+}
+
+const medianoche = construirMapa({
+  desde: "2026-10-16",
+  hasta: "2026-10-16",
+  filas: [fila("2026-10-16", 0, 25, 1)],
+  filasComparadas: [],
+  comparar: false,
+  modo: "off",
+  tramo: { desde: "2026-10-16", hasta: "2026-10-16" },
+  anterior: null,
+});
+const celdaMedianoche = celdaEn(medianoche, 5, 0);
+assert(celdaMedianoche?.venta === 25 && celdaMedianoche.estado === "con_ventas", "la medianoche permanece en la fecha calendario");
+assert(celdaEn(medianoche, 4, 23)?.estado === "sin_datos" && celdaEn(medianoche, 4, 23)?.venta == null, "una hora vecina sin datos no hereda la venta ni se vuelve cero");
+assert(medianoche.celdas.length === 168 && new Set(medianoche.celdas.map((celda) => `${celda.dow}-${celda.hora}`)).size === 168, "las franjas de una hora no se solapan");
+assert(etiquetaFranja(20) === "8–9 p. m." && etiquetaFranja(0) === "12–1 a. m.", "la franja es el intervalo local [hora, hora+1)");
+
+const ceros = construirMapa({
+  desde: "2026-10-05",
+  hasta: "2026-10-12",
+  filas: [fila("2026-10-05", 8, 0, 0), fila("2026-10-12", 8, 100, 2)],
+  filasComparadas: [],
+  comparar: false,
+  modo: "off",
+  tramo: null,
+  anterior: null,
+});
+const lunesCero = celdaEn(ceros, 1, 8);
+assert(lunesCero?.promedioVenta === 50 && lunesCero.fechasCompletas.length === 2 && lunesCero.elegibles === 2, "el promedio incluye la fecha cubierta con cero ventas");
+assert(lunesCero?.ticket === 50, "el ticket de la franja es ventas entre tickets, no un promedio de promedios");
+assert(celdaEn(ceros, 1, 9)?.estado === "sin_datos" && celdaEn(ceros, 1, 9)?.promedioVenta == null, "la hora sin sesión no entra como cero");
+
+const parcial = construirMapa({
+  desde: "2026-10-05",
+  hasta: "2026-10-05",
+  filas: [fila("2026-10-05", 8, 0, 0, "parcial"), fila("2026-10-05", 9, 40, 1, "desconocida")],
+  filasComparadas: [],
+  comparar: false,
+  modo: "off",
+  tramo: null,
+  anterior: null,
+});
+assert(celdaEn(parcial, 1, 8)?.estado === "parcial" && celdaEn(parcial, 1, 8)?.venta == null && celdaEn(parcial, 1, 8)?.promedioVenta == null, "la cobertura parcial no se presenta como cero");
+assert(celdaEn(parcial, 1, 9)?.estado === "desconocida" && celdaEn(parcial, 1, 9)?.venta === 40 && celdaEn(parcial, 1, 9)?.promedioVenta == null, "la venta sin sesión cerrada no crea un promedio");
+assert(calculoAplicado("promedio", "venta", false).aplicado === "total", "sin base fiable el promedio no se aplica");
+assert(!parcial.horarioConfigurado && parcial.celdas.every((celda) => celda.hora >= 0 && celda.hora <= 23), "sin horario configurado se conservan las 24 horas");
+
+const ponderado = construirMapa({
+  desde: "2026-10-05",
+  hasta: "2026-10-05",
+  filas: [fila("2026-10-05", 8, 100, 1), fila("2026-10-05", 9, 100, 4)],
+  filasComparadas: [],
+  comparar: false,
+  modo: "off",
+  tramo: null,
+  anterior: null,
+});
+assert(ponderado.dias[0]?.ticket === 40 && ponderado.dias[0].venta === 200 && ponderado.dias[0].tickets === 5, "el ticket del día pondera ventas y tickets");
+assert(ponderado.dias[0]?.promedioVenta === 200 && ponderado.dias[0].fechasComparables === 1, "el promedio del día usa la fecha cubierta, no la suma de promedios de celda");
+
+const baseCero = construirMapa({
+  desde: "2026-10-05",
+  hasta: "2026-10-05",
+  filas: [fila("2026-10-05", 8, 80, 2)],
+  filasComparadas: [fila("2026-09-28", 8, 0, 0)],
+  comparar: true,
+  modo: "semana",
+  tramo: { desde: "2026-10-05", hasta: "2026-10-05" },
+  anterior: { desde: "2026-09-28", hasta: "2026-09-28" },
+});
+const cambioCero = celdaEn(baseCero, 1, 8)?.comparacion?.ventaCambio;
+assert(cambioCero?.estado === "sin_base" && cambioCero.absoluto === 80 && cambioCero.porcentaje == null, "con base anterior cero el absoluto existe y el porcentaje no");
+assert(textoCambio(cambioCero ?? null, "venta", "porcentaje") === "Sin base porcentual", "la base cero se lee como sin base porcentual");
+assert(textoCambio(cambioCero ?? null, "venta", "absoluto") !== "Infinity" && textoCambio(cambioCero ?? null, "venta", "porcentaje") !== "NaN", "no se muestra Infinity ni NaN");
+
+const ambosCero = construirMapa({
+  desde: "2026-10-05",
+  hasta: "2026-10-05",
+  filas: [fila("2026-10-05", 8, 0, 0)],
+  filasComparadas: [fila("2026-09-28", 8, 0, 0)],
+  comparar: true,
+  modo: "semana",
+  tramo: { desde: "2026-10-05", hasta: "2026-10-05" },
+  anterior: { desde: "2026-09-28", hasta: "2026-09-28" },
+});
+assert(celdaEn(ambosCero, 1, 8)?.comparacion?.ventaCambio.estado === "ambos_cero" && celdaEn(ambosCero, 1, 8)?.comparacion?.ventaCambio.absoluto === 0, "dos ceros con cobertura válida cambian cero");
+
+const sinAnterior = construirMapa({
+  desde: "2026-10-05",
+  hasta: "2026-10-05",
+  filas: [fila("2026-10-05", 8, 80, 1)],
+  filasComparadas: [],
+  comparar: true,
+  modo: "semana",
+  tramo: { desde: "2026-10-05", hasta: "2026-10-05" },
+  anterior: { desde: "2026-09-28", hasta: "2026-09-28" },
+});
+assert(celdaEn(sinAnterior, 1, 8)?.comparacion?.ventaCambio.estado === "sin_comparacion" && celdaEn(sinAnterior, 1, 8)?.comparacion?.ventaCambio.absoluto == null, "sin datos anteriores no se usa cero");
+
+const exposicion = construirMapa({
+  desde: "2026-10-05",
+  hasta: "2026-10-12",
+  filas: [fila("2026-10-05", 8, 100, 1), fila("2026-10-12", 8, 0, 0)],
+  filasComparadas: [fila("2026-09-27", 8, 40, 1), fila("2026-09-28", 8, 999, 1)],
+  comparar: true,
+  modo: "anterior",
+  tramo: { desde: "2026-10-05", hasta: "2026-10-12" },
+  anterior: { desde: "2026-09-27", hasta: "2026-10-04" },
+});
+const lunesExpuesto = celdaEn(exposicion, 1, 8);
+assert(lunesExpuesto?.comparacion?.fechasEquivalentes === 2 && lunesExpuesto.comparacion.fechasCompletas === 1, "la comparación usa las fechas equivalentes, no el otro lunes del periodo anterior");
+assert(lunesExpuesto?.comparacion?.ventaCambio.base === "promedio" && lunesExpuesto.comparacion.ventaCambio.absoluto === 10, "si difieren las observaciones se comparan promedios");
+assert(cambioVisible(lunesExpuesto as NonNullable<typeof lunesExpuesto>, "venta", "total")?.absoluto === 10, "el total no se compara contra una exposición distinta");
+
+const anio = construirMapa({
+  desde: "2024-02-28",
+  hasta: "2024-02-29",
+  filas: [fila("2024-02-28", 8, 5, 1), fila("2024-02-29", 8, 7, 1)],
+  filasComparadas: [fila("2023-02-28", 8, 10, 1)],
+  comparar: true,
+  modo: "anio",
+  tramo: { desde: "2024-02-28", hasta: "2024-02-29" },
+  anterior: { desde: "2023-02-28", hasta: "2023-02-28" },
+});
+assert(anio.colisionFechas.includes("2023-02-28"), "el 29 de febrero y el 28 comparten la fecha equivalente");
+assert(celdaEn(anio, isoDow("2024-02-28"), 8)?.comparacion?.venta === 10, "la celda del 28 compara una sola vez con su fecha equivalente");
+assert(celdaEn(anio, isoDow("2024-02-29"), 8)?.comparacion?.venta === 10, "la celda del 29 no duplica la venta dentro de sí misma");
+
+function isoDow(fecha: string): number {
+  const celda = construirMapa({
+    desde: fecha,
+    hasta: fecha,
+    filas: [fila(fecha, 8, 1, 1)],
+    filasComparadas: [],
+    comparar: false,
+    modo: "off",
+    tramo: null,
+    anterior: null,
+  }).celdas.find((item) => item.venta === 1);
+  if (!celda) throw new Error(`sin día para ${fecha}`);
+  return celda.dow;
+}
+
+const hallazgoHorario = elegirHallazgoHorario(
+  [
+    {
+      id: "ventas",
+      titulo: "Suben las ventas",
+      resumen: "Sube el total.",
+      periodo_desde: "2026-10-05",
+      periodo_hasta: "2026-10-11",
+      estado: "vigente",
+      visual: { tipo: "tendencia", serie: [{ etiqueta: "a", valor: 1 }, { etiqueta: "b", valor: 2 }] },
+      evidencia: { enlaces: [{ pantalla: "resumen", query: "" }] },
+      muestras: {},
+    },
+    {
+      id: "hora",
+      titulo: "Los sábados de noche concentran venta",
+      resumen: "La franja del sábado concentra más venta que el resto de la semana.",
+      periodo_desde: "2026-08-01",
+      periodo_hasta: "2026-08-31",
+      estado: "vigente",
+      limitaciones: "Muestra de un mes.",
+      visual: { tipo: "horarios", categorias: [{ etiqueta: "sáb 20", valor: 10 }, { etiqueta: "sáb 21", valor: 8 }, { etiqueta: "sáb 22", valor: 4 }, { etiqueta: "sáb 23", valor: 2 }] },
+      evidencia: { enlaces: [{ pantalla: "horarios", query: "desde=2026-08-01&hasta=2026-08-31" }] },
+      muestras: { observaciones: 4 },
+    },
+  ],
+  { desde: "2026-10-05", hasta: "2026-10-11" },
+);
+assert(hallazgoHorario?.id === "hora" && hallazgoHorario.alcance === "fuera" && hallazgoHorario.muestra === 4, "solo se muestra un hallazgo de horarios ya publicado, marcado si es de otro periodo");
+assert(TEXTO_RELOJ.real.includes("transacción") && TEXTO_RELOJ.caja.includes("Día operativo") && CRITERIO_TURNO.includes("No es un corte"), "la hora de la transacción y la sesión de caja quedan separadas");
