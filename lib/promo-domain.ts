@@ -4,7 +4,7 @@ import { leerVisual, type VisualMiles } from "@/lib/miles-presentacion";
 import { TIPOS_PROMO, type TipoPromo } from "@/lib/promo-calculo";
 
 export const ESTADOS_PROPUESTA = ["borrador", "por_revisar", "requiere_ampliacion", "lista_para_probar", "descartada", "archivada"] as const;
-export const ESTADOS_MILES_PROPUESTA = ["borrador", "por_revisar"] as const;
+export const ESTADOS_MILES_PROPUESTA = ["borrador", "por_revisar", "bloqueada"] as const;
 export const FUNCIONES_PRODUCTO = ["principal", "complemento", "beneficio"] as const;
 export const SOLIDEZ = ["alta", "media", "baja"] as const;
 

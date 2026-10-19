@@ -130,7 +130,7 @@ export function ComboFicha({ propuesta }: { propuesta: Fila }) {
   return (
     <div className="space-y-8">
       <header>
-        <Link href="/admin/consumo/miles?vista=combos" className="text-sm font-semibold" style={{ color: brand.green }}>Volver a combos y promos</Link>
+        <Link href="/admin/consumo/miles?seccion=propuestas" className="text-sm font-semibold" style={{ color: brand.green }}>Volver a propuestas</Link>
         <div className="mt-3 flex flex-wrap gap-2">
           <Pildora tono="gris">{ETIQUETA_TIPO_PROMO[tipo] ?? tipo}</Pildora>
           <Pildora tono="naranja">{ETIQUETA_ESTADO_PROPUESTA[String(propuesta.estado)] ?? String(propuesta.estado)}</Pildora>

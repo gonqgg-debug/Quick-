@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { isDayKey } from "@/lib/local-day";
+import { leerGrafica, type GraficaMiles } from "@/lib/miles-grafica";
 import { leerVisual, type VisualMiles } from "@/lib/miles-presentacion";
 
 export const MILES_ROL = "miles" as const;
 export const MILES_NOMBRE = "Miles — Analista Comercial";
 export const MILES_TIENDA = "quick";
 
-export const MILES_TIPOS = ["oportunidad", "deterioro", "patron", "anomalia", "calidad"] as const;
+export const MILES_TIPOS = ["oportunidad", "deterioro", "patron", "anomalia", "calidad", "cambio"] as const;
 export const MILES_PRIORIDADES = ["alta", "media", "baja"] as const;
 export const MILES_ESTADOS_HALLAZGO = ["vigente", "descartado", "archivado"] as const;
 export const MILES_ESTADOS_INVESTIGACION = ["pendiente", "en_analisis", "requiere_informacion", "completada", "cancelada"] as const;
@@ -31,6 +32,7 @@ export const CONSULTAS_MILES = [
   "consumo_categorias",
   "consumo_canasta",
   "consumo_canasta_par",
+  "consumo_canasta_periodo",
   "consumo_calidad_conteos",
   "consumo_horarios",
   "consumo_sin_costo",
@@ -281,6 +283,9 @@ export type HallazgoInput = {
   evidencia: EvidenciaMiles;
   corte: string | null;
   visual: VisualMiles | null;
+  grafica: GraficaMiles | null;
+  hipotesis: string | null;
+  proximoPaso: string | null;
 };
 
 export function parseHallazgo(body: unknown): HallazgoInput {
@@ -302,6 +307,8 @@ export function parseHallazgo(body: unknown): HallazgoInput {
   }
   const visual = leerVisual(raw.visual);
   if (visual.error) throw new MilesError(400, visual.error);
+  const grafica = leerGrafica(raw.grafica);
+  if (grafica.error) throw new MilesError(400, grafica.error);
   const periodoDesde = fecha(periodo.desde, "periodo.desde");
   const periodoHasta = fecha(periodo.hasta, "periodo.hasta");
   if (periodoDesde > periodoHasta) {
@@ -332,7 +339,19 @@ export function parseHallazgo(body: unknown): HallazgoInput {
     evidencia: parseEvidencia(raw.evidencia),
     corte: opcional(raw.corte, "corte", 120),
     visual: visual.visual,
+    grafica: grafica.grafica,
+    hipotesis: opcional(raw.hipotesis, "hipotesis", 2000),
+    proximoPaso: opcional(raw.proximoPaso, "proximoPaso", 500),
   };
+}
+
+/** El hash de un hallazgo anterior no incluye los campos nuevos cuando vienen vacíos. */
+export function hashHallazgo(input: HallazgoInput): string {
+  const copia: Record<string, unknown> = { ...input };
+  if (copia.grafica == null) delete copia.grafica;
+  if (copia.hipotesis == null) delete copia.hipotesis;
+  if (copia.proximoPaso == null) delete copia.proximoPaso;
+  return hashPayload(copia);
 }
 
 export function parseRun(body: unknown): { idempotencyKey: string; datosHasta: string | null; corte: string | null } {
@@ -345,15 +364,15 @@ export function parseRun(body: unknown): { idempotencyKey: string; datosHasta: s
   };
 }
 
-export function parseCierreRun(body: unknown): { version: number; estado: "completada" | "fallida"; error: string | null; datosHasta: string | null; corte: string | null } {
+export function parseCierreRun(body: unknown): { version: number; estado: "completada" | "fallida" | "parcial"; error: string | null; datosHasta: string | null; corte: string | null } {
   const raw = objeto(body, "cuerpo");
   rechazarSuplantacion(raw, ["estado"]);
   const version = raw.version;
   if (typeof version !== "number" || !Number.isInteger(version) || version < 1) {
     throw new MilesError(400, "version es obligatoria");
   }
-  if (raw.estado !== "completada" && raw.estado !== "fallida") {
-    throw new MilesError(400, "estado tiene que ser completada o fallida");
+  if (raw.estado !== "completada" && raw.estado !== "fallida" && raw.estado !== "parcial") {
+    throw new MilesError(400, "estado tiene que ser completada, parcial o fallida");
   }
   return {
     version,

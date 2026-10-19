@@ -5,10 +5,12 @@ import {
   MILES_NOMBRE,
   MILES_ROL,
   MilesError,
+  hashHallazgo,
   hashPayload,
   mismoContenido,
   type HallazgoInput,
 } from "@/lib/miles-domain";
+import { hashAsociacion, hashInforme, type AsociacionInput, type InformeInput, type TareaInput } from "@/lib/miles-publicacion";
 
 function client() {
   return getSupabaseAdminClient();
@@ -161,7 +163,7 @@ export async function leerEjecucion(id: string) {
 
 export async function cerrarEjecucion(
   id: string,
-  input: { version: number; estado: "completada" | "fallida"; error: string | null; datosHasta: string | null; corte: string | null },
+  input: { version: number; estado: "completada" | "fallida" | "parcial"; error: string | null; datosHasta: string | null; corte: string | null },
 ) {
   const patch: Record<string, unknown> = {
     estado: input.estado,
@@ -186,8 +188,42 @@ export async function cerrarEjecucion(
   return data;
 }
 
+function filaHallazgo(input: HallazgoInput, payloadHash: string) {
+  return {
+    ejecucion_id: input.ejecucionId,
+    payload_hash: payloadHash,
+    patron_clave: input.patronClave,
+    tipo: input.tipo,
+    titulo: input.titulo,
+    resumen: input.resumen,
+    observacion: input.observacion,
+    interpretacion: input.interpretacion,
+    recomendacion: input.recomendacion,
+    prioridad: input.prioridad,
+    prioridad_justificacion: input.prioridadJustificacion,
+    tienda: input.tienda,
+    alcance: input.alcance,
+    periodo_desde: input.periodoDesde,
+    periodo_hasta: input.periodoHasta,
+    comparacion_desde: input.comparacionDesde,
+    comparacion_hasta: input.comparacionHasta,
+    comparacion_modo: input.comparacionModo,
+    metricas: input.metricas,
+    muestras: input.muestras,
+    limitaciones: input.limitaciones,
+    evidencia: input.evidencia,
+    corte: input.corte,
+    hipotesis: input.hipotesis,
+    proximo_paso: input.proximoPaso,
+    validado_en: new Date().toISOString(),
+    ...(input.visual ? { visual: input.visual } : {}),
+    ...(input.grafica ? { grafica: input.grafica } : {}),
+    actualizado_en: new Date().toISOString(),
+  };
+}
+
 export async function publicarHallazgo(input: HallazgoInput) {
-  const payloadHash = hashPayload(input);
+  const payloadHash = hashHallazgo(input);
   const supabase = client();
   const previo = await supabase.from("miles_hallazgos").select("*").eq("idempotency_key", input.idempotencyKey).maybeSingle();
   if (previo.error) fallar(previo.error);
@@ -197,50 +233,45 @@ export async function publicarHallazgo(input: HallazgoInput) {
     }
     return { row: previo.data, reintento: true };
   }
-  let previoPatron: string | null = null;
   if (input.patronClave) {
     const anterior = await supabase
       .from("miles_hallazgos")
-      .select("id, periodo_desde, periodo_hasta")
+      .select("*")
       .eq("patron_clave", input.patronClave)
+      .eq("tienda", input.tienda)
       .order("publicado_en", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (anterior.error) fallar(anterior.error);
-    if (anterior.data && (anterior.data.periodo_desde !== input.periodoDesde || anterior.data.periodo_hasta !== input.periodoHasta)) {
-      previoPatron = String(anterior.data.id);
+    if (anterior.data) {
+      if (mismoContenido(String(anterior.data.payload_hash), payloadHash)) {
+        return { row: anterior.data, reintento: true };
+      }
+      const actualizado = await supabase
+        .from("miles_hallazgos")
+        .update({ ...filaHallazgo(input, payloadHash), version: Number(anterior.data.version ?? 1) + 1 })
+        .eq("id", anterior.data.id)
+        .select("*")
+        .single();
+      if (actualizado.error) fallar(actualizado.error);
+      await evento("hallazgo", String(anterior.data.id), MILES_ROL, "actualizacion", {
+        titulo: anterior.data.titulo,
+        resumen: anterior.data.resumen,
+        periodo_desde: anterior.data.periodo_desde,
+        periodo_hasta: anterior.data.periodo_hasta,
+        metricas: anterior.data.metricas,
+        estado: anterior.data.estado,
+      });
+      return { row: actualizado.data, reintento: false };
     }
   }
   const insertado = await supabase
     .from("miles_hallazgos")
     .insert({
-      ejecucion_id: input.ejecucionId,
+      ...filaHallazgo(input, payloadHash),
       autor: MILES_ROL,
       idempotency_key: input.idempotencyKey,
-      payload_hash: payloadHash,
-      patron_clave: input.patronClave,
-      hallazgo_previo_id: previoPatron,
-      tipo: input.tipo,
-      titulo: input.titulo,
-      resumen: input.resumen,
-      observacion: input.observacion,
-      interpretacion: input.interpretacion,
-      recomendacion: input.recomendacion,
-      prioridad: input.prioridad,
-      prioridad_justificacion: input.prioridadJustificacion,
-      tienda: input.tienda,
-      alcance: input.alcance,
-      periodo_desde: input.periodoDesde,
-      periodo_hasta: input.periodoHasta,
-      comparacion_desde: input.comparacionDesde,
-      comparacion_hasta: input.comparacionHasta,
-      comparacion_modo: input.comparacionModo,
-      metricas: input.metricas,
-      muestras: input.muestras,
-      limitaciones: input.limitaciones,
-      evidencia: input.evidencia,
-      corte: input.corte,
-      ...(input.visual ? { visual: input.visual } : {}),
+      hallazgo_previo_id: null,
     })
     .select("*")
     .single();
@@ -250,7 +281,7 @@ export async function publicarHallazgo(input: HallazgoInput) {
     }
     fallar(insertado.error);
   }
-  await evento("hallazgo", String(insertado.data.id), MILES_ROL, "publicacion", { previo: previoPatron });
+  await evento("hallazgo", String(insertado.data.id), MILES_ROL, "publicacion", {});
   return { row: insertado.data, reintento: false };
 }
 
@@ -491,4 +522,187 @@ export async function comentar(input: { recursoTipo: string; recursoId: string; 
   if (error) fallar(error);
   await evento(input.recursoTipo, input.recursoId, input.autor, "comentario", {});
   return data;
+}
+
+export async function publicarInforme(input: InformeInput) {
+  const payloadHash = hashInforme(input);
+  const supabase = client();
+  const previo = await supabase.from("miles_informes").select("*").eq("idempotency_key", input.idempotencyKey).maybeSingle();
+  if (previo.error) fallar(previo.error);
+  if (previo.data) {
+    if (!mismoContenido(String(previo.data.payload_hash), payloadHash)) throw new MilesError(409, "La misma clave llegó con otro contenido");
+    return { row: previo.data, reintento: true };
+  }
+  const hallazgos = input.casos.length
+    ? await supabase.from("miles_hallazgos").select("id, titulo, resumen, estado, tipo, prioridad, grafica").in("id", input.casos)
+    : { data: [], error: null };
+  if (hallazgos.error) fallar(hallazgos.error);
+  if ((hallazgos.data ?? []).length !== input.casos.length) throw new MilesError(400, "Un caso del informe no existe");
+  const insertado = await supabase
+    .from("miles_informes")
+    .insert({
+      fecha: input.fecha,
+      ejecucion_id: input.ejecucionId,
+      estado: input.estado,
+      conclusion: input.conclusion,
+      novedades: input.novedades,
+      actualizaciones: input.actualizaciones,
+      bloqueos: input.bloqueos,
+      trabajo: input.trabajo,
+      datos_hasta: input.datosHasta,
+      idempotency_key: input.idempotencyKey,
+      payload_hash: payloadHash,
+    })
+    .select("*")
+    .single();
+  if (insertado.error) {
+    if (insertado.error.code === "23505") return publicarInforme(input);
+    fallar(insertado.error);
+  }
+  if ((hallazgos.data ?? []).length > 0) {
+    const casos = (hallazgos.data ?? []).map((row, index) => ({
+      informe_id: insertado.data.id,
+      hallazgo_id: row.id,
+      orden: input.casos.indexOf(String(row.id)) >= 0 ? input.casos.indexOf(String(row.id)) : index,
+      titulo: row.titulo,
+      conclusion: row.resumen,
+      estado_en_publicacion: row.estado,
+      tipo: row.tipo,
+      prioridad: row.prioridad,
+      grafica: row.grafica,
+    }));
+    const ligadura = await supabase.from("miles_informe_casos").insert(casos);
+    if (ligadura.error) {
+      await supabase.from("miles_informes").delete().eq("id", insertado.data.id);
+      fallar(ligadura.error);
+    }
+  }
+  await evento("informe", String(insertado.data.id), MILES_ROL, "publicacion", { fecha: input.fecha });
+  return { row: insertado.data, reintento: false };
+}
+
+export async function listarInformes(limit = 30) {
+  const { data, error } = await client().from("miles_informes").select("*").order("fecha", { ascending: false }).order("publicado_en", { ascending: false }).limit(limit);
+  if (error) fallar(error);
+  return data ?? [];
+}
+
+export async function casosDeInforme(informeId: string) {
+  const { data, error } = await client().from("miles_informe_casos").select("*").eq("informe_id", informeId).order("orden", { ascending: true });
+  if (error) fallar(error);
+  return data ?? [];
+}
+
+export async function publicarAsociacion(input: AsociacionInput) {
+  const payloadHash = hashAsociacion(input);
+  const supabase = client();
+  const previo = await supabase.from("miles_asociaciones").select("*").eq("idempotency_key", input.idempotencyKey).maybeSingle();
+  if (previo.error) fallar(previo.error);
+  if (previo.data) {
+    if (!mismoContenido(String(previo.data.payload_hash), payloadHash)) {
+      const actualizado = await supabase
+        .from("miles_asociaciones")
+        .update({
+          ...filaAsociacion(input),
+          payload_hash: payloadHash,
+          version: Number(previo.data.version ?? 1) + 1,
+          actualizado_en: new Date().toISOString(),
+        })
+        .eq("id", previo.data.id)
+        .select("*")
+        .single();
+      if (actualizado.error) fallar(actualizado.error);
+      await evento("asociacion", String(previo.data.id), MILES_ROL, "actualizacion", { n_ab: previo.data.n_ab, observacion: previo.data.observacion });
+      return { row: actualizado.data, reintento: false };
+    }
+    return { row: previo.data, reintento: true };
+  }
+  const par = await supabase
+    .from("miles_asociaciones")
+    .select("*")
+    .eq("codigo_a", input.codigoA)
+    .eq("codigo_b", input.codigoB)
+    .eq("periodo_desde", input.periodoDesde)
+    .eq("periodo_hasta", input.periodoHasta)
+    .maybeSingle();
+  if (par.error) fallar(par.error);
+  if (par.data) {
+    const actualizado = await supabase
+      .from("miles_asociaciones")
+      .update({ ...filaAsociacion(input), payload_hash: payloadHash, version: Number(par.data.version ?? 1) + 1, actualizado_en: new Date().toISOString() })
+      .eq("id", par.data.id)
+      .select("*")
+      .single();
+    if (actualizado.error) fallar(actualizado.error);
+    await evento("asociacion", String(par.data.id), MILES_ROL, "actualizacion", { clave: input.idempotencyKey });
+    return { row: actualizado.data, reintento: false };
+  }
+  const insertado = await supabase.from("miles_asociaciones").insert({ ...filaAsociacion(input), idempotency_key: input.idempotencyKey, payload_hash: payloadHash }).select("*").single();
+  if (insertado.error) fallar(insertado.error);
+  await evento("asociacion", String(insertado.data.id), MILES_ROL, "publicacion", {});
+  return { row: insertado.data, reintento: false };
+}
+
+function filaAsociacion(input: AsociacionInput) {
+  return {
+    codigo_a: input.codigoA,
+    codigo_b: input.codigoB,
+    nombre_a: input.nombreA,
+    nombre_b: input.nombreB,
+    periodo_desde: input.periodoDesde,
+    periodo_hasta: input.periodoHasta,
+    n: input.n,
+    n_a: input.nA,
+    n_b: input.nB,
+    n_ab: input.nAB,
+    observacion: input.observacion,
+    cambio: input.cambio,
+    solidez: input.solidez,
+    limitaciones: input.limitaciones,
+    oportunidad: input.oportunidad,
+    proximo_paso: input.proximoPaso,
+    estado: input.estado,
+    ejecucion_id: input.ejecucionId,
+  };
+}
+
+export async function listarAsociaciones(limit = 40) {
+  const { data, error } = await client().from("miles_asociaciones").select("*").order("actualizado_en", { ascending: false }).limit(limit);
+  if (error) fallar(error);
+  return data ?? [];
+}
+
+export async function guardarTareas(ejecucionId: string, tareas: TareaInput[]) {
+  const supabase = client();
+  const corrida = await supabase.from("miles_ejecuciones").select("id").eq("id", ejecucionId).maybeSingle();
+  if (corrida.error) fallar(corrida.error);
+  if (!corrida.data) throw new MilesError(404, "No está esa corrida");
+  for (let index = 0; index < tareas.length; index += 1) {
+    const tarea = tareas[index];
+    const guardada = await supabase.from("miles_tareas").upsert(
+      {
+        ejecucion_id: ejecucionId,
+        area: tarea.area,
+        estado: tarea.estado,
+        iniciada_en: tarea.iniciadaEn,
+        terminada_en: tarea.terminadaEn,
+        datos_revisados: tarea.datosRevisados,
+        entregable: tarea.entregable,
+        error: tarea.error,
+        proximo_paso: tarea.proximoPaso,
+        orden: index,
+      },
+      { onConflict: "ejecucion_id,area" },
+    );
+    if (guardada.error) fallar(guardada.error);
+  }
+  await evento("ejecucion", ejecucionId, MILES_ROL, "tareas", { areas: tareas.map((tarea) => tarea.area) });
+  return listarTareas(ejecucionId);
+}
+
+export async function listarTareas(ejecucionId: string | null) {
+  if (!ejecucionId) return [];
+  const { data, error } = await client().from("miles_tareas").select("*").eq("ejecucion_id", ejecucionId).order("orden", { ascending: true });
+  if (error) fallar(error);
+  return data ?? [];
 }

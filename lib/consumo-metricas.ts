@@ -255,5 +255,5 @@ export const DEFINICIONES_CONSUMO = {
   participacion:
     "Venta del producto con ITBIS dividida entre la venta con ITBIS de todo el periodo, no entre la página ni entre la venta sin ITBIS.",
   canasta:
-    "Un ticket contiene un producto si la suma de cantidades, sin las líneas marcadas como devolución, es mayor que cero. El producto repetido en el mismo ticket cuenta una vez. draft y cancel no entran.",
+    "Un ticket contiene un producto si la suma de cantidades, sin las líneas marcadas como devolución, es mayor que cero. El producto repetido en el mismo ticket cuenta una vez. draft y cancel no entran. La lista del periodo incluye cada par que llega al mínimo; no hace falta elegir candidatos.",
 } as const;

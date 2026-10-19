@@ -63,11 +63,9 @@ export function PropuestasRelacionadas({ productoId, hallazgoId }: { productoId?
           );
         })}
       </ul>
-      {hallazgoId ? (
-        <Link href={`/admin/consumo/miles?vista=combos&origen=${hallazgoId}&pedir=1`} className="inline-flex rounded-full bg-[#F3F4F6] px-3 py-1.5 text-sm font-semibold">
-          Pedir propuesta a Miles
-        </Link>
-      ) : null}
+      <Link href="/admin/consumo/miles?seccion=propuestas" className="inline-flex rounded-full bg-[#F3F4F6] px-3 py-1.5 text-sm font-semibold">
+        Ver propuestas publicadas
+      </Link>
     </div>
   );
 }

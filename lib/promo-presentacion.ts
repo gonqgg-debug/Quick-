@@ -7,10 +7,14 @@ export const ETIQUETA_TIPO_PROMO: Record<string, string> = {
 };
 
 export const ETIQUETA_ESTADO_PROPUESTA: Record<string, string> = {
-  borrador: "Borrador",
-  por_revisar: "Por revisar",
-  requiere_ampliacion: "Requiere ampliación",
-  lista_para_probar: "Lista para probar",
+  borrador: "En evaluación",
+  por_revisar: "En evaluación",
+  requiere_ampliacion: "Bloqueada",
+  bloqueada: "Bloqueada",
+  lista_para_probar: "Lista para decisión",
+  aprobada: "Aprobada para implementar",
+  implementada: "Implementada, en prueba",
+  evaluada: "Evaluada",
   descartada: "Descartada",
   archivada: "Archivada",
 };

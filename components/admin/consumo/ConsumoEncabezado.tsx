@@ -45,6 +45,7 @@ export function ConsumoEncabezado({ frescura }: { frescura: FrescuraConsumo | nu
   const esResumen = pathname === "/admin/consumo";
   const esDetalleProducto = pathname.startsWith("/admin/consumo/productos/");
   const esHorarios = pathname.startsWith("/admin/consumo/horarios");
+  const esMiles = pathname.startsWith("/admin/consumo/miles");
   const muestraPeriodo = pathname === "/admin/consumo" || esDetalleProducto || pathname.startsWith("/admin/consumo/horarios");
   const preset = params.get("preset") ?? (params.get("desde") || params.get("hasta") ? "custom" : "7d");
   const comparacion = params.get("comparar") === "0" ? "off" : (params.get("comparacion") ?? "anterior");
@@ -60,7 +61,7 @@ export function ConsumoEncabezado({ frescura }: { frescura: FrescuraConsumo | nu
     router.push(conQuery(pathname, params, patch));
   }
 
-  if (esListaProductos || esResumen || esDetalleProducto || esHorarios) {
+  if (esListaProductos || esResumen || esDetalleProducto || esHorarios || esMiles) {
     return null;
   }
 

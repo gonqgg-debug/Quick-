@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-auth";
 import { MilesError } from "@/lib/miles-domain";
 import { respuestaMiles } from "@/lib/miles-http";
-import { crearInvestigacion } from "@/lib/miles-store";
+import { comentar, crearInvestigacion } from "@/lib/miles-store";
 import { cambiarPropuesta, leerPropuesta } from "@/lib/promo-store";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +39,24 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (body.accion === "lista") {
       const row = await cambiarPropuesta(params.id, version, { estado: "lista_para_probar" }, actor, "lista");
       return NextResponse.json({ id: row.id, estado: row.estado, version: row.version, aviso: "Lista para probar no enciende la promoción en caja." });
+    }
+    if (body.accion === "aprobar") {
+      const row = await cambiarPropuesta(params.id, version, { estado: "aprobada" }, actor, "aprobacion");
+      return NextResponse.json({ id: row.id, estado: row.estado, version: row.version, aviso: "Aprobar no cambia precios ni enciende la promoción." });
+    }
+    if (body.accion === "implementar") {
+      const inicio = typeof body.inicio === "string" ? body.inicio : "";
+      const nota = typeof body.nota === "string" ? body.nota.trim() : "";
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(inicio) || nota.length < 3) throw new MilesError(400, "Registrar la implementación pide la fecha real y una nota");
+      const row = await cambiarPropuesta(params.id, version, { estado: "implementada" }, actor, "implementacion");
+      await comentar({ recursoTipo: "propuesta", recursoId: params.id, autor: actor, cuerpo: `Implementación desde ${inicio}. ${nota}` });
+      return NextResponse.json({ id: row.id, estado: row.estado, version: row.version, aviso: "Quedó registrada la implementación. No se modificaron precios, inventario ni pedidos." });
+    }
+    if (body.accion === "contexto") {
+      const nota = typeof body.nota === "string" ? body.nota.trim() : "";
+      if (nota.length < 3) throw new MilesError(400, "El contexto necesita un texto");
+      await comentar({ recursoTipo: "propuesta", recursoId: params.id, autor: actor, cuerpo: nota });
+      return NextResponse.json({ id: params.id, aviso: "El contexto quedó en el caso." });
     }
     if (body.accion === "ampliacion") {
       const pregunta = typeof body.pregunta === "string" ? body.pregunta.trim() : "";
