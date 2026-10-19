@@ -193,7 +193,7 @@ Authorization: Bearer <token de Miles>
 }
 ```
 
-`tipo` es `combo`, `acompanamiento`, `compra_minima`, `horario` o `salida_inventario`. `funcion` es `principal`, `complemento` o `beneficio`. Cada producto lleva `productId` o `codigoOdoo` del catálogo. `estado` solo puede ser `borrador` o `por_revisar`. La misma `idempotencyKey` devuelve la misma propuesta; otro contenido es 409.
+`tipo` es `combo`, `acompanamiento`, `compra_minima`, `horario` o `salida_inventario`. `funcion` es `principal`, `complemento` o `beneficio`. Cada producto lleva `productId` o `codigoOdoo` del catálogo. Miles puede publicar `borrador`, `por_revisar` o `bloqueada`. La misma `idempotencyKey` devuelve la misma propuesta; otro contenido es 409. Aprobar e implementar son acciones del admin y no cambian precios.
 
 `solidez` alta, media o baja no es un porcentaje. `probabilidad` se omite, o llega completa: `valor` entre 0 y 1, `objetivo`, `horizonte`, `modelo`, `version`, `datos`, `supuestos`, `validacion` fuera de muestra, `evaluadaEn` y `limitaciones`. Un intervalo necesita `inferior`, `superior` y `representa`. Sin ese paquete la pantalla dice que todavía no es estimable.
 
@@ -202,6 +202,54 @@ Si `escenarios` trae `ingreso`, `costo`, `margen` y `tasa`, la API anota `aritme
 `GET /api/agent/miles/proposals` y `GET /api/agent/miles/proposals/<id>` devuelven productos, hallazgos, pruebas y evaluaciones. `PATCH` corrige texto, mecánica, evidencia, escenarios o el estado propio si `version` coincide. No acepta HTML, `decision`, descarte ni `lista_para_probar`.
 
 Las solicitudes de propuestas y de ampliación salen en `GET /api/agent/miles/investigations`. El alcance trae `solicitud` `propuestas` o `ampliacion`, y `propuestaId` cuando aplica. Tomarlas no genera una propuesta.
+
+## Informe, asociaciones y rutina
+
+La página ya no pide investigaciones ni propuestas. Miles publica solo.
+
+`POST /api/agent/miles/informes` guarda el informe de una fecha local. `casos` son ids de hallazgos que ya existen. El título y el resumen se copian en ese momento: un cambio posterior del caso no reescribe el informe. La misma `idempotencyKey` con otro cuerpo responde 409. Otra clave el mismo día crea otro informe; la pantalla muestra el último y conserva los anteriores.
+
+`POST /api/agent/miles/findings` con un `patronClave` que ya existe actualiza ese caso. No abre un hallazgo nuevo por día. El texto y las métricas anteriores quedan en el historial del caso. La misma `idempotencyKey` con otro contenido sigue siendo 409.
+
+`grafica` admite `linea`, `barras`, `barras_divergentes`, `cascada`, `histograma`, `apiladas`, `apiladas_100`, `dona`, `calor` y `porcentaje`. Un valor ausente va en `null`, no en cero. Una cascada tiene que cuadrar. Una dona no acepta negativos. `visual` anterior sigue valiendo. Sin serie, la pantalla muestra el texto y no inventa puntos.
+
+`POST /api/agent/miles/asociaciones` publica la interpretación de un par. Los conteos `n`, `nA`, `nB` y `nAB` tienen que cuadrar. La canasta que se ve en Complementarios la calcula la plataforma con la semana ya guardada; no se fabrican grupos de tres productos.
+
+`POST /api/agent/miles/runs/{id}/tareas` dice qué pasó en cada área: `datos`, `ventas`, `productos`, `horarios`, `complementarios`, `rentabilidad`, `seguimiento`, `informe`. El estado de una tarea es `ejecutada`, `sin_novedades`, `publicada`, `limitada`, `fallida` o `no_ejecutada`. Cerrar la corrida en `completada`, `parcial` o `fallida` no marca la rutina.
+
+Una propuesta de Miles puede quedar `bloqueada` si falta costo o disponibilidad. No inventa precio ni margen. El admin puede aprobar o registrar la implementación; eso no cambia precios, inventario ni pedidos.
+
+### Qué tiene que cambiar el agente
+
+El agente vive fuera de este repositorio. Esta página no lo despierta ni le configura un horario. Tiene que publicar, en este orden, contra `https://www.quickminimarket.com`:
+
+1. `POST /api/agent/miles/runs` y, al terminar cada área, `POST /api/agent/miles/runs/{id}/tareas`. Cerrar la corrida con `PATCH` y `estado` `completada`, `parcial` o `fallida` no completa la rutina. Una rentabilidad bloqueada no debe impedir publicar las tareas de ventas, horarios o complementarios: esas van en `ejecutada`, `sin_novedades`, `publicada` o `limitada`, y rentabilidad en `fallida` o `limitada`.
+2. Revalidar cada caso con el mismo `patronClave`. Si el caso ya existe, el `POST /api/agent/miles/findings` lo actualiza. No abras un hallazgo nuevo por día. Usa una `idempotencyKey` nueva solo cuando el contenido cambió y el caso es otro. La misma clave con otro cuerpo responde 409.
+3. Adjuntar `grafica` del catálogo cuando haya una serie real. Un hueco es `null`. No envíes HTML. Si no hay serie, omite `grafica`. Separa `hipotesis` de la observación. `proximoPaso` es lo que Miles hará, no una petición al usuario.
+4. Publicar la interpretación de pares con `POST /api/agent/miles/asociaciones`. Los conteos salen de `GET /api/agent/analytics/baskets?a=&b=` o de la canasta semanal. No armes un grupo de tres productos sumando pares. Si falta costo o inventario, dilo en `limitaciones` y no inventes margen.
+5. Publicar el informe del día local `America/Santo_Domingo` con `POST /api/agent/miles/informes` después de que existan los hallazgos. `casos` son sus ids. `fecha` es el día del informe, no el periodo analizado. `datosHasta` es el último día con datos. Si una área falló, `estado` es `parcial` y `bloqueos` dice cuál.
+
+Ejemplo ficticio, no es un informe de la tienda:
+
+```json
+{
+  "idempotencyKey": "informe-quick-2026-10-19",
+  "fecha": "2026-10-19",
+  "ejecucionId": "00000000-0000-4000-8000-000000000001",
+  "estado": "publicado",
+  "conclusion": "Ejemplo de dos líneas. No usar estas cifras en producción.",
+  "novedades": "Ninguna en este ejemplo.",
+  "actualizaciones": null,
+  "bloqueos": null,
+  "datosHasta": "2026-10-18",
+  "casos": ["00000000-0000-4000-8000-000000000002"],
+  "trabajo": { "areas": ["ventas", "complementarios"], "revalidados": [], "pruebas": [], "bloqueos": [] }
+}
+```
+
+La pantalla de Complementarios calcula los pares con la canasta semanal ya guardada (mínimo 5 tickets juntos, una presencia por ticket). No hay una ventana de 30 días ni grupos de más de dos productos. El agente no tiene que reenviar esa lista para que se vea; sí tiene que revalidarla y publicar la interpretación cuando cambie.
+
+No se configuró un cron externo en este cambio.
 
 ## Permisos
 
@@ -220,6 +268,6 @@ Las solicitudes de propuestas y de ampliación salen en `GET /api/agent/miles/in
 
 ## Migración
 
-`supabase/migrations/20261016200000_miles_consumo.sql` crea las tablas de Miles. `20261016220000_miles_visual.sql` agrega `visual`, `resolucion` y `recomendacion_estado`. `20261016230000_miles_promos.sql` crea propuestas, productos, hallazgos vinculados y variantes, y agrega `propuesta_id`, `variante_id` y `snapshot` a las pruebas. En producción quedó registrada como `20261016230000`. No enciende promociones.
+`supabase/migrations/20261016200000_miles_consumo.sql` crea las tablas de Miles. `20261016220000_miles_visual.sql` agrega `visual`, `resolucion` y `recomendacion_estado`. `20261016230000_miles_promos.sql` crea propuestas. `20261019180000_miles_informe.sql` crea informes, la copia de cada caso (título, conclusión, estado, tipo, prioridad y gráfica en el momento de publicar), asociaciones y tareas, y amplía los estados de corrida (`parcial`) y propuesta (`bloqueada`, `aprobada`, `implementada`, `evaluada`). Hay que aplicarla para que el informe diario guarde. No enciende promociones ni reescribe hallazgos viejos.
 
 Una propuesta guardada sigue siendo válida si no trae probabilidad ni visual. El estado de la propuesta no es el estado de la prueba. El snapshot de una prueba no se recalcula cuando cambian el catálogo o el simulador.

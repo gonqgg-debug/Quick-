@@ -25,7 +25,10 @@ import {
 import { anioAnterior, asociacionCanasta, coberturaDeFechas, desgloseVenta, estadoComparacion, estadoHora, participacion, promedioOcurrencia, resolverComparacion, variacionPct } from "../lib/consumo-metricas";
 import { describirPeriodo, estadoCosto, margenAgregado, subtituloProducto, variacionAgregada, variacionProducto } from "../lib/consumo-productos-ui";
 import { celdaCsv, csvProductos, etiquetaVariacion, etiquetaVariacionTotal } from "../lib/productos-analitica";
-import { CONSULTAS_MILES, MilesError, hashPayload, parseAvanceInvestigacion, parseCierreRun, parseEvidencia, parseHallazgo } from "../lib/miles-domain";
+import { CONSULTAS_MILES, MilesError, hashHallazgo, hashPayload, parseAvanceInvestigacion, parseCierreRun, parseEvidencia, parseHallazgo } from "../lib/miles-domain";
+import { clasificarPortada, metricaAsociacion } from "../lib/miles-casos";
+import { parseAsociacion, parseInforme, parseTareas } from "../lib/miles-publicacion";
+import { leerGrafica } from "../lib/miles-grafica";
 import { calcularPromo, revisarAritmetica, supuestosVacios } from "../lib/promo-calculo";
 import { parseCorreccionPropuesta, parsePropuesta } from "../lib/promo-domain";
 import { indicadoresPromo, ordenAtencion, probabilidadCompleta } from "../lib/promo-presentacion";
@@ -470,6 +473,58 @@ try {
   tituloVacio = error instanceof MilesError ? error.message : "";
 }
 assert(tituloVacio === "titulo es obligatorio", "un título vacío sigue siendo obligatorio");
+const legado = parseHallazgo(hallazgo);
+const sinNuevos = { ...legado } as Record<string, unknown>;
+delete sinNuevos.grafica;
+delete sinNuevos.hipotesis;
+delete sinNuevos.proximoPaso;
+assert(hashHallazgo(legado) === hashPayload(sinNuevos), "un hallazgo sin campos nuevos conserva el hash anterior");
+assert(parseCierreRun({ version: 1, estado: "parcial" }).estado === "parcial", "una corrida puede cerrar en parcial");
+const parOk = metricaAsociacion({ elegibles: 100, conA: 40, conB: 25, conAmbos: 10 });
+assert(parOk.metrica?.soporte === 0.1 && parOk.metrica.dadoA === 0.25 && parOk.metrica.dadoB === 0.4 && parOk.metrica.afinidad === 1, "soporte, direcciones y afinidad usan los mismos tickets");
+assert(metricaAsociacion({ elegibles: 10, conA: 4, conB: 3, conAmbos: 5 }).error != null, "los tickets compartidos no pueden superar los de un producto");
+assert(clasificarPortada({ hoy: "2026-10-19", informeFecha: "2026-10-18", informeEstado: "publicado", ejecucionEstado: "completada" }).estado === "anterior", "un informe de ayer no se presenta como el de hoy");
+assert(clasificarPortada({ hoy: "2026-10-19", informeFecha: "2026-10-19", informeEstado: "publicado", ejecucionEstado: "completada" }).informeEsDeHoy, "el informe de la fecha local es el de hoy");
+assert(clasificarPortada({ hoy: "2026-10-19", informeFecha: null, informeEstado: null, ejecucionEstado: "completada" }).estado === "sin_informe", "cerrar la corrida no publica un informe");
+const cascadaMala = leerGrafica({ titulo: "Cambio", tipo: "cascada", unidad: "rd", serie: [{ etiqueta: "Tickets", valor: 10 }, { etiqueta: "Total", valor: 4 }] });
+assert(cascadaMala.error != null, "una cascada que no cuadra se rechaza");
+const donaMala = leerGrafica({ titulo: "Mix", tipo: "dona", unidad: "rd", serie: [{ etiqueta: "A", valor: -1 }, { etiqueta: "B", valor: 2 }] });
+assert(donaMala.error != null, "una dona no acepta negativos");
+assert(leerGrafica({ titulo: "Venta", tipo: "linea", unidad: "rd", serie: [{ etiqueta: "Lun", valor: 1 }, { etiqueta: "Mar", valor: null }, { etiqueta: "Mié", valor: 3 }] }).grafica?.serie[1].valor == null, "un hueco de la serie sigue siendo ausencia, no cero");
+const asociacion = parseAsociacion({
+  idempotencyKey: "par-ejemplo",
+  codigoA: "B",
+  codigoB: "A",
+  periodoDesde: "2026-09-01",
+  periodoHasta: "2026-09-30",
+  n: 100,
+  nA: 40,
+  nB: 25,
+  nAB: 10,
+});
+assert(asociacion.codigoA === "A" && asociacion.codigoB === "B", "los códigos de una asociación se ordenan");
+let conteosMal = "";
+try {
+  parseAsociacion({ idempotencyKey: "par-mal", codigoA: "A", codigoB: "B", periodoDesde: "2026-09-01", periodoHasta: "2026-09-30", n: 10, nA: 4, nB: 3, nAB: 5 });
+} catch (error) {
+  conteosMal = error instanceof MilesError ? error.message : "";
+}
+assert(conteosMal.includes("no cuadran"), "una asociación con conteos imposibles se rechaza");
+const informe = parseInforme({
+  idempotencyKey: "informe-ejemplo",
+  fecha: "2026-10-19",
+  conclusion: "Ejemplo de documentación, no es un informe real.",
+  casos: ["caso-1", "caso-1"],
+  trabajo: { areas: ["ventas"] },
+});
+assert(informe.casos.length === 1 && informe.estado === "publicado", "el informe deduplica casos y publica completo si no dice parcial");
+let tareasRepetidas = "";
+try {
+  parseTareas({ tareas: [{ area: "ventas", estado: "ejecutada" }, { area: "ventas", estado: "fallida" }] });
+} catch (error) {
+  tareasRepetidas = error instanceof MilesError ? error.message : "";
+}
+assert(tareasRepetidas.includes("repetida"), "una área de la rutina no se publica dos veces en la misma corrida");
 const evidenciaLarga = parseEvidencia({
   consultas: ["/api/agent/analytics/summary?desde=2026-10-01&hasta=2026-10-16&categoria=tabaco", { nombre: "consumo_mapa_horas" }],
   filtros: { categoria: "tabaco" },

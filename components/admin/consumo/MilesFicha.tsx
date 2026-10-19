@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { MilesGrafica } from "@/components/admin/consumo/MilesGrafica";
 import { MilesVisual, textoComparacion, textoMetrica } from "@/components/admin/consumo/MilesVisual";
+import { leerGrafica } from "@/lib/miles-grafica";
 import { PropuestasRelacionadas } from "@/components/admin/consumo/PropuestasRelacionadas";
 import { Pildora } from "@/components/admin/consumo/ui";
 import type { EvidenciaMiles } from "@/lib/miles-domain";
@@ -29,6 +31,7 @@ const TIPO: Record<string, string> = {
   patron: "Patrón",
   anomalia: "Anomalía",
   calidad: "Calidad de datos",
+  cambio: "Cambio",
 };
 
 const CLASE: Record<string, { texto: string; tono: "gris" | "naranja" | "verde" | "rojo" }> = {
@@ -92,8 +95,8 @@ export function MilesFicha({
   const evidencia = (row.evidencia ?? {}) as EvidenciaMiles;
   const metricas = row.metricas && typeof row.metricas === "object" ? (row.metricas as Record<string, unknown>) : {};
   const [motivo, setMotivo] = useState("");
-  const [pregunta, setPregunta] = useState("");
   const [comentario, setComentario] = useState("");
+  const grafica = leerGrafica(row.grafica);
   const [confirmar, setConfirmar] = useState<"resolver" | "archivar" | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const vigente = String(row.estado) === "vigente" && row.resolucion !== "resuelta";
@@ -108,7 +111,6 @@ export function MilesFicha({
     setAviso(json.aviso ?? json.error ?? (respuesta.ok ? "Listo" : "No se pudo guardar"));
     if (!respuesta.ok) return;
     if (body.accion === "comentario") setComentario("");
-    if (body.accion === "ampliacion") setPregunta("");
     if (body.accion === "descartar") setMotivo("");
     setConfirmar(null);
     router.refresh();
@@ -152,9 +154,14 @@ export function MilesFicha({
 
       <section>
         <h3 className="text-sm font-semibold">Evidencia</h3>
+        {grafica.grafica ? <div className="mt-3"><MilesGrafica grafica={grafica.grafica} /></div> : null}
+        {grafica.error ? <p className="mt-2 text-sm" style={{ color: brand.error }}>{grafica.error} No se dibuja esa serie.</p> : null}
         {visual.motivo ? <p className="mt-2 text-sm" style={{ color: brand.error }}>{visual.motivo} Se muestra el texto publicado, no el gráfico.</p> : null}
-        {visual.coherente && visual.visual && graficoAlcanza(visual.visual) ? (
+        {!grafica.grafica && visual.coherente && visual.visual && graficoAlcanza(visual.visual) ? (
           <div className="mt-3"><MilesVisual visual={visual.visual} /></div>
+        ) : null}
+        {!grafica.grafica && !(visual.coherente && visual.visual && graficoAlcanza(visual.visual)) ? (
+          <p className="mt-2 text-xs text-brand-muted">Sin serie publicada. El texto no se convierte en gráfica.</p>
         ) : null}
         <Cifras metricas={metricas} />
         <p className="mt-3 text-sm leading-6">{String(row.observacion)}</p>
@@ -170,6 +177,8 @@ export function MilesFicha({
             <p className="mt-2 text-sm leading-6 text-brand-muted">{anterior}</p>
           </details>
         ) : null}
+        {row.hipotesis ? <p className="mt-2 text-sm leading-6">Hipótesis, no observación: {String(row.hipotesis)}</p> : null}
+        {row.proximo_paso ? <p className="mt-2 text-sm leading-6">Siguiente paso de Miles: {String(row.proximo_paso)}</p> : null}
         <p className="mt-2 text-xs text-brand-muted">Prioridad {String(row.prioridad)}: {String(row.prioridad_justificacion)}</p>
       </section>
 
@@ -204,14 +213,8 @@ export function MilesFicha({
           <textarea value={comentario} onChange={(event) => setComentario(event.target.value)} className="mt-1 w-full rounded-md border border-[#E5E7EB] px-3 py-2 text-sm text-brand-ink" />
         </label>
         <button type="button" disabled={comentario.trim().length < 2} onClick={() => void enviar({ accion: "comentario", cuerpo: comentario })} className="mt-2 rounded-full bg-[#F3F4F6] px-3 py-1.5 text-sm font-semibold disabled:opacity-50">
-          Publicar comentario
+          Aportar contexto
         </button>
-        {vigente ? (
-          <label className="mt-3 block text-xs text-brand-muted">
-            Pedir ampliación
-            <textarea value={pregunta} onChange={(event) => setPregunta(event.target.value)} className="mt-1 w-full rounded-md border border-[#E5E7EB] px-3 py-2 text-sm text-brand-ink" />
-          </label>
-        ) : null}
       </section>
 
       <section>
@@ -257,8 +260,8 @@ export function MilesFicha({
             Explorar datos
           </Link>
         ) : null}
-        {vigente ? <Link href={`/admin/consumo/miles?vista=pruebas&origen=${row.id}`} className="rounded-full bg-[#F3F4F6] px-3 py-1.5 text-sm font-semibold">Crear prueba</Link> : null}
-        <Link href={`/admin/consumo/miles?vista=combos&origen=${row.id}&pedir=1`} className="rounded-full bg-[#F3F4F6] px-3 py-1.5 text-sm font-semibold">Pedir propuesta a Miles</Link>
+        <Link href="/admin/consumo/miles?seccion=propuestas" className="rounded-full bg-[#F3F4F6] px-3 py-1.5 text-sm font-semibold">Ver propuestas</Link>
+        <Link href="/admin/consumo/miles?seccion=seguimiento" className="rounded-full bg-[#F3F4F6] px-3 py-1.5 text-sm font-semibold">Seguimiento</Link>
         {onClose ? null : <Link href="/admin/consumo/miles" className="rounded-full bg-[#F3F4F6] px-3 py-1.5 text-sm font-semibold">Volver</Link>}
       </div>
 
@@ -268,9 +271,6 @@ export function MilesFicha({
             <button type="button" onClick={() => actuar("resolver")} className="rounded-full px-3 py-1.5 text-sm font-semibold text-white" style={{ backgroundColor: brand.green }}>
               {confirmar === "resolver" ? "Confirmar resolución" : "Registrar resolución"}
             </button>
-          ) : null}
-          {pregunta ? (
-            <button type="button" onClick={() => enviar({ accion: "ampliacion", pregunta })} className="rounded-full bg-[#F3F4F6] px-3 py-1.5 text-sm font-semibold">Dejar la solicitud</button>
           ) : null}
           <label className="block text-xs text-brand-muted">
             Motivo para descartar
