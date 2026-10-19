@@ -68,6 +68,42 @@ function canonicaConsulta(nombre: string): string | null {
   return ALIAS_CONSULTA[base] ?? null;
 }
 
+/** Acepta el nombre solo, la ruta con filtros, o una nota que contenga el nombre. */
+function extraerConsultas(texto: string): string[] {
+  const exacta = canonicaConsulta(texto);
+  if (exacta) {
+    return [exacta];
+  }
+  const fuente = texto.toLowerCase();
+  const nombres = [...CONSULTAS_MILES].sort((a, b) => b.length - a.length);
+  const hallados: string[] = [];
+  const ocupado: Array<[number, number]> = [];
+  for (const nombre of nombres) {
+    const aguja = nombre.toLowerCase();
+    let desde = 0;
+    while (desde <= fuente.length - aguja.length) {
+      const indice = fuente.indexOf(aguja, desde);
+      if (indice < 0) {
+        break;
+      }
+      const fin = indice + aguja.length;
+      const anterior = fuente[indice - 1] ?? "";
+      const siguiente = fuente[fin] ?? "";
+      const bordeIzq = indice === 0 || !/[a-z0-9_]/.test(anterior);
+      const bordeDer = fin >= fuente.length || !/[a-z0-9_]/.test(siguiente);
+      const choca = ocupado.some(([inicio, final]) => indice < final && fin > inicio);
+      if (bordeIzq && bordeDer && !choca) {
+        ocupado.push([indice, fin]);
+        if (!hallados.includes(nombre)) {
+          hallados.push(nombre);
+        }
+      }
+      desde = fin;
+    }
+  }
+  return hallados;
+}
+
 function textoConsulta(item: unknown): string | null {
   if (typeof item === "string") {
     return item;
@@ -95,12 +131,14 @@ function parseConsultas(value: unknown): string[] {
     if (textoItem == null || textoItem.trim() === "") {
       throw new MilesError(400, `evidencia.consultas tiene que ser una lista de nombres. Válidas: ${listaConsultas()}`);
     }
-    const canonica = canonicaConsulta(textoItem);
-    if (!canonica) {
-      throw new MilesError(400, `evidencia.consultas no reconoce «${textoItem.trim().slice(0, 80)}». Válidas: ${listaConsultas()}`);
+    const encontradas = extraerConsultas(textoItem);
+    if (encontradas.length === 0) {
+      throw new MilesError(400, `evidencia.consultas no reconoce «${textoItem.trim().slice(0, 120)}». Falta un nombre de esta lista: ${listaConsultas()}`);
     }
-    if (!nombres.includes(canonica)) {
-      nombres.push(canonica);
+    for (const canonica of encontradas) {
+      if (!nombres.includes(canonica)) {
+        nombres.push(canonica);
+      }
     }
   }
   return nombres;
@@ -149,7 +187,7 @@ function texto(value: unknown, campo: string, max: number): string {
   }
   const limpio = value.trim();
   if (limpio.length > max) {
-    throw new MilesError(400, `${campo} admite hasta ${max} caracteres`);
+    throw new MilesError(400, `${campo} supera ${max} caracteres`);
   }
   return limpio;
 }

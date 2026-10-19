@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AGENT_EVENT_TYPES } from "@/lib/agent-events";
 import { agentRolFromRequest, requireAgentApi } from "@/lib/agent-auth";
 import { CONSULTAS_MILES } from "@/lib/miles-domain";
-import { MILES_AGENT_ENDPOINTS } from "@/lib/miles-api";
+import { MILES_AGENT_ENDPOINTS, MILES_BASE_URL, MILES_LIMITES, MILES_NOTA_APEX } from "@/lib/miles-api";
 import { EXPANSION_AGENT_ENDPOINTS } from "@/lib/expansion-shared";
 import { FACTURAS_AGENT_ENDPOINTS } from "@/lib/facturas-shared";
 import { OPERACION_AGENT_ENDPOINTS } from "@/lib/operacion-shared";
@@ -21,14 +21,17 @@ export async function GET(request: NextRequest) {
       version: 1,
       agente: "Miles — Analista Comercial",
       auth: "Authorization: Bearer <token de Miles>",
-      nota: "Este token solo ve las funciones de Miles. No escribe ventas, costos, precios, inventario ni decisiones humanas.",
+      baseUrl: MILES_BASE_URL,
+      nota: `Este token solo ve las funciones de Miles. No escribe ventas, costos, precios, inventario ni decisiones humanas. ${MILES_NOTA_APEX}`,
       consultas: CONSULTAS_MILES,
+      limites: MILES_LIMITES,
       endpoints: MILES_AGENT_ENDPOINTS,
     });
   }
 
   return NextResponse.json({
     version: 1,
+    baseUrl: MILES_BASE_URL,
     auth: "Authorization: Bearer <AGENT_API_TOKEN>",
     webhook: {
       configurado: Boolean(process.env.AGENT_WEBHOOK_URL?.trim()),
@@ -36,7 +39,7 @@ export async function GET(request: NextRequest) {
       firma: "Todos los eventos salen con el header X-Quick-Signature: t=<unix>,v1=<hex>. v1 es HMAC-SHA256 de `${timestamp}.${body}` con AGENT_WEBHOOK_SECRET (mínimo 16 caracteres). El secreto vive en el servidor y esta respuesta no lo incluye. El POST también manda Authorization: Bearer <AGENT_WEBHOOK_KEY>, distinta del secreto de la firma. Si el secreto no está, el evento no se envía.",
       eventos: [...AGENT_EVENT_TYPES],
     },
-    nota: "Ventas, compras, caja, catálogo y contable no incluyen teléfonos, direcciones ni chats de clientes. Expansión sí incluye teléfono y correo de brokers y desarrolladores: ese directorio es el CRM. El catálogo no tiene existencias. POST de compras registra una factura con RNC, NCF y captura. POST de facturas guarda lo que Phillip lee, incluida la foto original. Cada bot escribe con su token: Boris solo verifica, Fred solo concilia, Hans publica asientos, Robert los estados y Troy aprueba el cierre. AGENT_API_TOKEN sigue pudiendo leer. POST y PATCH de expansión crean y mueven el pipeline.",
+    nota: `Ventas, compras, caja, catálogo y contable no incluyen teléfonos, direcciones ni chats de clientes. Expansión sí incluye teléfono y correo de brokers y desarrolladores: ese directorio es el CRM. El catálogo no tiene existencias. POST de compras registra una factura con RNC, NCF y captura. POST de facturas guarda lo que Phillip lee, incluida la foto original. Cada bot escribe con su token: Boris solo verifica, Fred solo concilia, Hans publica asientos, Robert los estados y Troy aprueba el cierre. AGENT_API_TOKEN sigue pudiendo leer. POST y PATCH de expansión crean y mueven el pipeline. ${MILES_NOTA_APEX}`,
     endpoints: [
       { method: "GET", path: "/api/agent/metas?fecha=YYYY-MM-DD", describe: "Meta del día (la misma que Hoy) y la venta de esa fecha, en cuanto está guardada. Trae metaAcumulada a la fecha y deficit (meta acumulada menos ventas; positivo si va por debajo). Con mes=YYYY-MM devuelve cada día del mes y el acumulado hasta hoy." },
       { method: "GET", path: "/api/agent/ventas?fecha=YYYY-MM-DD", describe: "Ventas diarias de un día, o from y to (máximo 93 días)" },
