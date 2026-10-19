@@ -32,6 +32,7 @@ export const CONSULTAS_MILES = [
   "consumo_categorias",
   "consumo_canasta",
   "consumo_canasta_par",
+  "consumo_canasta_periodo",
   "consumo_calidad_conteos",
   "consumo_horarios",
   "consumo_sin_costo",

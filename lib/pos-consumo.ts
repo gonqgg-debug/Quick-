@@ -1012,6 +1012,53 @@ export async function cargarCanasta(semana: string, cursor: string | null, limit
   };
 }
 
+export async function cargarCanastaPeriodo(input: {
+  desde: string;
+  hasta: string;
+  minJuntos: number;
+  limit: number;
+  cursor: string | null;
+  categoria: string | null;
+}) {
+  const supabase = getSupabaseAdminClient();
+  const limite = parseLimit(String(input.limit));
+  const decoded = decodeCursor(input.cursor, "juntos");
+  const partes = decoded?.id.split("\u0000") ?? [];
+  const { data, error } = await supabase.rpc("consumo_canasta_periodo", {
+    p_tienda: TIENDA_DEFAULT,
+    p_desde: input.desde,
+    p_hasta: input.hasta,
+    p_min_juntos: input.minJuntos,
+    p_limit: limite + 1,
+    p_cursor_juntos: decoded ? decoded.n : null,
+    p_cursor_a: partes[0] || null,
+    p_cursor_b: partes[1] || null,
+    p_categoria: input.categoria,
+  });
+  if (error) fallar(error);
+  const crudas = ((data ?? []) as Record<string, unknown>[]).filter((row) => row.producto_a != null && row.producto_b != null);
+  const marca = ((data ?? []) as Record<string, unknown>[])[0];
+  const rows = crudas.slice(0, limite).map((row) => ({
+    codigoA: String(row.producto_a),
+    nombreA: row.nombre_a == null ? null : String(row.nombre_a),
+    categoriaA: row.categoria_a == null ? null : String(row.categoria_a),
+    codigoB: String(row.producto_b),
+    nombreB: row.nombre_b == null ? null : String(row.nombre_b),
+    categoriaB: row.categoria_b == null ? null : String(row.categoria_b),
+    n: num(row.elegibles),
+    nA: num(row.n_a),
+    nB: num(row.n_b),
+    nAB: num(row.n_ab),
+  }));
+  const last = rows[rows.length - 1];
+  return {
+    elegibles: num(marca?.elegibles),
+    pares: crudas.length > 0 ? num(crudas[0]?.pares) : num(marca?.pares),
+    rows,
+    nextCursor: crudas.length > limite && last ? encodeCursor({ n: last.nAB, v: null, id: `${last.codigoA}\u0000${last.codigoB}`, orden: "juntos" }) : null,
+  };
+}
+
 export async function cargarSinMatch(periodo: ConsumoPeriodo, cursor: string | null, limit = CONSUMO_PAGE_DEFAULT) {
   const supabase = getSupabaseAdminClient();
   const limite = parseLimit(String(limit));

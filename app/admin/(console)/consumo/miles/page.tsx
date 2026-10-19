@@ -34,7 +34,7 @@ export default async function MilesPage({ searchParams }: { searchParams: Record
         throw error;
       }),
       cargarFrescura().catch(() => null),
-      cargarComplementarios({ semana: uno("semana") || null, par: uno("par") || null }).catch(() => null),
+      cargarComplementarios({ desde: uno("desde") || null, hasta: uno("hasta") || null, semana: uno("semana") || null, par: uno("par") || null }).catch(() => null),
       listarAsociaciones(40).catch((error: unknown) => {
         if (error instanceof MilesError && error.status === 503) return [];
         throw error;
@@ -77,9 +77,10 @@ export default async function MilesPage({ searchParams }: { searchParams: Record
         tareasInforme={tareasInforme}
         complementarios={
           complementarios ?? {
-            semana: "",
-            semanaPedida: "",
+            desde: "",
+            hasta: "",
             aviso: "No se pudo leer la canasta.",
+            paresTotal: 0,
             umbral: "",
             pares: [],
             elegido: null,

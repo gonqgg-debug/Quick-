@@ -58,9 +58,10 @@ export function MilesPortada({
   tareas: Fila[];
   tareasInforme: Fila[];
   complementarios: {
-    semana: string;
-    semanaPedida: string;
+    desde: string;
+    hasta: string;
     aviso: string | null;
+    paresTotal: number;
     umbral: string;
     pares: ParCanasta[];
     elegido: ParCanasta | null;
@@ -293,9 +294,10 @@ function Complementarios({
   ir,
 }: {
   datos: {
-    semana: string;
-    semanaPedida: string;
+    desde: string;
+    hasta: string;
     aviso: string | null;
+    paresTotal: number;
     umbral: string;
     pares: ParCanasta[];
     elegido: ParCanasta | null;
@@ -354,12 +356,16 @@ function Complementarios({
       {modo !== "oportunidades" ? (
       <>
       {modo === "cambios" ? (
-        <p className="mb-2 text-xs text-brand-muted">El cambio es la diferencia de tickets juntos contra la semana anterior observada. Si esa semana no tiene el par, no se usa cero.</p>
+        <p className="mb-2 text-xs text-brand-muted">El cambio es la diferencia de tickets juntos contra el periodo anterior, de la misma cantidad de días. Si ese periodo no tiene el par, no se usa cero.</p>
       ) : null}
       <div className="flex flex-wrap items-end gap-2">
         <label className="text-xs font-medium text-brand-muted">
-          Semana
-          <input type="date" defaultValue={datos.semanaPedida} onChange={(event) => ir({ semana: event.target.value || null, par: null })} className="mt-1 block rounded-md border border-[#E6E8E6] bg-white px-2 py-1.5 text-sm" />
+          Desde
+          <input type="date" defaultValue={datos.desde} onChange={(event) => ir({ desde: event.target.value || null, semana: null, par: null })} className="mt-1 block rounded-md border border-[#E6E8E6] bg-white px-2 py-1.5 text-sm" />
+        </label>
+        <label className="text-xs font-medium text-brand-muted">
+          Hasta
+          <input type="date" defaultValue={datos.hasta} onChange={(event) => ir({ hasta: event.target.value || null, semana: null, par: null })} className="mt-1 block rounded-md border border-[#E6E8E6] bg-white px-2 py-1.5 text-sm" />
         </label>
         <label className="text-xs font-medium text-brand-muted">
           Producto
@@ -374,9 +380,9 @@ function Complementarios({
           </select>
         </label>
       </div>
-      <p className="mt-2 text-xs text-brand-muted">Semana del {datos.semana}. {datos.umbral}</p>
+      <p className="mt-2 text-xs text-brand-muted">{datos.umbral}</p>
       {datos.aviso ? <p className="mt-2 text-sm">{datos.aviso}</p> : null}
-      {filtrados.length === 0 ? <p className="mt-4 rounded-lg bg-white p-4 text-sm">No hay asociaciones con la muestra mínima en esta semana.</p> : null}
+      {filtrados.length === 0 ? <p className="mt-4 rounded-lg bg-white p-4 text-sm">No hay pares con al menos 5 tickets juntos en este periodo.</p> : null}
       <div className="mt-3 grid gap-3 lg:grid-cols-[280px_minmax(0,1fr)]">
         <ul className="max-h-[32rem] space-y-1 overflow-auto rounded-lg border border-[#E6E8E6] bg-white p-2">
           {filtrados.map((par) => {
@@ -387,7 +393,7 @@ function Complementarios({
                   <span className="font-semibold">{par.nombreA}</span> + {par.nombreB}
                   <span className="mt-0.5 block text-xs text-brand-muted">
                     {formatNumero(par.ordenesJuntas)} tickets · afinidad {par.lift == null ? "—" : formatNumero(par.lift, 2)}
-                    {modo === "cambios" ? ` · ${par.deltaJuntos == null ? "sin semana previa" : `${par.deltaJuntos > 0 ? "+" : ""}${formatNumero(par.deltaJuntos)}`}` : ""}
+                    {modo === "cambios" ? ` · ${par.deltaJuntos == null ? "sin periodo previo" : `${par.deltaJuntos > 0 ? "+" : ""}${formatNumero(par.deltaJuntos)}`}` : ""}
                   </span>
                 </button>
               </li>
@@ -410,7 +416,7 @@ function Complementarios({
             </div>
             <p className="mt-3 text-sm">
               {formatNumero(datos.detalle.conteos.conAmbos)} tickets juntos de {formatNumero(datos.detalle.conteos.elegibles)} elegibles, del {datos.detalle.desde} al {datos.detalle.hasta}.
-              {datos.detalle.parcial ? " La semana todavía no cierra; el detalle llega hasta el último día completo." : ""}
+              {datos.detalle.parcial ? " El hasta pedido incluye hoy; el detalle llega hasta el último día completo." : ""}
             </p>
             {datos.detalle.metrica.error ? <p className="mt-2 text-sm">{datos.detalle.metrica.error}</p> : null}
             {metrica ? (

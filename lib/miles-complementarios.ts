@@ -1,6 +1,7 @@
-import { addDaysToDayKey, isDayKey, yesterdayDayKey } from "@/lib/local-day";
+import { afirmarPeriodoCanasta, CANASTA_PERIODO_MAX_DIAS } from "@/lib/canasta-periodo";
+import { addDaysToDayKey, diffDayKeys, isDayKey, yesterdayDayKey } from "@/lib/local-day";
 import { metricaAsociacion } from "@/lib/miles-casos";
-import { cargarAsociacion, cargarCanasta } from "@/lib/pos-consumo";
+import { cargarAsociacion, cargarCanastaPeriodo } from "@/lib/pos-consumo";
 import { lunesDe, resolverPeriodo } from "@/lib/pos-domain";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 
@@ -21,38 +22,34 @@ export type ParCanasta = {
 
 export type PuntoSerie = { semana: string; juntos: number; soporte: number; lift: number | null; elegibles: number };
 
-export async function cargarComplementarios(input: { semana: string | null; par: string | null }) {
+export async function cargarComplementarios(input: { desde: string | null; hasta: string | null; semana: string | null; par: string | null }) {
   const ayer = yesterdayDayKey();
-  const pedida = input.semana && isDayKey(input.semana) ? lunesDe(input.semana) : lunesDe(ayer);
-  const domingo = addDaysToDayKey(pedida, 6);
-  const hastaDetalle = domingo > ayer ? ayer : domingo;
-  const lista = await cargarCanasta(pedida, null, 40);
-  let aviso: string | null = null;
-  let semana = pedida;
-  let rows = lista.rows;
-  if (rows.length === 0) {
-    const previa = addDaysToDayKey(pedida, -7);
-    const otra = await cargarCanasta(previa, null, 40);
-    if (otra.rows.length > 0) {
-      rows = otra.rows;
-      semana = previa;
-      aviso = `La semana del ${pedida} no tiene pares con al menos 5 tickets. Esta lista es de la semana anterior.`;
-    }
-  }
-  const codigos = Array.from(new Set(rows.flatMap((row) => [row.productoA, row.productoB])));
+  const ventana = ventanaPedida(input, ayer);
+  const lista = await cargarCanastaPeriodo({ desde: ventana.desde, hasta: ventana.hasta, minJuntos: 5, limit: 500, cursor: null, categoria: null });
+  const largo = diffDayKeys(ventana.desde, ventana.hasta);
+  const previoHasta = addDaysToDayKey(ventana.desde, -1);
+  const previoDesde = addDaysToDayKey(previoHasta, -largo);
+  const previa = await cargarCanastaPeriodo({ desde: previoDesde, hasta: previoHasta, minJuntos: 5, limit: 500, cursor: null, categoria: null }).catch(() => null);
+  const previos = new Map((previa?.rows ?? []).map((row) => [`${row.codigoA}|${row.codigoB}`, row.nAB]));
+  const codigos = Array.from(new Set(lista.rows.flatMap((row) => [row.codigoA, row.codigoB])));
   const nombres = await nombresDe(codigos);
-  const previos = await semanaPrevia(semana);
-  const pares: ParCanasta[] = rows.map((row) => {
-    const clave = `${row.productoA}|${row.productoB}`;
+  const pares: ParCanasta[] = lista.rows.map((row) => {
+    const clave = `${row.codigoA}|${row.codigoB}`;
+    const metrica = metricaAsociacion({ elegibles: row.n, conA: row.nA, conB: row.nB, conAmbos: row.nAB }).metrica;
     const juntosPrevios = previos.has(clave) ? previos.get(clave) ?? null : null;
     return {
-      ...row,
-      nombreA: nombres.get(row.productoA)?.nombre ?? row.productoA,
-      nombreB: nombres.get(row.productoB)?.nombre ?? row.productoB,
-      fotoA: nombres.get(row.productoA)?.foto ?? null,
-      fotoB: nombres.get(row.productoB)?.foto ?? null,
+      productoA: row.codigoA,
+      productoB: row.codigoB,
+      nombreA: nombres.get(row.codigoA)?.nombre ?? row.nombreA ?? row.codigoA,
+      nombreB: nombres.get(row.codigoB)?.nombre ?? row.nombreB ?? row.codigoB,
+      fotoA: nombres.get(row.codigoA)?.foto ?? null,
+      fotoB: nombres.get(row.codigoB)?.foto ?? null,
+      ordenesJuntas: row.nAB,
+      soporte: metrica?.soporte ?? 0,
+      lift: metrica?.afinidad ?? null,
+      ordenesSemana: row.n,
       juntosPrevios,
-      deltaJuntos: juntosPrevios == null ? null : row.ordenesJuntas - juntosPrevios,
+      deltaJuntos: juntosPrevios == null ? null : row.nAB - juntosPrevios,
     };
   });
   const elegido = elegirPar(input.par, pares);
@@ -65,23 +62,47 @@ export async function cargarComplementarios(input: { semana: string | null; par:
     parcial: boolean;
   } | null = null;
   if (elegido) {
-    const desde = semana;
-    const hasta = addDaysToDayKey(semana, 6) > ayer && semana === pedida ? hastaDetalle : addDaysToDayKey(semana, 6);
-    const conteos = await cargarAsociacion(resolverPeriodo({ desde, hasta, preset: "custom", comparacion: "off" }), elegido.productoA, elegido.productoB);
-    const metrica = metricaAsociacion(conteos);
-    const serie = await seriePar(elegido.productoA, elegido.productoB);
-    detalle = { conteos, metrica, serie, desde, hasta, parcial: hasta < addDaysToDayKey(semana, 6) };
+    const conteos = await cargarAsociacion(resolverPeriodo({ desde: ventana.desde, hasta: ventana.hasta, preset: "custom", comparacion: "off" }), elegido.productoA, elegido.productoB);
+    detalle = {
+      conteos,
+      metrica: metricaAsociacion(conteos),
+      serie: await seriePar(elegido.productoA, elegido.productoB),
+      desde: ventana.desde,
+      hasta: ventana.hasta,
+      parcial: ventana.parcial,
+    };
   }
+  const avisoRecorte = lista.pares > lista.rows.length ? ` Hay ${lista.pares} pares con al menos 5 tickets juntos. Aquí están los ${lista.rows.length} de mayor volumen.` : "";
   return {
-    semanaPedida: pedida,
-    semana,
-    hasta: addDaysToDayKey(semana, 6),
-    aviso,
+    desde: ventana.desde,
+    hasta: ventana.hasta,
+    aviso: `${ventana.aviso ?? ""}${avisoRecorte}`.trim() || null,
     pares,
+    paresTotal: lista.pares,
     elegido,
     detalle,
-    umbral: "El listado reutiliza la canasta semanal: un ticket cuenta una vez por producto y el par entra con al menos 5 tickets juntos. No se arman grupos de tres productos a partir de estos pares.",
+    umbral: `Del ${ventana.desde} al ${ventana.hasta}: ${lista.elegibles} tickets elegibles y ${lista.pares} pares con al menos 5 tickets juntos. Un producto cuenta una vez por ticket. No se eligen categorías ni se arman grupos de tres.`,
   };
+}
+
+function ventanaPedida(input: { desde: string | null; hasta: string | null; semana: string | null }, ayer: string): { desde: string; hasta: string; aviso: string | null; parcial: boolean } {
+  let desde = addDaysToDayKey(ayer, -29);
+  let hasta = ayer;
+  let aviso: string | null = null;
+  if (input.desde && isDayKey(input.desde)) desde = input.desde;
+  if (input.hasta && isDayKey(input.hasta)) hasta = input.hasta;
+  if (!(input.desde && isDayKey(input.desde)) && !(input.hasta && isDayKey(input.hasta)) && input.semana && isDayKey(input.semana)) {
+    desde = lunesDe(input.semana);
+    hasta = addDaysToDayKey(desde, 6);
+  }
+  if (hasta > ayer) hasta = ayer;
+  if (desde > hasta) desde = hasta;
+  if (diffDayKeys(desde, hasta) > CANASTA_PERIODO_MAX_DIAS - 1) {
+    desde = addDaysToDayKey(hasta, -(CANASTA_PERIODO_MAX_DIAS - 1));
+    aviso = `El periodo se recortó a ${CANASTA_PERIODO_MAX_DIAS} días.`;
+  }
+  afirmarPeriodoCanasta(desde, hasta);
+  return { desde, hasta, aviso, parcial: Boolean(input.hasta && isDayKey(input.hasta) && input.hasta > ayer) };
 }
 
 function elegirPar(par: string | null, pares: ParCanasta[]): ParCanasta | null {
@@ -103,23 +124,6 @@ async function nombresDe(codigos: string[]) {
   const { data } = await supabase.from("products").select("codigo_odoo, nombre, foto_url").in("codigo_odoo", codigos);
   for (const row of data ?? []) {
     mapa.set(String(row.codigo_odoo), { nombre: String(row.nombre ?? row.codigo_odoo), foto: row.foto_url ? String(row.foto_url) : null });
-  }
-  return mapa;
-}
-
-async function semanaPrevia(semana: string): Promise<Map<string, number>> {
-  const mapa = new Map<string, number>();
-  const previa = addDaysToDayKey(semana, -7);
-  const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from("resumen_canasta_semana")
-    .select("producto_a, producto_b, n_ordenes_juntos")
-    .eq("tienda", "quick")
-    .eq("semana", previa)
-    .limit(500);
-  if (error) return mapa;
-  for (const row of data ?? []) {
-    mapa.set(`${row.producto_a}|${row.producto_b}`, Number(row.n_ordenes_juntos ?? 0));
   }
   return mapa;
 }

@@ -213,7 +213,9 @@ La página ya no pide investigaciones ni propuestas. Miles publica solo.
 
 `grafica` admite `linea`, `barras`, `barras_divergentes`, `cascada`, `histograma`, `apiladas`, `apiladas_100`, `dona`, `calor` y `porcentaje`. Un valor ausente va en `null`, no en cero. Una cascada tiene que cuadrar. Una dona no acepta negativos. `visual` anterior sigue valiendo. Sin serie, la pantalla muestra el texto y no inventa puntos.
 
-`POST /api/agent/miles/asociaciones` publica la interpretación de un par. Los conteos `n`, `nA`, `nB` y `nAB` tienen que cuadrar. La canasta que se ve en Complementarios la calcula la plataforma con la semana ya guardada; no se fabrican grupos de tres productos.
+`POST /api/agent/miles/asociaciones` publica la interpretación de un par. Los conteos `n`, `nA`, `nB` y `nAB` tienen que cuadrar. La canasta de Complementarios y `GET /api/agent/analytics/baskets` sin `a` ni `b` usan el mismo censo del periodo: tickets que cuentan, una presencia por producto y par con al menos 5 tickets juntos. No se fabrican grupos de tres productos.
+
+`GET /api/agent/analytics/baskets?desde=2026-04-01&hasta=2026-07-31&min=5&limit=100` recorre el periodo. El máximo es 184 días. `preset=30c` son los últimos 30 días completos. `semana=2026-10-13`, sin `desde` ni `hasta`, conserva la canasta precalculada de esa semana. Un par suelto sigue siendo `a` y `b`.
 
 `POST /api/agent/miles/runs/{id}/tareas` dice qué pasó en cada área: `datos`, `ventas`, `productos`, `horarios`, `complementarios`, `rentabilidad`, `seguimiento`, `informe`. El estado de una tarea es `ejecutada`, `sin_novedades`, `publicada`, `limitada`, `fallida` o `no_ejecutada`. Cerrar la corrida en `completada`, `parcial` o `fallida` no marca la rutina.
 
@@ -226,7 +228,7 @@ El agente vive fuera de este repositorio. Esta página no lo despierta ni le con
 1. `POST /api/agent/miles/runs` y, al terminar cada área, `POST /api/agent/miles/runs/{id}/tareas`. Cerrar la corrida con `PATCH` y `estado` `completada`, `parcial` o `fallida` no completa la rutina. Una rentabilidad bloqueada no debe impedir publicar las tareas de ventas, horarios o complementarios: esas van en `ejecutada`, `sin_novedades`, `publicada` o `limitada`, y rentabilidad en `fallida` o `limitada`.
 2. Revalidar cada caso con el mismo `patronClave`. Si el caso ya existe, el `POST /api/agent/miles/findings` lo actualiza. No abras un hallazgo nuevo por día. Usa una `idempotencyKey` nueva solo cuando el contenido cambió y el caso es otro. La misma clave con otro cuerpo responde 409.
 3. Adjuntar `grafica` del catálogo cuando haya una serie real. Un hueco es `null`. No envíes HTML. Si no hay serie, omite `grafica`. Separa `hipotesis` de la observación. `proximoPaso` es lo que Miles hará, no una petición al usuario.
-4. Publicar la interpretación de pares con `POST /api/agent/miles/asociaciones`. Los conteos salen de `GET /api/agent/analytics/baskets?a=&b=` o de la canasta semanal. No armes un grupo de tres productos sumando pares. Si falta costo o inventario, dilo en `limitaciones` y no inventes margen.
+4. Leer los complementarios con `GET /api/agent/analytics/baskets?preset=30c` o `desde` y `hasta`. No elijas categorías ni pares candidatos. La respuesta trae todos los pares del periodo que llegan a `min` (5 si se omite), con `n`, `nA`, `nB` y `nAB`. `pares` es el total. Sigue `nextCursor` hasta que sea null. Una página de 50 no es el mapa. Lo que no aparece quedó debajo del mínimo. `a` y `b` solo sirven para revisar un par que ya salió en la lista. Publica la interpretación con `POST /api/agent/miles/asociaciones`. No armes un grupo de tres productos sumando pares. Si falta costo o inventario, dilo en `limitaciones` y no inventes margen.
 5. Publicar el informe del día local `America/Santo_Domingo` con `POST /api/agent/miles/informes` después de que existan los hallazgos. `casos` son sus ids. `fecha` es el día del informe, no el periodo analizado. `datosHasta` es el último día con datos. Si una área falló, `estado` es `parcial` y `bloqueos` dice cuál.
 
 Ejemplo ficticio, no es un informe de la tienda:
@@ -247,7 +249,7 @@ Ejemplo ficticio, no es un informe de la tienda:
 }
 ```
 
-La pantalla de Complementarios calcula los pares con la canasta semanal ya guardada (mínimo 5 tickets juntos, una presencia por ticket). No hay una ventana de 30 días ni grupos de más de dos productos. El agente no tiene que reenviar esa lista para que se vea; sí tiene que revalidarla y publicar la interpretación cuando cambie.
+La pantalla de Complementarios usa el mismo censo: por defecto los 30 días completos hasta ayer, mínimo 5 tickets juntos y una presencia por ticket. El agente no tiene que reenviar esa lista para que se vea. Sí tiene que leerla con `analytics/baskets`, seguir el cursor y publicar la interpretación cuando cambie. No hay grupos de más de dos productos.
 
 No se configuró un cron externo en este cambio.
 

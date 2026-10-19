@@ -26,6 +26,7 @@ import { anioAnterior, asociacionCanasta, coberturaDeFechas, desgloseVenta, esta
 import { describirPeriodo, estadoCosto, margenAgregado, subtituloProducto, variacionAgregada, variacionProducto } from "../lib/consumo-productos-ui";
 import { celdaCsv, csvProductos, etiquetaVariacion, etiquetaVariacionTotal } from "../lib/productos-analitica";
 import { CONSULTAS_MILES, MilesError, hashHallazgo, hashPayload, parseAvanceInvestigacion, parseCierreRun, parseEvidencia, parseHallazgo } from "../lib/miles-domain";
+import { afirmarPeriodoCanasta, leerMinJuntos } from "../lib/canasta-periodo";
 import { clasificarPortada, metricaAsociacion } from "../lib/miles-casos";
 import { parseAsociacion, parseInforme, parseTareas } from "../lib/miles-publicacion";
 import { leerGrafica } from "../lib/miles-grafica";
@@ -503,6 +504,22 @@ const asociacion = parseAsociacion({
   nAB: 10,
 });
 assert(asociacion.codigoA === "A" && asociacion.codigoB === "B", "los códigos de una asociación se ordenan");
+assert(leerMinJuntos(null) === 5, "el mínimo de tickets juntos es 5 si Miles no lo pide");
+let minimoBajo = "";
+try {
+  leerMinJuntos("1");
+} catch (error) {
+  minimoBajo = error instanceof MilesError ? error.message : "";
+}
+assert(minimoBajo.includes("entre 2 y 100"), "un mínimo de 1 no abre todas las combinaciones");
+let periodoLargo = "";
+try {
+  afirmarPeriodoCanasta("2026-01-01", "2026-08-01");
+} catch (error) {
+  periodoLargo = error instanceof MilesError ? error.message : "";
+}
+assert(periodoLargo.includes("184"), "un periodo de canasta más largo que 184 días pide partir la ventana");
+afirmarPeriodoCanasta("2026-04-01", "2026-07-31");
 let conteosMal = "";
 try {
   parseAsociacion({ idempotencyKey: "par-mal", codigoA: "A", codigoB: "B", periodoDesde: "2026-09-01", periodoHasta: "2026-09-30", n: 10, nA: 4, nB: 3, nAB: 5 });
