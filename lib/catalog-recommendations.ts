@@ -1,9 +1,7 @@
-import { getSalesTotalsByOdooCode } from "@/lib/catalog-ranking";
 import { toMoney } from "@/lib/money";
 import { getSupabaseAdminClient } from "@/lib/supabase";
 import type { Product } from "@/lib/types";
 
-const BEST_SELLER_LIMIT = 12;
 const FAVORITE_LIMIT = 8;
 
 export type RepeatOrderItem = {
@@ -46,34 +44,17 @@ function mapProduct(row: {
   };
 }
 
-export async function getBestSellers(): Promise<Product[]> {
-  const totals = await getSalesTotalsByOdooCode();
-  const ranked = Array.from(totals.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, BEST_SELLER_LIMIT * 2);
-  if (ranked.length === 0) {
-    return [];
+export async function getCatalogRecommendations(customerId: string | null): Promise<CatalogRecommendations> {
+  if (!customerId) {
+    return { bestSellers: [], lastOrder: null, favorites: [] };
   }
 
-  const supabase = getSupabaseAdminClient();
-  const { data: products, error: productError } = await supabase
-    .from("products")
-    .select("id, nombre, marca, descripcion, precio, foto_url, categoria, codigo_odoo")
-    .eq("activo", true)
-    .in(
-      "codigo_odoo",
-      ranked.map(([code]) => code)
-    );
+  const [lastOrder, favorites] = await Promise.all([
+    getRepeatLastOrder(customerId),
+    getFavoriteProducts(customerId),
+  ]);
 
-  if (productError || !products?.length) {
-    return [];
-  }
-
-  const byCode = new Map(products.map((row) => [String(row.codigo_odoo), mapProduct(row)]));
-  return ranked
-    .map(([code]) => byCode.get(code))
-    .filter((product): product is Product => Boolean(product))
-    .slice(0, BEST_SELLER_LIMIT);
+  return { bestSellers: [], lastOrder, favorites };
 }
 
 export async function getRepeatLastOrder(customerId: string): Promise<RepeatLastOrder | null> {
@@ -213,18 +194,4 @@ export async function getFavoriteProducts(customerId: string): Promise<Product[]
 
   const byId = new Map(products.map((row) => [String(row.id), mapProduct(row)]));
   return ranked.map(([id]) => byId.get(id)).filter((product): product is Product => Boolean(product));
-}
-
-export async function getCatalogRecommendations(customerId: string | null): Promise<CatalogRecommendations> {
-  const bestSellers = await getBestSellers();
-  if (!customerId) {
-    return { bestSellers, lastOrder: null, favorites: [] };
-  }
-
-  const [lastOrder, favorites] = await Promise.all([
-    getRepeatLastOrder(customerId),
-    getFavoriteProducts(customerId),
-  ]);
-
-  return { bestSellers, lastOrder, favorites };
 }
